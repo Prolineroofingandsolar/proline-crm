@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Lead, Stage, Material, FileItem, Photo, Contact } from '../types';
+import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser } from '../types';
 import { initialLeads } from '../data/mockData';
 import { generateId } from '../utils/helpers';
+import { hashPassword } from '../utils/crypto';
 
 const DEFAULT_TASKS = [
   'Order materials', 'Scaffold booked', 'Confirm start date with customer',
@@ -23,6 +24,8 @@ export interface GeneralTask {
 }
 
 interface Store {
+  users: AppUser[];
+  currentUserId: string | null;
   leads: Lead[];
   contacts: Contact[];
   generalTasks: GeneralTask[];
@@ -31,6 +34,13 @@ interface Store {
   currentPage: string;
   searchQuery: string;
   toast: { message: string; type: 'success' | 'info' | 'error' } | null;
+
+  login: (username: string, password: string) => Promise<boolean>;
+  logout: () => void;
+  addUser: (name: string, username: string, password: string, role: 'admin' | 'user') => Promise<{ ok: boolean; error?: string }>;
+  deleteUser: (id: string) => void;
+  changePassword: (id: string, newPassword: string) => Promise<void>;
+  updateUserName: (id: string, name: string) => void;
 
   setCurrentPage: (page: string) => void;
   setSelectedId: (id: string | null) => void;
@@ -77,6 +87,8 @@ const jobCounter = { n: 21 };
 export const useStore = create<Store>()(
   persist(
     (set, get) => ({
+      users: [],
+      currentUserId: null,
       leads: initialLeads,
       // Seed contacts from unique customers in initialLeads (deduped by phone)
       contacts: Object.values(
@@ -96,6 +108,34 @@ export const useStore = create<Store>()(
       currentPage: 'pipeline',
       searchQuery: '',
       toast: null,
+
+      login: async (username, password) => {
+        const hash = await hashPassword(password);
+        const user = get().users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.passwordHash === hash);
+        if (user) { set({ currentUserId: user.id }); return true; }
+        return false;
+      },
+
+      logout: () => set({ currentUserId: null }),
+
+      addUser: async (name, username, password, role) => {
+        const existing = get().users.find(u => u.username.toLowerCase() === username.toLowerCase());
+        if (existing) return { ok: false, error: 'Username already taken' };
+        const hash = await hashPassword(password);
+        const now = new Date().toISOString().split('T')[0];
+        const user: AppUser = { id: generateId(), name, username, passwordHash: hash, role, createdAt: now };
+        set(s => ({ users: [...s.users, user] }));
+        return { ok: true };
+      },
+
+      deleteUser: (id) => set(s => ({ users: s.users.filter(u => u.id !== id) })),
+
+      changePassword: async (id, newPassword) => {
+        const hash = await hashPassword(newPassword);
+        set(s => ({ users: s.users.map(u => u.id === id ? { ...u, passwordHash: hash } : u) }));
+      },
+
+      updateUserName: (id, name) => set(s => ({ users: s.users.map(u => u.id === id ? { ...u, name } : u) })),
 
       setCurrentPage: (page) => set({ currentPage: page, selectedId: null }),
       setSelectedId: (id) => set({ selectedId: id }),

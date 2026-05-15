@@ -3,6 +3,7 @@ import Sidebar from './components/Layout/Sidebar';
 import BottomNav from './components/Layout/BottomNav';
 import TopBar from './components/Layout/TopBar';
 import { useStore } from './store/useStore';
+import LoginPage from './pages/LoginPage';
 import PipelinePage from './pages/PipelinePage';
 import DashboardPage from './pages/DashboardPage';
 import LeadsPage from './pages/LeadsPage';
@@ -32,8 +33,11 @@ function Toast() {
 }
 
 export default function App() {
-  const { currentPage } = useStore();
+  const { currentPage, currentUserId, users } = useStore();
   const [showNewLead, setShowNewLead] = useState(false);
+
+  if (users.length === 0) return <LoginPage mode="setup" />;
+  if (!currentUserId) return <LoginPage mode="login" />;
 
   const page: Record<string, React.ReactNode> = {
     dashboard: <DashboardPage />,

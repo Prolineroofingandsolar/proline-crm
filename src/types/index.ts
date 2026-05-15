@@ -59,6 +59,15 @@ export interface Material {
   delivered: boolean;
 }
 
+export interface AppUser {
+  id: string;
+  name: string;
+  username: string;
+  passwordHash: string;
+  role: 'admin' | 'user';
+  createdAt: string;
+}
+
 export interface Contact {
   id: string;
   name: string;
