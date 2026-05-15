@@ -77,6 +77,18 @@ export interface Contact {
   createdAt: string;
 }
 
+export interface GeneralTask {
+  id: string;
+  title: string;
+  completed: boolean;
+  completedDate?: string;
+  dueDate?: string;
+  priority: 'low' | 'medium' | 'high';
+  category: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Lead {
   id: string;
   name: string;
