@@ -1,6 +1,7 @@
 ﻿import { TrendingUp, Briefcase, PoundSterling, CheckCircle2, Clock, Trophy, Users, Star } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate, jobTypeColor } from '../utils/helpers';
+import JobsMap from '../components/Map/JobsMap';
 
 export default function DashboardPage() {
   const { leads } = useStore();
@@ -83,6 +84,9 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Job locations map */}
+      <JobsMap />
 
       {/* Pipeline breakdown */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">

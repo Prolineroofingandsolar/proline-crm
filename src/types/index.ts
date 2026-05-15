@@ -92,6 +92,8 @@ export interface Lead {
   source: string;
   assignedTo: string;
   wonDate?: string;
+  lat?: number;
+  lng?: number;
   tasks: Task[];
   photos: Photo[];
   notes: Note[];

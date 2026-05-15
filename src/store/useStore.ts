@@ -41,6 +41,8 @@ interface Store {
   upsertContact: (data: Pick<Contact, 'name' | 'phone' | 'email' | 'address'>) => void;
   deleteContact: (id: string) => void;
 
+  geocodeLeads: (ids: string[]) => Promise<void>;
+
   addLead: (data: Omit<Lead, 'id' | 'jobRef' | 'createdAt' | 'updatedAt' | 'tasks' | 'photos' | 'notes' | 'files' | 'materials'>) => void;
   updateLead: (id: string, updates: Partial<Lead>) => void;
   deleteLead: (id: string) => void;
@@ -116,6 +118,24 @@ export const useStore = create<Store>()(
       },
 
       deleteContact: (id) => set(s => ({ contacts: s.contacts.filter(c => c.id !== id) })),
+
+      geocodeLeads: async (ids) => {
+        const leads = get().leads;
+        // Only geocode leads that don't have coords yet
+        const toGeocode = leads.filter(l => ids.includes(l.id) && !l.lat && l.address);
+        for (const lead of toGeocode) {
+          try {
+            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(lead.address)}&format=json&limit=1&countrycodes=gb`;
+            const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'ProLineCRM/1.0' } });
+            const data = await res.json();
+            if (data[0]) {
+              set(s => ({ leads: s.leads.map(l => l.id === lead.id ? { ...l, lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } : l) }));
+            }
+          } catch { /* silently skip if geocode fails */ }
+          // Nominatim rate limit: 1 req/sec
+          await new Promise(r => setTimeout(r, 1100));
+        }
+      },
 
       addLead: (data) => {
         const ref = `JOB-${String(jobCounter.n++).padStart(3, '0')}`;
