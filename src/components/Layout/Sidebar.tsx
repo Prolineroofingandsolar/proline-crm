@@ -15,22 +15,6 @@ const nav = [
   { id: 'settings',  label: 'Settings',  icon: Settings },
 ];
 
-function ProLineLogo() {
-  return (
-    <svg viewBox="0 0 220 165" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-      <polygon points="92,42 2,18 2,36" fill="#ea580c"/>
-      <polygon points="92,42 2,41 2,59" fill="#ea580c"/>
-      <polygon points="92,42 2,64 2,82" fill="#ea580c"/>
-      <polygon points="92,42 2,87 2,105" fill="#ea580c"/>
-      <path d="M92,42 L122,16 L148,68 L188,10 L188,2 L203,2 L203,10 L218,145"
-            stroke="white" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M92,42 L124,25 L150,71 L190,19 L218,131"
-            stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M92,42 L126,34 L152,73 L192,28 L218,117"
-            stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
 
 export default function Sidebar() {
   const { currentPage, setCurrentPage, users, currentUserId, logout } = useStore();
@@ -42,8 +26,8 @@ export default function Sidebar() {
     <aside className="w-16 lg:w-56 shrink-0 flex flex-col h-full transition-all duration-200" style={{ background: '#111827' }}>
       {/* Logo */}
       <div className="flex items-center justify-center lg:justify-start gap-3 px-3 lg:px-4 py-4 border-b border-white/10">
-        <div className="w-10 h-8 shrink-0">
-          <ProLineLogo />
+        <div className="w-10 h-10 shrink-0">
+          <img src="/logo.svg" alt="Logo" className="w-full h-full object-contain" />
         </div>
         <div className="leading-tight hidden lg:block">
           <div className="text-white font-extrabold text-sm tracking-wide">ProLine</div>
