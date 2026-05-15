@@ -1,0 +1,13 @@
+{
+  "name": "ProLine CRM",
+  "short_name": "ProLine",
+  "description": "ProLine Roofing & Solar — Job & Lead Management",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#111827",
+  "theme_color": "#ea580c",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

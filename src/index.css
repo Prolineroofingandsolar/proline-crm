@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+#root { height: 100vh; height: 100dvh; }
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* iPhone safe-area helpers */
+.pb-safe  { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.mb-safe  { margin-bottom:  env(safe-area-inset-bottom, 0px); }

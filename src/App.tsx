@@ -1,0 +1,76 @@
+import { useState } from 'react';
+import Sidebar from './components/Layout/Sidebar';
+import BottomNav from './components/Layout/BottomNav';
+import TopBar from './components/Layout/TopBar';
+import { useStore } from './store/useStore';
+import PipelinePage from './pages/PipelinePage';
+import DashboardPage from './pages/DashboardPage';
+import LeadsPage from './pages/LeadsPage';
+import JobsPage from './pages/JobsPage';
+import TasksPage from './pages/TasksPage';
+import CalendarPage from './pages/CalendarPage';
+import ContactsPage from './pages/ContactsPage';
+import FilesPage from './pages/FilesPage';
+import ReportsPage from './pages/ReportsPage';
+import SettingsPage from './pages/SettingsPage';
+import AddLeadModal from './components/Pipeline/AddLeadModal';
+import AIAssistant from './components/AI/AIAssistant';
+
+function Toast() {
+  const { toast } = useStore();
+  if (!toast) return null;
+  const colors = {
+    success: 'bg-green-600',
+    info: 'bg-orange-600',
+    error: 'bg-red-600',
+  };
+  return (
+    <div className={`fixed bottom-20 right-4 md:bottom-6 md:right-6 z-[100] ${colors[toast.type]} text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl flex items-center gap-2`}>
+      {toast.message}
+    </div>
+  );
+}
+
+export default function App() {
+  const { currentPage } = useStore();
+  const [showNewLead, setShowNewLead] = useState(false);
+
+  const page: Record<string, React.ReactNode> = {
+    dashboard: <DashboardPage />,
+    pipeline: <PipelinePage />,
+    leads: <LeadsPage />,
+    jobs: <JobsPage />,
+    tasks: <TasksPage />,
+    calendar: <CalendarPage />,
+    contacts: <ContactsPage />,
+    files: <FilesPage />,
+    reports: <ReportsPage />,
+    settings: <SettingsPage />,
+  };
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-white">
+      {/* Sidebar — desktop only */}
+      <div className="hidden md:flex">
+        <Sidebar />
+      </div>
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <TopBar onNewLead={() => setShowNewLead(true)} />
+        {/* pb-16 on mobile to clear the bottom nav bar */}
+        <main className="flex-1 overflow-hidden pb-0 md:pb-0">
+          <div className="h-full pb-16 md:pb-0">
+            {page[currentPage] ?? <PipelinePage />}
+          </div>
+        </main>
+      </div>
+
+      {/* Bottom nav — mobile only */}
+      <BottomNav />
+
+      {showNewLead && <AddLeadModal onClose={() => setShowNewLead(false)} />}
+      <Toast />
+      <AIAssistant />
+    </div>
+  );
+}
