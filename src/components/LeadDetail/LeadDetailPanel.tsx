@@ -22,8 +22,6 @@ const stageColors: Record<string, string> = {
   'Paid': 'bg-teal-100 text-teal-700',
 };
 
-const JOB_STAGES = ['Won', 'In Progress', 'Completed', 'Paid'];
-
 export default function LeadDetailPanel() {
   const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead, updateLead } = useStore();
   const [activeTab, setActiveTab] = useState<Tab>('Tasks');
@@ -143,8 +141,8 @@ export default function LeadDetailPanel() {
               </div>
             ) : null)}
 
-            {/* Start / End dates — always visible for jobs */}
-            {JOB_STAGES.includes(lead.stage) && (
+            {/* Start / End dates — always visible for all stages */}
+            {true && (
               <>
                 <div className="shrink-0 min-w-[130px] md:min-w-0">
                   <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1 flex items-center gap-1">
