@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { X, Phone, MessageSquare, Mail, Trophy, Play, CheckCircle, CreditCard, ChevronRight, Trash2 } from 'lucide-react';
+import { X, Phone, MessageSquare, Mail, Trophy, Play, CheckCircle, CreditCard, ChevronRight, Trash2, Calendar } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { formatCurrency, formatDate, jobTypeColor } from '../../utils/helpers';
+import { formatCurrency, jobTypeColor } from '../../utils/helpers';
 import TasksTab from './TasksTab';
 import PhotosTab from './PhotosTab';
 import MaterialsTab from './MaterialsTab';
@@ -22,8 +22,10 @@ const stageColors: Record<string, string> = {
   'Paid': 'bg-teal-100 text-teal-700',
 };
 
+const JOB_STAGES = ['Won', 'In Progress', 'Completed', 'Paid'];
+
 export default function LeadDetailPanel() {
-  const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead } = useStore();
+  const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead, updateLead } = useStore();
   const [activeTab, setActiveTab] = useState<Tab>('Tasks');
 
   const lead = leads.find(l => l.id === selectedId);
@@ -131,8 +133,6 @@ export default function LeadDetailPanel() {
             {[
               { label: 'Phone', value: lead.phone },
               { label: 'Email', value: lead.email },
-              { label: 'Start', value: formatDate(lead.startDate) },
-              { label: 'End', value: formatDate(lead.endDate) },
               { label: 'Value', value: formatCurrency(lead.value), bold: true },
               { label: 'Deposit', value: `${formatCurrency(lead.deposit)}${lead.depositPaid ? ' ✓' : ''}` },
               { label: 'Balance', value: formatCurrency(lead.balance), bold: true },
@@ -142,6 +142,34 @@ export default function LeadDetailPanel() {
                 <p className={`${bold ? 'font-bold text-gray-800' : 'text-gray-700'} text-sm whitespace-nowrap`}>{value}</p>
               </div>
             ) : null)}
+
+            {/* Start / End dates — always visible for jobs */}
+            {JOB_STAGES.includes(lead.stage) && (
+              <>
+                <div className="shrink-0 min-w-[130px] md:min-w-0">
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1 flex items-center gap-1">
+                    <Calendar size={10} /> Start Date
+                  </p>
+                  <input
+                    type="date"
+                    value={lead.startDate ?? ''}
+                    onChange={e => updateLead(lead.id, { startDate: e.target.value || undefined })}
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 text-gray-700"
+                  />
+                </div>
+                <div className="shrink-0 min-w-[130px] md:min-w-0">
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1 flex items-center gap-1">
+                    <Calendar size={10} /> End Date
+                  </p>
+                  <input
+                    type="date"
+                    value={lead.endDate ?? ''}
+                    onChange={e => updateLead(lead.id, { endDate: e.target.value || undefined })}
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 text-gray-700"
+                  />
+                </div>
+              </>
+            )}
 
             {lead.stage === 'In Progress' && (
               <div className="shrink-0 min-w-[120px] md:min-w-0">
