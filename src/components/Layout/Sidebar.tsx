@@ -1,4 +1,5 @@
-import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Contact, FolderOpen, BarChart2, Settings, ChevronDown, Kanban } from 'lucide-react';
+import { useState } from 'react';
+import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Contact, FolderOpen, BarChart2, Settings, ChevronDown, Kanban, LogOut } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 const nav = [
@@ -32,9 +33,10 @@ function ProLineLogo() {
 }
 
 export default function Sidebar() {
-  const { currentPage, setCurrentPage, users, currentUserId } = useStore();
+  const { currentPage, setCurrentPage, users, currentUserId, logout } = useStore();
   const currentUser = users.find(u => u.id === currentUserId);
   const initial = currentUser?.name?.[0]?.toUpperCase() ?? '?';
+  const [showMenu, setShowMenu] = useState(false);
 
   return (
     <aside className="w-16 lg:w-56 shrink-0 flex flex-col h-full transition-all duration-200" style={{ background: '#111827' }}>
@@ -72,17 +74,45 @@ export default function Sidebar() {
       </nav>
 
       {/* Current user */}
-      <div className="p-3 border-t border-white/10">
-        <div className="flex items-center justify-center lg:justify-start gap-2.5 px-2 py-2 rounded-lg">
+      <div className="p-3 border-t border-white/10 relative">
+        {/* Popup menu */}
+        {showMenu && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+            <div className="absolute bottom-full left-2 right-2 mb-2 z-50 bg-gray-800 rounded-xl shadow-xl overflow-hidden border border-white/10">
+              <div className="px-4 py-3 border-b border-white/10">
+                <p className="text-white text-sm font-semibold truncate">{currentUser?.name ?? 'User'}</p>
+                <p className="text-white/50 text-xs capitalize">@{currentUser?.username} · {currentUser?.role}</p>
+              </div>
+              <button
+                onClick={() => { setShowMenu(false); setCurrentPage('settings'); }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-white/70 hover:bg-white/10 hover:text-white text-sm transition-colors"
+              >
+                <Settings size={14} /> Settings
+              </button>
+              <button
+                onClick={() => { setShowMenu(false); logout(); }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-red-400 hover:bg-red-500/10 hover:text-red-300 text-sm transition-colors"
+              >
+                <LogOut size={14} /> Sign Out
+              </button>
+            </div>
+          </>
+        )}
+
+        <button
+          onClick={() => setShowMenu(s => !s)}
+          className="w-full flex items-center justify-center lg:justify-start gap-2.5 px-2 py-2 rounded-lg hover:bg-white/10 transition-colors"
+        >
           <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
             {initial}
           </div>
           <div className="hidden lg:flex flex-col text-left flex-1 min-w-0">
             <div className="text-white text-sm font-medium truncate">{currentUser?.name ?? 'User'}</div>
-            <div className="text-white/50 text-xs capitalize">{currentUser?.role ?? ''}</div>
+            <div className="text-white/50 text-xs capitalize">{currentUser?.role}</div>
           </div>
-          <ChevronDown size={14} className="text-white/40 shrink-0 hidden lg:block" />
-        </div>
+          <ChevronDown size={14} className={`text-white/40 shrink-0 hidden lg:block transition-transform ${showMenu ? 'rotate-180' : ''}`} />
+        </button>
       </div>
     </aside>
   );
