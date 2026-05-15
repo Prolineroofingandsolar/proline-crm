@@ -59,7 +59,8 @@ export default function JobsPage() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Value</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Balance</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Progress</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Start Date</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Start</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">End</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
@@ -100,7 +101,8 @@ export default function JobsPage() {
                     </div>
                   ) : <span className="text-xs text-gray-300">—</span>}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-400 hidden lg:table-cell">{formatDate(lead.startDate)}</td>
+                <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap hidden sm:table-cell">{formatDate(lead.startDate) || '—'}</td>
+                <td className={`px-4 py-3 text-sm whitespace-nowrap hidden sm:table-cell ${lead.endDate ? 'text-orange-600 font-medium' : 'text-gray-300'}`}>{formatDate(lead.endDate) || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                     <a href={`tel:${lead.phone}`} className="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500"><Phone size={13} /></a>

@@ -12,7 +12,8 @@ export default function InfoTab({ lead }: { lead: Lead }) {
   const [form, setForm] = useState({
     name: lead.name, phone: lead.phone, email: lead.email, address: lead.address,
     jobType: lead.jobType, value: String(lead.value), deposit: String(lead.deposit),
-    startDate: lead.startDate ?? '', source: lead.source, assignedTo: lead.assignedTo,
+    startDate: lead.startDate ?? '', endDate: lead.endDate ?? '',
+    source: lead.source, assignedTo: lead.assignedTo,
   });
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
@@ -23,7 +24,8 @@ export default function InfoTab({ lead }: { lead: Lead }) {
     updateLead(lead.id, {
       name: form.name, phone: form.phone, email: form.email, address: form.address,
       jobType: form.jobType as JobType, value, deposit, balance: value - deposit,
-      startDate: form.startDate || undefined, source: form.source, assignedTo: form.assignedTo,
+      startDate: form.startDate || undefined, endDate: form.endDate || undefined,
+      source: form.source, assignedTo: form.assignedTo,
     });
     setEditing(false);
   };
@@ -70,9 +72,14 @@ export default function InfoTab({ lead }: { lead: Lead }) {
             <input type="number" value={form.deposit} onChange={e => set('deposit', e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
           </div>
-          <div className="col-span-2">
+          <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Start Date</label>
             <input type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">End Date</label>
+            <input type="date" value={form.endDate} onChange={e => set('endDate', e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
           </div>
         </div>
@@ -105,6 +112,7 @@ export default function InfoTab({ lead }: { lead: Lead }) {
         <Row label="Address" value={lead.address} />
         <Row label="Source" value={lead.source} />
         {lead.startDate && <Row label="Start Date" value={formatDate(lead.startDate)} />}
+        {lead.endDate && <Row label="End Date" value={formatDate(lead.endDate)} />}
         {lead.completedDate && <Row label="Completed" value={formatDate(lead.completedDate)} />}
         {lead.paidDate && <Row label="Paid" value={formatDate(lead.paidDate)} />}
         <div className="border-t border-gray-100 pt-3 space-y-2">

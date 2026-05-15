@@ -91,6 +91,7 @@ export interface Lead {
   surveyDate?: string;
   surveyTime?: string;
   startDate?: string;
+  endDate?: string;
   completedDate?: string;
   paidDate?: string;
   value: number;

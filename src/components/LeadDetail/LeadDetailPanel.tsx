@@ -132,6 +132,7 @@ export default function LeadDetailPanel() {
               { label: 'Phone', value: lead.phone },
               { label: 'Email', value: lead.email },
               { label: 'Start', value: formatDate(lead.startDate) },
+              { label: 'End', value: formatDate(lead.endDate) },
               { label: 'Value', value: formatCurrency(lead.value), bold: true },
               { label: 'Deposit', value: `${formatCurrency(lead.deposit)}${lead.depositPaid ? ' ✓' : ''}` },
               { label: 'Balance', value: formatCurrency(lead.balance), bold: true },
