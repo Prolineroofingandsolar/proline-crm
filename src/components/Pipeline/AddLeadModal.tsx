@@ -1,5 +1,5 @@
-﻿import { useState } from 'react';
-import { X } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { X, UserCheck } from 'lucide-react';
 import type { JobType, Stage } from '../../types';
 import { useStore } from '../../store/useStore';
 
@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Props) {
-  const { addLead } = useStore();
+  const { addLead, contacts } = useStore();
   const [form, setForm] = useState({
     name: '', phone: '', email: '', address: '',
     jobType: 'Roof Repair' as JobType,
@@ -22,8 +22,36 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
     surveyDate: '', surveyTime: '',
     notes: '',
   });
+  const [suggestions, setSuggestions] = useState<typeof contacts>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
+
+  const handleNameChange = (v: string) => {
+    set('name', v);
+    if (v.trim().length < 1) { setSuggestions([]); setShowSuggestions(false); return; }
+    const matches = contacts.filter(c => c.name.toLowerCase().includes(v.toLowerCase())).slice(0, 6);
+    setSuggestions(matches);
+    setShowSuggestions(matches.length > 0);
+  };
+
+  const selectContact = (c: typeof contacts[0]) => {
+    setForm(p => ({ ...p, name: c.name, phone: c.phone, email: c.email, address: c.address }));
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (nameRef.current && !nameRef.current.closest('.name-field')?.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +82,7 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 backdrop-blur-sm md:p-4">
       <div className="bg-white md:rounded-2xl rounded-t-2xl shadow-2xl w-full md:max-w-lg max-h-[92dvh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
           <h2 className="font-bold text-gray-800 text-lg">Add New Lead</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><X size={18} /></button>
         </div>
@@ -62,11 +90,43 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
         {/* Form */}
         <form onSubmit={handleSubmit} className="overflow-y-auto p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
+
+            {/* Customer name with autocomplete */}
+            <div className="col-span-2 name-field relative">
               <label className="block text-xs font-semibold text-gray-600 mb-1">Customer Name *</label>
-              <input required value={form.name} onChange={e => set('name', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="Full name" />
+              <input
+                ref={nameRef}
+                required
+                value={form.name}
+                onChange={e => handleNameChange(e.target.value)}
+                onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                placeholder="Full name"
+                autoComplete="off"
+              />
+              {showSuggestions && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 overflow-hidden">
+                  {suggestions.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onMouseDown={() => selectContact(c)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-orange-50 text-left transition-colors"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                        {c.name[0]}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{c.name}</p>
+                        <p className="text-xs text-gray-400 truncate">{c.phone}{c.address ? ` · ${c.address}` : ''}</p>
+                      </div>
+                      <UserCheck size={14} className="text-orange-400 shrink-0 ml-auto" />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Phone *</label>
               <input required value={form.phone} onChange={e => set('phone', e.target.value)}

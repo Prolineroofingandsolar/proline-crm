@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Lead, Stage, Material, FileItem, Photo } from '../types';
+import type { Lead, Stage, Material, FileItem, Photo, Contact } from '../types';
 import { initialLeads } from '../data/mockData';
 import { generateId } from '../utils/helpers';
 
@@ -24,6 +24,7 @@ export interface GeneralTask {
 
 interface Store {
   leads: Lead[];
+  contacts: Contact[];
   generalTasks: GeneralTask[];
   apiKey: string;
   selectedId: string | null;
@@ -36,6 +37,9 @@ interface Store {
   setSearchQuery: (q: string) => void;
   setApiKey: (key: string) => void;
   showToast: (message: string, type?: 'success' | 'info' | 'error') => void;
+
+  upsertContact: (data: Pick<Contact, 'name' | 'phone' | 'email' | 'address'>) => void;
+  deleteContact: (id: string) => void;
 
   addLead: (data: Omit<Lead, 'id' | 'jobRef' | 'createdAt' | 'updatedAt' | 'tasks' | 'photos' | 'notes' | 'files' | 'materials'>) => void;
   updateLead: (id: string, updates: Partial<Lead>) => void;
@@ -72,6 +76,13 @@ export const useStore = create<Store>()(
   persist(
     (set, get) => ({
       leads: initialLeads,
+      // Seed contacts from unique customers in initialLeads (deduped by phone)
+      contacts: Object.values(
+        initialLeads.reduce((acc, l) => {
+          if (!acc[l.phone]) acc[l.phone] = { id: l.id + '_c', name: l.name, phone: l.phone, email: l.email, address: l.address, createdAt: l.createdAt };
+          return acc;
+        }, {} as Record<string, Contact>)
+      ),
       generalTasks: [
         { id: 'gt1', title: 'MOT reminder – work van', completed: false, priority: 'high', category: 'Vehicle', dueDate: '2024-06-15', createdAt: '2024-05-01' },
         { id: 'gt2', title: 'Renew public liability insurance', completed: false, priority: 'high', category: 'Admin', dueDate: '2024-07-01', createdAt: '2024-05-01' },
@@ -93,6 +104,19 @@ export const useStore = create<Store>()(
         setTimeout(() => set({ toast: null }), 3000);
       },
 
+      upsertContact: ({ name, phone, email, address }) => {
+        const now = new Date().toISOString().split('T')[0];
+        set(s => {
+          const existing = s.contacts.find(c => c.phone === phone);
+          if (existing) {
+            return { contacts: s.contacts.map(c => c.phone === phone ? { ...c, name, email, address } : c) };
+          }
+          return { contacts: [{ id: generateId(), name, phone, email, address, createdAt: now }, ...s.contacts] };
+        });
+      },
+
+      deleteContact: (id) => set(s => ({ contacts: s.contacts.filter(c => c.id !== id) })),
+
       addLead: (data) => {
         const ref = `JOB-${String(jobCounter.n++).padStart(3, '0')}`;
         const now = new Date().toISOString().split('T')[0];
@@ -109,6 +133,7 @@ export const useStore = create<Store>()(
           materials: [],
         };
         set(s => ({ leads: [lead, ...s.leads] }));
+        get().upsertContact({ name: data.name, phone: data.phone, email: data.email, address: data.address });
         get().showToast(`New lead added: ${data.name}`);
       },
 

@@ -59,6 +59,15 @@ export interface Material {
   delivered: boolean;
 }
 
+export interface Contact {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  createdAt: string;
+}
+
 export interface Lead {
   id: string;
   name: string;
