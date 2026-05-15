@@ -16,8 +16,8 @@ export default function TopBar({ onNewLead }: Props) {
 
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center px-3 md:px-4 gap-2 md:gap-4 shrink-0">
-      {/* Title — desktop only */}
-      <h1 className="hidden md:block text-lg font-bold text-gray-800 w-32 shrink-0">
+      {/* Title — tablet and desktop */}
+      <h1 className="hidden sm:block text-lg font-bold text-gray-800 w-28 lg:w-32 shrink-0">
         {titles[currentPage] ?? 'Pipeline'}
       </h1>
 
@@ -48,7 +48,7 @@ export default function TopBar({ onNewLead }: Props) {
           className="flex items-center gap-1 md:gap-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium px-2.5 md:px-3 py-1.5 rounded-lg transition-colors"
         >
           <Plus size={15} />
-          <span className="hidden sm:inline">New Lead</span>
+          <span className="hidden sm:inline lg:inline">New Lead</span>
         </button>
       </div>
     </header>

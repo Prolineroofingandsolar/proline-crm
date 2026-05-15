@@ -3,30 +3,24 @@ import { useStore } from '../../store/useStore';
 
 const nav = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'pipeline', label: 'Pipeline', icon: Kanban },
-  { id: 'leads', label: 'Leads', icon: Users },
-  { id: 'jobs', label: 'Jobs', icon: Briefcase },
-  { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-  { id: 'calendar', label: 'Calendar', icon: Calendar },
-  { id: 'contacts', label: 'Contacts', icon: Contact },
-  { id: 'files', label: 'Files', icon: FolderOpen },
-  { id: 'reports', label: 'Reports', icon: BarChart2 },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
+  { id: 'leads',     label: 'Leads',     icon: Users },
+  { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
+  { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
+  { id: 'calendar',  label: 'Calendar',  icon: Calendar },
+  { id: 'contacts',  label: 'Contacts',  icon: Contact },
+  { id: 'files',     label: 'Files',     icon: FolderOpen },
+  { id: 'reports',   label: 'Reports',   icon: BarChart2 },
+  { id: 'settings',  label: 'Settings',  icon: Settings },
 ];
 
 function ProLineLogo() {
-  // Peak where orange and white sections meet: (92, 42)
-  // Orange: 4 filled triangular bands fanning left from the peak
-  // White: 3 parallel M-shaped roof paths going right from the peak, with chimney notch
   return (
     <svg viewBox="0 0 220 165" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-      {/* 4 orange solar-panel bands — equal-width triangles converging at peak */}
       <polygon points="92,42 2,18 2,36" fill="#ea580c"/>
       <polygon points="92,42 2,41 2,59" fill="#ea580c"/>
       <polygon points="92,42 2,64 2,82" fill="#ea580c"/>
       <polygon points="92,42 2,87 2,105" fill="#ea580c"/>
-
-      {/* 3 white parallel paths: inner peak → valley → outer peak → chimney → base */}
       <path d="M92,42 L122,16 L148,68 L188,10 L188,2 L203,2 L203,10 L218,145"
             stroke="white" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M92,42 L124,25 L150,71 L190,19 L218,131"
@@ -38,16 +32,18 @@ function ProLineLogo() {
 }
 
 export default function Sidebar() {
-  const { currentPage, setCurrentPage } = useStore();
+  const { currentPage, setCurrentPage, users, currentUserId } = useStore();
+  const currentUser = users.find(u => u.id === currentUserId);
+  const initial = currentUser?.name?.[0]?.toUpperCase() ?? '?';
 
   return (
-    <aside className="w-56 shrink-0 flex flex-col h-full" style={{ background: '#111827' }}>
+    <aside className="w-16 lg:w-56 shrink-0 flex flex-col h-full transition-all duration-200" style={{ background: '#111827' }}>
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10">
+      <div className="flex items-center justify-center lg:justify-start gap-3 px-3 lg:px-4 py-4 border-b border-white/10">
         <div className="w-10 h-8 shrink-0">
           <ProLineLogo />
         </div>
-        <div className="leading-tight">
+        <div className="leading-tight hidden lg:block">
           <div className="text-white font-extrabold text-sm tracking-wide">ProLine</div>
           <div className="text-orange-400 text-[11px] font-medium tracking-wider uppercase">Roofing & Solar</div>
         </div>
@@ -61,31 +57,32 @@ export default function Sidebar() {
             <button
               key={id}
               onClick={() => setCurrentPage(id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium mb-0.5 transition-colors text-left ${
+              title={label}
+              className={`w-full flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-lg text-sm font-medium mb-0.5 transition-colors ${
                 active
                   ? 'bg-orange-600 text-white'
-                  : 'text-white/60 hover:bg-white/8 hover:text-white'
+                  : 'text-white/60 hover:bg-white/10 hover:text-white'
               }`}
             >
-              <Icon size={17} />
-              {label}
+              <Icon size={18} className="shrink-0" />
+              <span className="hidden lg:block">{label}</span>
             </button>
           );
         })}
       </nav>
 
-      {/* User */}
+      {/* Current user */}
       <div className="p-3 border-t border-white/10">
-        <button className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/10 transition-colors">
+        <div className="flex items-center justify-center lg:justify-start gap-2.5 px-2 py-2 rounded-lg">
           <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
-            H
+            {initial}
           </div>
-          <div className="text-left flex-1 min-w-0">
-            <div className="text-white text-sm font-medium truncate">Harman</div>
-            <div className="text-white/50 text-xs">Owner</div>
+          <div className="hidden lg:flex flex-col text-left flex-1 min-w-0">
+            <div className="text-white text-sm font-medium truncate">{currentUser?.name ?? 'User'}</div>
+            <div className="text-white/50 text-xs capitalize">{currentUser?.role ?? ''}</div>
           </div>
-          <ChevronDown size={14} className="text-white/40 shrink-0" />
-        </button>
+          <ChevronDown size={14} className="text-white/40 shrink-0 hidden lg:block" />
+        </div>
       </div>
     </aside>
   );

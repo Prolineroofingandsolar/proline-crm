@@ -49,7 +49,7 @@ export default function BottomNav() {
       )}
 
       {/* Bottom bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 flex pb-safe md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 flex pb-safe sm:hidden">
         {MAIN.map(({ id, label, icon: Icon }) => {
           const active = currentPage === id;
           return (

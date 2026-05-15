@@ -26,7 +26,7 @@ function Toast() {
     error: 'bg-red-600',
   };
   return (
-    <div className={`fixed bottom-20 right-4 md:bottom-6 md:right-6 z-[100] ${colors[toast.type]} text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl flex items-center gap-2`}>
+    <div className={`fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-[100] ${colors[toast.type]} text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl flex items-center gap-2`}>
       {toast.message}
     </div>
   );
@@ -54,8 +54,8 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-white">
-      {/* Sidebar — desktop only */}
-      <div className="hidden md:flex">
+      {/* Sidebar — tablet and desktop */}
+      <div className="hidden sm:flex">
         <Sidebar />
       </div>
 
@@ -63,7 +63,7 @@ export default function App() {
         <TopBar onNewLead={() => setShowNewLead(true)} />
         {/* pb-16 on mobile to clear the bottom nav bar */}
         <main className="flex-1 overflow-hidden pb-0 md:pb-0">
-          <div className="h-full pb-16 md:pb-0">
+          <div className="h-full pb-16 sm:pb-0">
             {page[currentPage] ?? <PipelinePage />}
           </div>
         </main>

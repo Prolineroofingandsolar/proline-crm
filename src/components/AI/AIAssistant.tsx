@@ -609,7 +609,7 @@ export default function AIAssistant() {
       {/* Floating button — above bottom nav on mobile */}
       <button
         onClick={() => setOpen(o => !o)}
-        className={`fixed bottom-20 right-4 md:bottom-6 md:right-6 z-50 w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all ${
+        className={`fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-50 w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all ${
           open ? 'bg-gray-700 rotate-12' : 'bg-orange-600 hover:bg-orange-700 hover:scale-105'
         }`}
       >
@@ -621,8 +621,8 @@ export default function AIAssistant() {
 
       {/* Chat panel — full width on mobile, floating on desktop */}
       {open && (
-        <div className="fixed bottom-0 left-0 right-0 md:bottom-24 md:left-auto md:right-6 z-50
-                        md:w-96 md:max-w-[calc(100vw-3rem)] md:rounded-2xl
+        <div className="fixed bottom-0 left-0 right-0 sm:bottom-24 sm:left-auto sm:right-6 z-50
+                        sm:w-96 sm:max-w-[calc(100vw-3rem)] sm:rounded-2xl
                         rounded-t-2xl bg-white shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
           style={{ height: 'min(75dvh, 560px)' }}>
 

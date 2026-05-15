@@ -20,9 +20,9 @@ export default function DashboardPage() {
   const upcomingSurveys = leads.filter(l => l.surveyDate).sort((a, b) => (a.surveyDate ?? '').localeCompare(b.surveyDate ?? '')).slice(0, 5);
 
   return (
-    <div className="p-6 overflow-y-auto h-full bg-white space-y-6">
+    <div className="p-4 sm:p-5 lg:p-6 overflow-y-auto h-full bg-white space-y-4 lg:space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-4">
         <StatCard icon={<Users className="text-violet-600" size={20} />} label="Open Leads" value={String(stats.totalLeads)} color="violet" />
         <StatCard icon={<Briefcase className="text-orange-600" size={20} />} label="Active Jobs" value={String(stats.activeJobs)} color="blue" />
         <StatCard icon={<TrendingUp className="text-orange-600" size={20} />} label="Pipeline Value" value={formatCurrency(stats.pipeline)} color="indigo" />
@@ -33,7 +33,7 @@ export default function DashboardPage() {
         <StatCard icon={<Clock className="text-gray-500" size={20} />} label="Total Leads" value={String(leads.length)} color="gray" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* Recent activity */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
