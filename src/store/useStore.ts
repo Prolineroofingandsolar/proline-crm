@@ -86,7 +86,22 @@ let jobCounterN = 1;
 
 export const useStore = create<Store>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      // Sync the current state of a lead to Supabase after a local update.
+      // Uses update (not upsert) so stale local data can never silently insert a duplicate.
+      const syncLead = (leadId: string) => {
+        const lead = get().leads.find(l => l.id === leadId);
+        if (!lead) return;
+        supabase.from('leads').update(leadToDb(lead)).eq('id', leadId)
+          .then(({ error }) => {
+            if (error) {
+              console.error('Lead sync error:', error);
+              get().showToast('Save failed — check your connection', 'error');
+            }
+          });
+      };
+
+      return {
       isLoaded: false,
       users: [],
       currentUserId: null,
@@ -225,7 +240,10 @@ export const useStore = create<Store>()(
         };
         set(s => ({ leads: [lead, ...s.leads] }));
         supabase.from('leads').insert(leadToDb(lead)).then(({ error }) => {
-          if (error) console.error('addLead sync error:', error);
+          if (error) {
+            console.error('addLead sync error:', error);
+            get().showToast('Lead saved locally but failed to sync — check connection', 'error');
+          }
         });
         get().upsertContact({ name: data.name, phone: data.phone, email: data.email, address: data.address });
         get().showToast(`New lead added: ${data.name}`);
@@ -236,8 +254,7 @@ export const useStore = create<Store>()(
         set(s => ({
           leads: s.leads.map(l => l.id === id ? { ...l, ...updates, updatedAt } : l),
         }));
-        const lead = get().leads.find(l => l.id === id);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(id);
       },
 
       deleteLead: (id) => {
@@ -261,8 +278,7 @@ export const useStore = create<Store>()(
         if (stage === 'Completed') updates.completedDate = now;
         if (stage === 'Paid') { updates.paidDate = now; updates.balance = 0; }
         set(s => ({ leads: s.leads.map(l => l.id === id ? { ...l, ...updates } : l) }));
-        const updated = get().leads.find(l => l.id === id);
-        if (updated) supabase.from('leads').upsert(leadToDb(updated));
+        syncLead(id);
         get().showToast(`Moved to ${stage}`);
       },
 
@@ -285,8 +301,7 @@ export const useStore = create<Store>()(
             return { ...l, tasks, progress };
           }),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       addTask: (leadId, title) => {
@@ -295,8 +310,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, tasks: [...l.tasks, { id: generateId(), title, completed: false }] } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       deleteTask: (leadId, taskId) => {
@@ -305,8 +319,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, tasks: l.tasks.filter(t => t.id !== taskId) } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       // ── General tasks ────────────────────────────────────────────────────────
@@ -352,8 +365,7 @@ export const useStore = create<Store>()(
               : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       deleteNote: (leadId, noteId) => {
@@ -362,8 +374,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, notes: l.notes.filter(n => n.id !== noteId) } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       // ── Materials ────────────────────────────────────────────────────────────
@@ -373,8 +384,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, materials: [...l.materials, { ...mat, id: generateId() }] } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       updateMaterial: (leadId, matId, updates) => {
@@ -385,8 +395,7 @@ export const useStore = create<Store>()(
               : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       deleteMaterial: (leadId, matId) => {
@@ -395,8 +404,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, materials: l.materials.filter(m => m.id !== matId) } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       // ── Files ────────────────────────────────────────────────────────────────
@@ -406,8 +414,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, files: [...l.files, { ...file, id: generateId() }] } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       deleteFile: (leadId, fileId) => {
@@ -416,8 +423,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, files: l.files.filter(f => f.id !== fileId) } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       // ── Photos ───────────────────────────────────────────────────────────────
@@ -427,8 +433,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, photos: [...l.photos, { ...photo, id: generateId() }] } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       deletePhoto: (leadId, photoId) => {
@@ -437,10 +442,10 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, photos: l.photos.filter(p => p.id !== photoId) } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
-    }),
+    };
+    },
     {
       name: 'proline-crm-auth',
       // Only persist auth state locally — everything else comes from Supabase

@@ -1,7 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, UserCheck } from 'lucide-react';
+import { X, UserCheck, MapPin } from 'lucide-react';
 import type { JobType, Stage } from '../../types';
 import { useStore } from '../../store/useStore';
+
+interface NominatimResult {
+  display_name: string;
+  address?: {
+    house_number?: string;
+    road?: string;
+    town?: string;
+    city?: string;
+    postcode?: string;
+  };
+}
 
 const JOB_TYPES: JobType[] = ['Roof Repair', 'Solar Installation', 'New Roof', 'Flat Roof', 'Solar + Battery', 'Guttering', 'Fascias & Soffits', 'Chimney Repair'];
 const SOURCES = ['Website', 'Referral', 'Google', 'Facebook', 'Checkatrade', 'MyBuilder', 'Cold Call', 'Other'];
@@ -24,7 +35,11 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
   });
   const [suggestions, setSuggestions] = useState<typeof contacts>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [addressSuggestions, setAddressSuggestions] = useState<NominatimResult[]>([]);
+  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
+  const [addressLoading, setAddressLoading] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+  const addressDebounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
@@ -40,6 +55,47 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
     setForm(p => ({ ...p, name: c.name, phone: c.phone, email: c.email, address: c.address }));
     setSuggestions([]);
     setShowSuggestions(false);
+  };
+
+  const handleAddressChange = (v: string) => {
+    set('address', v);
+    clearTimeout(addressDebounceRef.current);
+    if (v.trim().length < 3) {
+      setAddressSuggestions([]);
+      setShowAddressSuggestions(false);
+      return;
+    }
+    addressDebounceRef.current = setTimeout(async () => {
+      setAddressLoading(true);
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(v)}&format=json&limit=6&countrycodes=gb&addressdetails=1`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'ProLineCRM/1.0' } });
+        const data: NominatimResult[] = await res.json();
+        setAddressSuggestions(data);
+        setShowAddressSuggestions(data.length > 0);
+      } catch {
+        setAddressSuggestions([]);
+      } finally {
+        setAddressLoading(false);
+      }
+    }, 500);
+  };
+
+  const selectAddress = (result: NominatimResult) => {
+    // Build a clean UK address from address components when available, else use display_name
+    const a = result.address;
+    let formatted = result.display_name;
+    if (a) {
+      const parts = [
+        a.house_number && a.road ? `${a.house_number} ${a.road}` : a.road,
+        a.town ?? a.city,
+        a.postcode,
+      ].filter(Boolean);
+      if (parts.length >= 2) formatted = parts.join(', ');
+    }
+    set('address', formatted);
+    setAddressSuggestions([]);
+    setShowAddressSuggestions(false);
   };
 
   // Close suggestions when clicking outside
@@ -137,10 +193,44 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
               <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="email@example.com" />
             </div>
-            <div className="col-span-2">
+            <div className="col-span-2 relative">
               <label className="block text-xs font-semibold text-gray-600 mb-1">Address</label>
-              <input value={form.address} onChange={e => set('address', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="Street, City, Postcode" />
+              <div className="relative">
+                <input
+                  value={form.address}
+                  onChange={e => handleAddressChange(e.target.value)}
+                  onBlur={() => setTimeout(() => setShowAddressSuggestions(false), 150)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  placeholder="Start typing postcode or address…"
+                  autoComplete="off"
+                />
+                {addressLoading && (
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+                )}
+              </div>
+              {showAddressSuggestions && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 overflow-hidden max-h-44 overflow-y-auto">
+                  {addressSuggestions.map((result, i) => {
+                    const a = result.address;
+                    const line1 = a?.house_number && a?.road ? `${a.house_number} ${a.road}` : a?.road ?? '';
+                    const line2 = [a?.town ?? a?.city, a?.postcode].filter(Boolean).join(' ');
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onMouseDown={() => selectAddress(result)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-orange-50 text-left transition-colors"
+                      >
+                        <MapPin size={13} className="text-orange-400 shrink-0" />
+                        <div className="min-w-0">
+                          {line1 && <p className="text-sm text-gray-800 truncate">{line1}</p>}
+                          <p className="text-xs text-gray-400 truncate">{line2 || result.display_name}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Job Type</label>
