@@ -1,4 +1,5 @@
-﻿import { useState, useRef } from 'react';
+﻿import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Edit3, Save, X, MapPin } from 'lucide-react';
 import type { Lead, JobType } from '../../types';
 import { useStore } from '../../store/useStore';
@@ -30,7 +31,26 @@ export default function InfoTab({ lead }: { lead: Lead }) {
   const [addressSuggestions, setAddressSuggestions] = useState<NominatimResult[]>([]);
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+  const addressInputRef = useRef<HTMLInputElement>(null);
   const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const updateDropdownPos = () => {
+    if (addressInputRef.current) {
+      const r = addressInputRef.current.getBoundingClientRect();
+      setDropdownPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+  };
+
+  useEffect(() => {
+    if (!showAddressSuggestions) return;
+    window.addEventListener('scroll', updateDropdownPos, true);
+    window.addEventListener('resize', updateDropdownPos);
+    return () => {
+      window.removeEventListener('scroll', updateDropdownPos, true);
+      window.removeEventListener('resize', updateDropdownPos);
+    };
+  }, [showAddressSuggestions]);
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
@@ -49,7 +69,12 @@ export default function InfoTab({ lead }: { lead: Lead }) {
         const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'ProLineCRM/1.0' } });
         const data: NominatimResult[] = await res.json();
         setAddressSuggestions(data);
-        setShowAddressSuggestions(data.length > 0);
+        if (data.length > 0) {
+          updateDropdownPos();
+          setShowAddressSuggestions(true);
+        } else {
+          setShowAddressSuggestions(false);
+        }
       } catch {
         setAddressSuggestions([]);
       } finally {
@@ -101,10 +126,11 @@ export default function InfoTab({ lead }: { lead: Lead }) {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
             </div>
           ))}
-          <div className="col-span-2 relative">
+          <div className="col-span-2">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Address</label>
             <div className="relative">
               <input
+                ref={addressInputRef}
                 value={form.address}
                 onChange={e => handleAddressChange(e.target.value)}
                 onBlur={() => setTimeout(() => setShowAddressSuggestions(false), 150)}
@@ -116,8 +142,11 @@ export default function InfoTab({ lead }: { lead: Lead }) {
                 <div className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
               )}
             </div>
-            {showAddressSuggestions && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 overflow-hidden max-h-44 overflow-y-auto">
+            {showAddressSuggestions && createPortal(
+              <div
+                style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width, zIndex: 9999 }}
+                className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-44 overflow-y-auto"
+              >
                 {addressSuggestions.map((result, i) => {
                   const a = result.address;
                   const line1 = a?.house_number && a?.road ? `${a.house_number} ${a.road}` : a?.road ?? '';
@@ -137,7 +166,8 @@ export default function InfoTab({ lead }: { lead: Lead }) {
                     </button>
                   );
                 })}
-              </div>
+              </div>,
+              document.body
             )}
           </div>
           <div>
