@@ -39,7 +39,7 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
-  const addressDebounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
