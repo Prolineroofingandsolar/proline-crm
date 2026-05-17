@@ -3,17 +3,7 @@ import { Edit3, Save, X, MapPin } from 'lucide-react';
 import type { Lead, JobType } from '../../types';
 import { useStore } from '../../store/useStore';
 import { formatCurrency, formatDate, jobTypeColor } from '../../utils/helpers';
-
-interface NominatimResult {
-  display_name: string;
-  address?: {
-    house_number?: string;
-    road?: string;
-    town?: string;
-    city?: string;
-    postcode?: string;
-  };
-}
+import { autocompleteAddress, getFullAddress, type AddressSuggestion } from '../../lib/getAddress';
 
 const JOB_TYPES: JobType[] = ['Roof Repair', 'Solar Installation', 'New Roof', 'Flat Roof', 'Solar + Battery', 'Guttering', 'Fascias & Soffits', 'Chimney Repair'];
 
@@ -27,7 +17,7 @@ export default function InfoTab({ lead }: { lead: Lead }) {
     source: lead.source, assignedTo: lead.assignedTo,
   });
 
-  const [addressSuggestions, setAddressSuggestions] = useState<NominatimResult[]>([]);
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
   const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -37,41 +27,25 @@ export default function InfoTab({ lead }: { lead: Lead }) {
   const handleAddressChange = (v: string) => {
     set('address', v);
     clearTimeout(addressDebounceRef.current);
-    if (v.trim().length < 3) {
+    if (v.trim().length < 2) {
       setAddressSuggestions([]);
       setShowAddressSuggestions(false);
       return;
     }
     addressDebounceRef.current = setTimeout(async () => {
       setAddressLoading(true);
-      try {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(v)}&format=json&limit=6&countrycodes=gb&addressdetails=1`;
-        const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'ProLineCRM/1.0' } });
-        const data: NominatimResult[] = await res.json();
-        setAddressSuggestions(data);
-        setShowAddressSuggestions(data.length > 0);
-      } catch {
-        setAddressSuggestions([]);
-      } finally {
-        setAddressLoading(false);
-      }
-    }, 500);
+      const results = await autocompleteAddress(v);
+      setAddressSuggestions(results);
+      setShowAddressSuggestions(results.length > 0);
+      setAddressLoading(false);
+    }, 300);
   };
 
-  const selectAddress = (result: NominatimResult) => {
-    const a = result.address;
-    let formatted = result.display_name;
-    if (a) {
-      const parts = [
-        a.house_number && a.road ? `${a.house_number} ${a.road}` : a.road,
-        a.town ?? a.city,
-        a.postcode,
-      ].filter(Boolean);
-      if (parts.length >= 2) formatted = parts.join(', ');
-    }
-    set('address', formatted);
-    setAddressSuggestions([]);
+  const selectAddress = async (suggestion: AddressSuggestion) => {
     setShowAddressSuggestions(false);
+    setAddressSuggestions([]);
+    const full = await getFullAddress(suggestion.id);
+    set('address', full || suggestion.address);
   };
 
   const save = () => {
@@ -118,25 +92,17 @@ export default function InfoTab({ lead }: { lead: Lead }) {
             </div>
             {showAddressSuggestions && (
               <div className="mt-1 border border-gray-200 rounded-xl overflow-hidden bg-white shadow">
-                {addressSuggestions.map((result, i) => {
-                  const a = result.address;
-                  const line1 = a?.house_number && a?.road ? `${a.house_number} ${a.road}` : a?.road ?? '';
-                  const line2 = [a?.town ?? a?.city, a?.postcode].filter(Boolean).join(' ');
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      onMouseDown={() => selectAddress(result)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-orange-50 text-left transition-colors border-b border-gray-100 last:border-0"
-                    >
-                      <MapPin size={13} className="text-orange-400 shrink-0" />
-                      <div className="min-w-0">
-                        {line1 && <p className="text-sm text-gray-800 truncate">{line1}</p>}
-                        <p className="text-xs text-gray-400 truncate">{line2 || result.display_name}</p>
-                      </div>
-                    </button>
-                  );
-                })}
+                {addressSuggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onMouseDown={() => selectAddress(s)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-orange-50 text-left transition-colors border-b border-gray-100 last:border-0"
+                  >
+                    <MapPin size={13} className="text-orange-400 shrink-0" />
+                    <p className="text-sm text-gray-700 truncate">{s.address}</p>
+                  </button>
+                ))}
               </div>
             )}
           </div>

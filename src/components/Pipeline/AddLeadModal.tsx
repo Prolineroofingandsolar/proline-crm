@@ -2,17 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { X, UserCheck, MapPin } from 'lucide-react';
 import type { JobType, Stage } from '../../types';
 import { useStore } from '../../store/useStore';
-
-interface NominatimResult {
-  display_name: string;
-  address?: {
-    house_number?: string;
-    road?: string;
-    town?: string;
-    city?: string;
-    postcode?: string;
-  };
-}
+import { autocompleteAddress, getFullAddress, type AddressSuggestion } from '../../lib/getAddress';
 
 const JOB_TYPES: JobType[] = ['Roof Repair', 'Solar Installation', 'New Roof', 'Flat Roof', 'Solar + Battery', 'Guttering', 'Fascias & Soffits', 'Chimney Repair'];
 const SOURCES = ['Website', 'Referral', 'Google', 'Facebook', 'Checkatrade', 'MyBuilder', 'Cold Call', 'Other'];
@@ -35,7 +25,7 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
   });
   const [suggestions, setSuggestions] = useState<typeof contacts>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [addressSuggestions, setAddressSuggestions] = useState<NominatimResult[]>([]);
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -60,42 +50,25 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
   const handleAddressChange = (v: string) => {
     set('address', v);
     clearTimeout(addressDebounceRef.current);
-    if (v.trim().length < 3) {
+    if (v.trim().length < 2) {
       setAddressSuggestions([]);
       setShowAddressSuggestions(false);
       return;
     }
     addressDebounceRef.current = setTimeout(async () => {
       setAddressLoading(true);
-      try {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(v)}&format=json&limit=6&countrycodes=gb&addressdetails=1`;
-        const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'ProLineCRM/1.0' } });
-        const data: NominatimResult[] = await res.json();
-        setAddressSuggestions(data);
-        setShowAddressSuggestions(data.length > 0);
-      } catch {
-        setAddressSuggestions([]);
-      } finally {
-        setAddressLoading(false);
-      }
-    }, 500);
+      const results = await autocompleteAddress(v);
+      setAddressSuggestions(results);
+      setShowAddressSuggestions(results.length > 0);
+      setAddressLoading(false);
+    }, 300);
   };
 
-  const selectAddress = (result: NominatimResult) => {
-    // Build a clean UK address from address components when available, else use display_name
-    const a = result.address;
-    let formatted = result.display_name;
-    if (a) {
-      const parts = [
-        a.house_number && a.road ? `${a.house_number} ${a.road}` : a.road,
-        a.town ?? a.city,
-        a.postcode,
-      ].filter(Boolean);
-      if (parts.length >= 2) formatted = parts.join(', ');
-    }
-    set('address', formatted);
-    setAddressSuggestions([]);
+  const selectAddress = async (suggestion: AddressSuggestion) => {
     setShowAddressSuggestions(false);
+    setAddressSuggestions([]);
+    const full = await getFullAddress(suggestion.id);
+    set('address', full || suggestion.address);
   };
 
   // Close suggestions when clicking outside
@@ -209,26 +182,18 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
                 )}
               </div>
               {showAddressSuggestions && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 overflow-hidden max-h-44 overflow-y-auto">
-                  {addressSuggestions.map((result, i) => {
-                    const a = result.address;
-                    const line1 = a?.house_number && a?.road ? `${a.house_number} ${a.road}` : a?.road ?? '';
-                    const line2 = [a?.town ?? a?.city, a?.postcode].filter(Boolean).join(' ');
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onMouseDown={() => selectAddress(result)}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-orange-50 text-left transition-colors"
-                      >
-                        <MapPin size={13} className="text-orange-400 shrink-0" />
-                        <div className="min-w-0">
-                          {line1 && <p className="text-sm text-gray-800 truncate">{line1}</p>}
-                          <p className="text-xs text-gray-400 truncate">{line2 || result.display_name}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 overflow-hidden max-h-52 overflow-y-auto">
+                  {addressSuggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onMouseDown={() => selectAddress(s)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-orange-50 text-left transition-colors border-b border-gray-100 last:border-0"
+                    >
+                      <MapPin size={13} className="text-orange-400 shrink-0" />
+                      <p className="text-sm text-gray-700 truncate">{s.address}</p>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
