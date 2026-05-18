@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, UserCheck, MapPin } from 'lucide-react';
+import { X, UserCheck, MapPin, Camera, Loader2 } from 'lucide-react';
 import type { JobType, Stage } from '../../types';
 import { useStore } from '../../store/useStore';
+import { extractLeadFromImage } from '../../lib/gemini';
 
 interface AddressSuggestion {
   display: string;
@@ -145,17 +146,54 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
     onClose();
   };
 
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleScanPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanError(null);
+    setScanning(true);
+    extractLeadFromImage(file)
+      .then(data => {
+        setForm(p => ({
+          ...p,
+          name: data.name ?? p.name,
+          phone: data.phone ?? p.phone,
+          email: data.email ?? p.email,
+          address: data.address ?? p.address,
+          jobType: (data.jobType as JobType) ?? p.jobType,
+          notes: data.notes ?? p.notes,
+        }));
+      })
+      .catch(err => setScanError(err.message))
+      .finally(() => { setScanning(false); e.target.value = ''; });
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 backdrop-blur-sm md:p-4">
       <div className="bg-white md:rounded-2xl rounded-t-2xl shadow-2xl w-full md:max-w-lg max-h-[92dvh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
           <h2 className="font-bold text-gray-800 text-lg">Add New Lead</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><X size={18} /></button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={scanning}
+              className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-600 transition-colors disabled:opacity-50">
+              {scanning ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}
+              {scanning ? 'Scanning…' : 'Scan photo'}
+            </button>
+            <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><X size={18} /></button>
+          </div>
         </div>
+        <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
+          className="hidden" onChange={handleScanPhoto} />
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="overflow-y-auto p-5 pb-safe space-y-4">
+          {scanError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{scanError}</div>
+          )}
           <div className="grid grid-cols-2 gap-3">
 
             {/* Customer name with autocomplete */}
