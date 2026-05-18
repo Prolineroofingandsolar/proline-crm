@@ -2,7 +2,6 @@ const CLIENT_ID = '845292341174-dqqb7o1dcsvf2brs7cbglmaop8k50d4q.apps.googleuser
 const SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 
 let accessToken: string | null = null;
-let tokenClient: google.accounts.oauth2.TokenClient | null = null;
 
 declare namespace google.accounts.oauth2 {
   interface TokenClient {
@@ -20,30 +19,54 @@ declare namespace google.accounts.oauth2 {
   }): TokenClient;
 }
 
-export function isGmailReady(): boolean {
-  return !!accessToken;
+function waitForGoogleScript(timeoutMs = 10000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof google !== 'undefined' && google?.accounts?.oauth2) {
+      resolve(); return;
+    }
+    const start = Date.now();
+    const check = setInterval(() => {
+      if (typeof google !== 'undefined' && google?.accounts?.oauth2) {
+        clearInterval(check); resolve();
+      } else if (Date.now() - start > timeoutMs) {
+        clearInterval(check);
+        reject(new Error('Google sign-in script failed to load. Check your internet connection and try again.'));
+      }
+    }, 100);
+  });
 }
 
-function getTokenClient(): Promise<string> {
+async function getAccessToken(): Promise<string> {
+  if (accessToken) return accessToken;
+
+  await waitForGoogleScript();
+
   return new Promise((resolve, reject) => {
-    if (accessToken) { resolve(accessToken); return; }
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPE,
+      callback: (resp) => {
+        if (resp.error || !resp.access_token) {
+          reject(new Error(resp.error ?? 'No access token returned'));
+          return;
+        }
+        accessToken = resp.access_token;
+        setTimeout(() => { accessToken = null; }, 55 * 60 * 1000);
+        resolve(accessToken);
+      },
+      error_callback: (err) => {
+        if (err.type === 'popup_closed') {
+          reject(new Error('Sign-in popup was closed — please try again'));
+        } else if (err.type === 'popup_blocked') {
+          reject(new Error('Popup was blocked — allow popups for this site and try again'));
+        } else {
+          reject(new Error(`Sign-in failed: ${err.type}`));
+        }
+      },
+    });
 
-    if (!tokenClient) {
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPE,
-        callback: (resp) => {
-          if (resp.error) { reject(new Error(resp.error)); return; }
-          accessToken = resp.access_token;
-          // Tokens last ~1 hour — clear so next send re-auths if needed
-          setTimeout(() => { accessToken = null; }, 55 * 60 * 1000);
-          resolve(accessToken);
-        },
-        error_callback: (err) => reject(new Error(err.type)),
-      });
-    }
-
-    tokenClient.requestAccessToken({ prompt: '' });
+    // Always show the account picker so the user can see what's happening
+    client.requestAccessToken({ prompt: 'select_account' });
   });
 }
 
@@ -65,7 +88,7 @@ function buildRfc2822(to: string, subject: string, body: string): string {
 }
 
 export async function sendGmail(to: string, subject: string, body: string): Promise<void> {
-  const token = await getTokenClient();
+  const token = await getAccessToken();
 
   const raw = toBase64Url(buildRfc2822(to, subject, body));
 
@@ -80,8 +103,7 @@ export async function sendGmail(to: string, subject: string, body: string): Prom
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    // Token may have expired mid-session — clear it so next attempt re-auths
     if (res.status === 401) accessToken = null;
-    throw new Error((err as { error?: { message?: string } }).error?.message ?? 'Failed to send email');
+    throw new Error((err as { error?: { message?: string } }).error?.message ?? 'Failed to send — please try again');
   }
 }
