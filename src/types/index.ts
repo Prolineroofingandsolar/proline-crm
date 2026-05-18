@@ -115,6 +115,8 @@ export interface Lead {
   source: string;
   assignedTo: string;
   wonDate?: string;
+  myBuilderUrl?: string;
+  reviewRequestSent?: boolean;
   lat?: number;
   lng?: number;
   tasks: Task[];

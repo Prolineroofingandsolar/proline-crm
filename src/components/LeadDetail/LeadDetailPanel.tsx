@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Phone, MessageSquare, Mail, Trophy, Play, CheckCircle, CreditCard, ChevronRight, Trash2, Calendar } from 'lucide-react';
+import { X, Phone, MessageSquare, Mail, Trophy, Play, CheckCircle, CreditCard, ChevronRight, Trash2, Calendar, Star } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { formatCurrency, jobTypeColor } from '../../utils/helpers';
 import TasksTab from './TasksTab';
@@ -8,6 +8,7 @@ import MaterialsTab from './MaterialsTab';
 import NotesTab from './NotesTab';
 import FilesTab from './FilesTab';
 import InfoTab from './InfoTab';
+import ReviewRequestModal from '../Reviews/ReviewRequestModal';
 
 const TABS = ['Tasks', 'Photos', 'Materials', 'Notes', 'Files', 'Info'] as const;
 type Tab = typeof TABS[number];
@@ -25,11 +26,17 @@ const stageColors: Record<string, string> = {
 export default function LeadDetailPanel() {
   const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead, updateLead } = useStore();
   const [activeTab, setActiveTab] = useState<Tab>('Tasks');
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
   const lead = leads.find(l => l.id === selectedId);
   if (!lead) return null;
 
   const close = () => setSelectedId(null);
+
+  const handleMarkPaid = () => {
+    moveToStage(lead.id, 'Paid');
+    if (!lead.reviewRequestSent) setShowReviewModal(true);
+  };
 
   return (
     <>
@@ -81,6 +88,21 @@ export default function LeadDetailPanel() {
           </div>
         </div>
 
+        {/* Review request button for paid jobs */}
+        {lead.stage === 'Paid' && (
+          <div className="px-4 py-2 border-b border-gray-100 shrink-0">
+            <button onClick={() => setShowReviewModal(true)}
+              className={`w-full flex items-center justify-center gap-1.5 text-sm px-4 py-2 rounded-xl font-medium transition-colors ${
+                lead.reviewRequestSent
+                  ? 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+              }`}>
+              <Star size={15} />
+              {lead.reviewRequestSent ? 'Review Request Sent — Send Again' : 'Send Review Request'}
+            </button>
+          </div>
+        )}
+
         {/* Stage advance — full-width banner on mobile */}
         {lead.stage !== 'Paid' && (
           <div className="px-4 py-2 border-b border-gray-100 shrink-0">
@@ -115,7 +137,7 @@ export default function LeadDetailPanel() {
               </button>
             )}
             {lead.stage === 'Completed' && (
-              <button onClick={() => moveToStage(lead.id, 'Paid')}
+              <button onClick={handleMarkPaid}
                 className="w-full flex items-center justify-center gap-1.5 text-sm bg-teal-600 text-white hover:bg-teal-700 px-4 py-2 rounded-xl font-medium transition-colors">
                 <CreditCard size={15} /> Mark Paid
               </button>
@@ -207,6 +229,14 @@ export default function LeadDetailPanel() {
           </div>
         </div>
       </div>
+
+      {showReviewModal && (
+        <ReviewRequestModal
+          lead={lead}
+          onClose={() => setShowReviewModal(false)}
+          onMarkSent={() => updateLead(lead.id, { reviewRequestSent: true })}
+        />
+      )}
     </>
   );
 }

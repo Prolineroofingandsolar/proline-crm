@@ -32,6 +32,7 @@ export default function InfoTab({ lead }: { lead: Lead }) {
     jobType: lead.jobType, value: String(lead.value), deposit: String(lead.deposit),
     startDate: lead.startDate ?? '', endDate: lead.endDate ?? '',
     source: lead.source, assignedTo: lead.assignedTo,
+    myBuilderUrl: lead.myBuilderUrl ?? '',
   });
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
@@ -95,6 +96,7 @@ export default function InfoTab({ lead }: { lead: Lead }) {
       jobType: form.jobType as JobType, value, deposit, balance: value - deposit,
       startDate: form.startDate || undefined, endDate: form.endDate || undefined,
       source: form.source, assignedTo: form.assignedTo,
+      myBuilderUrl: form.myBuilderUrl.trim() || undefined,
     });
     setEditing(false);
   };
@@ -175,6 +177,14 @@ export default function InfoTab({ lead }: { lead: Lead }) {
             <input value={form.source} onChange={e => set('source', e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
           </div>
+          {form.source === 'MyBuilder' && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">MyBuilder Job URL</label>
+              <input type="url" value={form.myBuilderUrl} onChange={e => set('myBuilderUrl', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                placeholder="https://www.mybuilder.com/jobs/..." />
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Job Value (£)</label>
             <input type="number" value={form.value} onChange={e => set('value', e.target.value)}

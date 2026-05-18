@@ -37,6 +37,7 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
     value: '', deposit: '',
     surveyDate: '', surveyTime: '',
     notes: '',
+    myBuilderUrl: '',
   });
   const [suggestions, setSuggestions] = useState<typeof contacts>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -139,6 +140,7 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
       progress: 0,
       surveyDate: form.surveyDate || undefined,
       surveyTime: form.surveyTime || undefined,
+      myBuilderUrl: form.myBuilderUrl.trim() || undefined,
     });
     onClose();
   };
@@ -265,6 +267,14 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
                 {SOURCES.map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
+            {form.source === 'MyBuilder' && (
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">MyBuilder Job URL</label>
+                <input type="url" value={form.myBuilderUrl} onChange={e => set('myBuilderUrl', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  placeholder="https://www.mybuilder.com/jobs/..." />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Stage</label>
               <select value={form.stage} onChange={e => set('stage', e.target.value)}
