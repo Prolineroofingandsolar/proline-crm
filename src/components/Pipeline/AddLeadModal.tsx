@@ -62,7 +62,7 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
     addressDebounceRef.current = setTimeout(async () => {
       setAddressLoading(true);
       try {
-        const res = await fetch(`/api/getaddress/autocomplete/${encodeURIComponent(v)}`);
+        const res = await fetch(`/api/getaddress/autocomplete/${encodeURIComponent(v)}?api-key=${import.meta.env.VITE_GETADDRESS_API_KEY}`);
         const data: { suggestions?: AddressSuggestion[] } = await res.json();
         const suggestions = data.suggestions ?? [];
         setAddressSuggestions(suggestions);
