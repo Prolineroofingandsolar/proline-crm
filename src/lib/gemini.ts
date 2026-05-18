@@ -1,5 +1,5 @@
 const API_KEY = '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';
-const MODEL = 'google/gemini-2.0-flash-exp:free';
+const MODEL = 'meta-llama/llama-4-scout:free';
 
 export interface ExtractedLead {
   name?: string;
