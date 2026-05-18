@@ -3,20 +3,9 @@ import { X, UserCheck, MapPin } from 'lucide-react';
 import type { JobType, Stage } from '../../types';
 import { useStore } from '../../store/useStore';
 
-interface NominatimResult {
-  display_name: string;
-  address?: {
-    house_number?: string;
-    road?: string;
-    town?: string;
-    city?: string;
-    village?: string;
-    suburb?: string;
-    hamlet?: string;
-    neighbourhood?: string;
-    county?: string;
-    postcode?: string;
-  };
+interface AddressSuggestion {
+  address: string;
+  url: string;
 }
 
 const JOB_TYPES: JobType[] = ['Roof Repair', 'Solar Installation', 'New Roof', 'Flat Roof', 'Solar + Battery', 'Guttering', 'Fascias & Soffits', 'Chimney Repair'];
@@ -40,7 +29,7 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
   });
   const [suggestions, setSuggestions] = useState<typeof contacts>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [addressSuggestions, setAddressSuggestions] = useState<NominatimResult[]>([]);
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -73,11 +62,11 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
     addressDebounceRef.current = setTimeout(async () => {
       setAddressLoading(true);
       try {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(v)}&format=json&limit=6&countrycodes=gb&addressdetails=1`;
-        const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'ProLineCRM/1.0' } });
-        const data: NominatimResult[] = await res.json();
-        setAddressSuggestions(data);
-        setShowAddressSuggestions(data.length > 0);
+        const res = await fetch(`/api/getaddress/autocomplete/${encodeURIComponent(v)}`);
+        const data: { suggestions?: AddressSuggestion[] } = await res.json();
+        const suggestions = data.suggestions ?? [];
+        setAddressSuggestions(suggestions);
+        setShowAddressSuggestions(suggestions.length > 0);
       } catch {
         setAddressSuggestions([]);
       } finally {
@@ -86,19 +75,8 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
     }, 500);
   };
 
-  const selectAddress = (result: NominatimResult) => {
-    const a = result.address;
-    let formatted = result.display_name;
-    if (a) {
-      const locality = a.town ?? a.city ?? a.village ?? a.suburb ?? a.hamlet ?? a.neighbourhood ?? a.county;
-      const parts = [
-        a.house_number && a.road ? `${a.house_number} ${a.road}` : a.road,
-        locality,
-        a.postcode,
-      ].filter(Boolean);
-      if (parts.length >= 2) formatted = parts.join(', ');
-    }
-    set('address', formatted);
+  const selectAddress = (suggestion: AddressSuggestion) => {
+    set('address', suggestion.address);
     setAddressSuggestions([]);
     setShowAddressSuggestions(false);
   };
@@ -215,22 +193,21 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
               </div>
               {showAddressSuggestions && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 overflow-hidden max-h-44 overflow-y-auto">
-                  {addressSuggestions.map((result, i) => {
-                    const a = result.address;
-                    const line1 = a?.house_number && a?.road ? `${a.house_number} ${a.road}` : a?.road ?? '';
-                    const locality = a?.town ?? a?.city ?? a?.village ?? a?.suburb ?? a?.hamlet ?? a?.neighbourhood ?? a?.county;
-                    const line2 = [locality, a?.postcode].filter(Boolean).join(', ');
+                  {addressSuggestions.map((suggestion, i) => {
+                    const parts = suggestion.address.split(', ');
+                    const line1 = parts[0];
+                    const line2 = parts.slice(1).join(', ');
                     return (
                       <button
                         key={i}
                         type="button"
-                        onMouseDown={() => selectAddress(result)}
+                        onMouseDown={() => selectAddress(suggestion)}
                         className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-orange-50 text-left transition-colors"
                       >
                         <MapPin size={13} className="text-orange-400 shrink-0" />
                         <div className="min-w-0">
-                          {line1 && <p className="text-sm text-gray-800 truncate">{line1}</p>}
-                          <p className="text-xs text-gray-400 truncate">{line2 || result.display_name}</p>
+                          <p className="text-sm text-gray-800 truncate">{line1}</p>
+                          {line2 && <p className="text-xs text-gray-400 truncate">{line2}</p>}
                         </div>
                       </button>
                     );
