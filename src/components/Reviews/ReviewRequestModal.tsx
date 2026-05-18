@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { X, Star, Copy, Mail, CheckCircle2 } from 'lucide-react';
+import { X, Star, Copy, Mail, CheckCircle2, Send, Loader2 } from 'lucide-react';
 import type { Lead } from '../../types';
+import { sendGmail } from '../../lib/gmail';
 
 const GOOGLE_REVIEW_URL = 'https://share.google/bUnpIGWWSyEqZuERS';
 
@@ -12,18 +13,17 @@ interface Props {
 
 export default function ReviewRequestModal({ lead, onClose, onMarkSent }: Props) {
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const isMyBuilder = lead.source === 'MyBuilder' && lead.myBuilderUrl;
-
-  const reviewLinks = [
-    `Google Review: ${GOOGLE_REVIEW_URL}`,
-    ...(isMyBuilder ? [`MyBuilder Review: ${lead.myBuilderUrl}`] : []),
-  ].join('\n');
+  const firstName = lead.name.split(' ')[0];
 
   const emailSubject = `Thank you for choosing ProLine Roofing & Solar`;
 
   const emailBody = [
-    `Hi ${lead.name.split(' ')[0]},`,
+    `Hi ${firstName},`,
     ``,
     `Thank you so much for choosing ProLine Roofing & Solar — it was a pleasure working on your project.`,
     ``,
@@ -40,17 +40,33 @@ export default function ReviewRequestModal({ lead, onClose, onMarkSent }: Props)
 
   const mailtoHref = `mailto:${lead.email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
 
+  const handleGmailSend = async () => {
+    if (!lead.email) return;
+    setSending(true);
+    setError(null);
+    try {
+      await sendGmail(lead.email, emailSubject, emailBody);
+      setSent(true);
+      onMarkSent();
+      setTimeout(onClose, 1500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to send — try the email app instead');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleMailtoSend = () => {
+    window.location.href = mailtoHref;
+    onMarkSent();
+    onClose();
+  };
+
   const handleCopy = () => {
     navigator.clipboard.writeText(emailBody).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  };
-
-  const handleSend = () => {
-    window.location.href = mailtoHref;
-    onMarkSent();
-    onClose();
   };
 
   return (
@@ -87,24 +103,43 @@ export default function ReviewRequestModal({ lead, onClose, onMarkSent }: Props)
             </div>
           )}
 
-          <div className="flex flex-col gap-2">
-            {lead.email ? (
-              <button onClick={handleSend}
-                className="flex items-center justify-center gap-2 w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 rounded-xl transition-colors">
-                <Mail size={16} />
-                Open in Email App
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {lead.email && (
+            <div className="flex flex-col gap-2">
+              {/* Primary: send directly via Gmail */}
+              <button onClick={handleGmailSend} disabled={sending || sent}
+                className="flex items-center justify-center gap-2 w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-70 text-white font-semibold py-3 rounded-xl transition-colors">
+                {sent
+                  ? <><CheckCircle2 size={16} /> Sent!</>
+                  : sending
+                  ? <><Loader2 size={16} className="animate-spin" /> Sending…</>
+                  : <><Send size={16} /> Send via Gmail</>}
               </button>
-            ) : null}
-            <button onClick={handleCopy}
-              className="flex items-center justify-center gap-2 w-full border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium py-2.5 rounded-xl transition-colors">
-              {copied ? <CheckCircle2 size={16} className="text-green-500" /> : <Copy size={16} />}
-              {copied ? 'Copied!' : 'Copy message'}
-            </button>
-            <button onClick={() => { onMarkSent(); onClose(); }}
-              className="text-xs text-gray-400 hover:text-gray-600 text-center py-1 transition-colors">
-              Mark as sent without opening email
-            </button>
-          </div>
+
+              {/* Fallback: open email app */}
+              <button onClick={handleMailtoSend}
+                className="flex items-center justify-center gap-2 w-full border border-gray-200 hover:bg-gray-50 text-gray-600 font-medium py-2.5 rounded-xl transition-colors text-sm">
+                <Mail size={15} />
+                Open in email app instead
+              </button>
+
+              <button onClick={handleCopy}
+                className="flex items-center justify-center gap-2 w-full border border-gray-200 hover:bg-gray-50 text-gray-600 font-medium py-2.5 rounded-xl transition-colors text-sm">
+                {copied ? <CheckCircle2 size={15} className="text-green-500" /> : <Copy size={15} />}
+                {copied ? 'Copied!' : 'Copy message'}
+              </button>
+
+              <button onClick={() => { onMarkSent(); onClose(); }}
+                className="text-xs text-gray-400 hover:text-gray-600 text-center py-1 transition-colors">
+                Mark as sent without sending
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </>
