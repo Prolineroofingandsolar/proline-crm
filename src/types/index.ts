@@ -23,6 +23,7 @@ export interface Task {
   completed: boolean;
   completedDate?: string;
   dueDate?: string;
+  isTemplate?: boolean;
 }
 
 export interface Photo {
