@@ -76,7 +76,7 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
         const key = import.meta.env.VITE_GETADDRESS_API_KEY;
         let results: AddressSuggestion[] = [];
         if (UK_POSTCODE_RE.test(v.trim())) {
-          const cleanPostcode = v.trim().replace(/\s+/g, '');
+          const cleanPostcode = v.trim().toUpperCase().replace(/\s+/g, '');
           const res = await fetch(`/api/getaddress/find/${cleanPostcode}?api-key=${key}`);
           const data: { addresses?: string[]; postcode?: string } = await res.json();
           const postcode = data.postcode ?? v.trim();
