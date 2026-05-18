@@ -1,76 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { Plus, X, CheckCircle2, Circle, ClipboardList, ChevronDown, ChevronUp } from 'lucide-react';
-import type { Lead, Stage } from '../../types';
+import type { Lead } from '../../types';
 import { useStore } from '../../store/useStore';
 import { formatDateShort } from '../../utils/helpers';
-
-const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
-  'New Lead': [
-    'Call customer to discuss requirements',
-    'Confirm contact details',
-    'Check job location / access',
-  ],
-  'Survey Booked': [
-    'Confirm survey appointment with customer',
-    'Prepare survey checklist',
-    'Review job requirements before visit',
-  ],
-  'Quote Sent': [
-    'Follow up on quote within 3 days',
-    'Answer any customer questions',
-    'Chase quote if no response after 7 days',
-  ],
-  'Won': [
-    'Collect deposit',
-    'Confirm start date with customer',
-    'Order materials',
-    'Brief the team on job details',
-  ],
-  'In Progress': [
-    'Confirm materials delivered',
-    'Daily progress check',
-    'Take before & during photos',
-    'Keep customer updated',
-  ],
-  'Completed': [
-    'Final inspection with customer',
-    'Take completion photos',
-    'Send final invoice',
-    'Collect outstanding balance',
-  ],
-  'Paid': [
-    'File all job paperwork',
-    'Request customer review / referral',
-    'Update job records',
-  ],
-};
 
 export default function TasksTab({ lead }: { lead: Lead }) {
   const { toggleTask, addTask, deleteTask } = useStore();
   const [newTask, setNewTask] = useState('');
   const [checklistOpen, setChecklistOpen] = useState(true);
   const [customOpen, setCustomOpen] = useState(true);
-  const prevStageRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    const isStageChange = prevStageRef.current !== undefined && prevStageRef.current !== lead.stage;
-    const isFirstLoad = prevStageRef.current === undefined;
-    prevStageRef.current = lead.stage;
-
-    if (isStageChange) {
-      lead.tasks.filter(t => t.isTemplate).forEach(t => deleteTask(lead.id, t.id));
-    }
-
-    if (isFirstLoad || isStageChange) {
-      const stageTasks = STAGE_TASKS[lead.stage] ?? [];
-      const existingTitles = new Set(
-        isStageChange ? [] : lead.tasks.filter(t => t.isTemplate).map(t => t.title)
-      );
-      stageTasks.forEach(title => {
-        if (!existingTitles.has(title)) addTask(lead.id, title, true);
-      });
-    }
-  }, [lead.stage]);
 
   const templateTasks = lead.tasks.filter(t => t.isTemplate);
   const customTasks = lead.tasks.filter(t => !t.isTemplate);
@@ -86,7 +24,7 @@ export default function TasksTab({ lead }: { lead: Lead }) {
   };
 
   const renderTask = (task: Lead['tasks'][0]) => (
-    <div key={task.id} className={`flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 group ${task.completed ? 'opacity-70' : ''}`}>
+    <div key={task.id} className={`flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 ${task.completed ? 'opacity-70' : ''}`}>
       <button onClick={() => toggleTask(lead.id, task.id)} className="shrink-0 text-gray-400 hover:text-orange-600">
         {task.completed
           ? <CheckCircle2 size={18} className="text-green-500" />
@@ -99,7 +37,7 @@ export default function TasksTab({ lead }: { lead: Lead }) {
         <span className="text-xs text-gray-400 shrink-0">{formatDateShort(task.completedDate)}</span>
       )}
       <button onClick={() => deleteTask(lead.id, task.id)}
-        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 shrink-0 transition-opacity p-0.5 rounded">
+        className="text-gray-300 hover:text-red-500 shrink-0 transition-colors p-0.5 rounded">
         <X size={13} />
       </button>
     </div>

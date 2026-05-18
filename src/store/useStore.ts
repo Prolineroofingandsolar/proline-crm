@@ -11,11 +11,46 @@ import {
   generalTaskToDb, dbToGeneralTask,
 } from '../lib/supabase';
 
-const DEFAULT_TASKS = [
-  'Order materials', 'Scaffold booked', 'Confirm start date with customer',
-  'Deposit received', 'Before photos', 'Remove old roof', 'Install new roof',
-  'Snagging / Quality check', 'After photos', 'Send invoice & request review',
-];
+const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
+  'New Lead': [
+    'Call customer to discuss requirements',
+    'Confirm contact details',
+    'Check job location / access',
+  ],
+  'Survey Booked': [
+    'Confirm survey appointment with customer',
+    'Prepare survey checklist',
+    'Review job requirements before visit',
+  ],
+  'Quote Sent': [
+    'Follow up on quote within 3 days',
+    'Answer any customer questions',
+    'Chase quote if no response after 7 days',
+  ],
+  'Won': [
+    'Collect deposit',
+    'Confirm start date with customer',
+    'Order materials',
+    'Brief the team on job details',
+  ],
+  'In Progress': [
+    'Confirm materials delivered',
+    'Daily progress check',
+    'Take before & during photos',
+    'Keep customer updated',
+  ],
+  'Completed': [
+    'Final inspection with customer',
+    'Take completion photos',
+    'Send final invoice',
+    'Collect outstanding balance',
+  ],
+  'Paid': [
+    'File all job paperwork',
+    'Request customer review / referral',
+    'Update job records',
+  ],
+};
 
 // Re-export for components that imported GeneralTask from here
 export type { GeneralTask };
@@ -269,14 +304,14 @@ export const useStore = create<Store>()(
         const now = new Date().toISOString().split('T')[0];
         const updates: Partial<Lead> = { stage, updatedAt: now };
         if (stage === 'Won') updates.wonDate = now;
-        if (stage === 'In Progress') {
-          if (!lead.startDate) updates.startDate = now;
-          if (lead.tasks.length === 0) {
-            updates.tasks = DEFAULT_TASKS.map((title, i) => ({ id: `${id}_t${i}`, title, completed: false }));
-          }
-        }
+        if (stage === 'In Progress' && !lead.startDate) updates.startDate = now;
         if (stage === 'Completed') updates.completedDate = now;
         if (stage === 'Paid') { updates.paidDate = now; updates.balance = 0; }
+        const customTasks = lead.tasks.filter(t => !t.isTemplate);
+        const newTemplateTasks = (STAGE_TASKS[stage] ?? []).map(title => ({
+          id: generateId(), title, completed: false, isTemplate: true as const,
+        }));
+        updates.tasks = [...newTemplateTasks, ...customTasks];
         set(s => ({ leads: s.leads.map(l => l.id === id ? { ...l, ...updates } : l) }));
         syncLead(id);
         get().showToast(`Moved to ${stage}`);
