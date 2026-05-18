@@ -23,7 +23,7 @@ export default function Sidebar() {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
-    <aside className="w-16 lg:w-56 shrink-0 flex flex-col h-full transition-all duration-200" style={{ background: '#111827' }}>
+    <aside className="w-16 lg:w-56 shrink-0 flex flex-col h-full transition-all duration-200 pt-safe" style={{ background: '#111827' }}>
       {/* Logo */}
       <div className="flex items-center justify-center lg:justify-start gap-3 px-3 lg:px-4 py-4 border-b border-white/10">
         <div className="w-10 h-10 shrink-0">

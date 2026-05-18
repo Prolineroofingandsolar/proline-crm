@@ -153,7 +153,7 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="overflow-y-auto p-5 pb-safe space-y-4">
           <div className="grid grid-cols-2 gap-3">
 
             {/* Customer name with autocomplete */}

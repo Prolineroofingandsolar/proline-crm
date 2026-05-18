@@ -31,7 +31,7 @@ export default function BottomNav() {
       {showMore && (
         <>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowMore(false)} />
-          <div className="fixed bottom-16 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl p-4 pb-safe">
+          <div className="fixed left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl p-4" style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' }}>
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
             <div className="grid grid-cols-3 gap-3">
               {MORE.map(({ id, label, icon: Icon }) => (

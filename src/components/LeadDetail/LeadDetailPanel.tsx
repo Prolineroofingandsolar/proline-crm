@@ -36,9 +36,9 @@ export default function LeadDetailPanel() {
       {/* Backdrop */}
       <div className="fixed inset-0 z-40 bg-black/20" onClick={close} />
 
-      {/* Panel — full width, 85vh on mobile / 60vh capped desktop */}
+      {/* Panel — full width, 92dvh on mobile (leaves room for top bar) / capped on desktop */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl flex flex-col"
-        style={{ height: 'min(85dvh, 680px)' }}>
+        style={{ height: 'min(92dvh, 720px)' }}>
 
         {/* Header */}
         <div className="flex items-start justify-between px-4 py-3 border-b border-gray-100 shrink-0 gap-2">
@@ -196,7 +196,7 @@ export default function LeadDetailPanel() {
                 </button>
               ))}
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto pb-safe">
               {activeTab === 'Tasks'     && <TasksTab lead={lead} />}
               {activeTab === 'Photos'    && <PhotosTab lead={lead} />}
               {activeTab === 'Materials' && <MaterialsTab lead={lead} />}
