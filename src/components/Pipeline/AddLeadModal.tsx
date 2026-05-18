@@ -30,7 +30,7 @@ interface Props {
 export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Props) {
   const { addLead, contacts } = useStore();
   const [form, setForm] = useState({
-    name: '', phone: '', email: '', address: '',
+    name: '', phone: '', email: '', address: '', lat: '', lng: '',
     jobType: 'Roof Repair' as JobType,
     stage: defaultStage as Stage,
     source: 'Website',
@@ -120,11 +120,14 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
     if (!form.name.trim() || !form.phone.trim()) return;
     const value = parseFloat(form.value) || 0;
     const deposit = parseFloat(form.deposit) || 0;
+    const lat = parseFloat(form.lat) || undefined;
+    const lng = parseFloat(form.lng) || undefined;
     addLead({
       name: form.name.trim(),
       phone: form.phone.trim(),
       email: form.email.trim(),
       address: form.address.trim(),
+      ...(lat && lng ? { lat, lng } : {}),
       jobType: form.jobType,
       stage: form.stage,
       source: form.source,
@@ -237,6 +240,16 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
                   })}
                 </div>
               )}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Latitude <span className="text-gray-400 font-normal">(optional)</span></label>
+              <input type="number" step="any" value={form.lat} onChange={e => set('lat', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="e.g. 51.5074" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Longitude <span className="text-gray-400 font-normal">(optional)</span></label>
+              <input type="number" step="any" value={form.lng} onChange={e => set('lng', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="e.g. -3.5275" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Job Type</label>

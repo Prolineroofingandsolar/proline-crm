@@ -28,6 +28,7 @@ export default function InfoTab({ lead }: { lead: Lead }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     name: lead.name, phone: lead.phone, email: lead.email, address: lead.address,
+    lat: lead.lat ? String(lead.lat) : '', lng: lead.lng ? String(lead.lng) : '',
     jobType: lead.jobType, value: String(lead.value), deposit: String(lead.deposit),
     startDate: lead.startDate ?? '', endDate: lead.endDate ?? '',
     source: lead.source, assignedTo: lead.assignedTo,
@@ -85,8 +86,11 @@ export default function InfoTab({ lead }: { lead: Lead }) {
   const save = () => {
     const value = parseFloat(form.value) || 0;
     const deposit = parseFloat(form.deposit) || 0;
+    const lat = parseFloat(form.lat) || undefined;
+    const lng = parseFloat(form.lng) || undefined;
     updateLead(lead.id, {
       name: form.name, phone: form.phone, email: form.email, address: form.address,
+      ...(lat && lng ? { lat, lng } : { lat: undefined, lng: undefined }),
       jobType: form.jobType as JobType, value, deposit, balance: value - deposit,
       startDate: form.startDate || undefined, endDate: form.endDate || undefined,
       source: form.source, assignedTo: form.assignedTo,
@@ -147,6 +151,16 @@ export default function InfoTab({ lead }: { lead: Lead }) {
                 })}
               </div>
             )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Latitude <span className="text-gray-400 font-normal">(optional)</span></label>
+            <input type="number" step="any" value={form.lat} onChange={e => set('lat', e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="e.g. 51.5074" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Longitude <span className="text-gray-400 font-normal">(optional)</span></label>
+            <input type="number" step="any" value={form.lng} onChange={e => set('lng', e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="e.g. -3.5275" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Job Type</label>
