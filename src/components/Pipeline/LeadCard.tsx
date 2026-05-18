@@ -1,4 +1,5 @@
-﻿import { Phone, Calendar, ChevronRight, Trophy, Play, CheckCircle, CreditCard, Clock, MessageSquare, Mail, GripVertical } from 'lucide-react';
+﻿import { useState } from 'react';
+import { Phone, Calendar, ChevronRight, Trophy, Play, CheckCircle, CreditCard, Clock, MessageSquare, Mail, GripVertical, X, ChevronDown, ChevronUp, ClipboardList } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Lead } from '../../types';
@@ -12,7 +13,8 @@ interface Props {
 }
 
 export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
-  const { moveToStage, markAsWon } = useStore();
+  const { moveToStage, markAsWon, deleteTask, toggleTask } = useStore();
+  const [tasksOpen, setTasksOpen] = useState(false);
 
   const {
     attributes,
@@ -146,6 +148,43 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
             <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
               <CreditCard size={11} /> Paid
             </span>
+          </div>
+        )}
+
+        {/* Tasks section */}
+        {lead.tasks.length > 0 && (
+          <div className="mt-2" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setTasksOpen(o => !o)}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-orange-600 transition-colors w-full"
+            >
+              <ClipboardList size={11} />
+              <span className="font-medium">
+                Tasks ({lead.tasks.filter(t => t.completed).length}/{lead.tasks.length})
+              </span>
+              {tasksOpen ? <ChevronUp size={11} className="ml-auto" /> : <ChevronDown size={11} className="ml-auto" />}
+            </button>
+            {tasksOpen && (
+              <div className="mt-1.5 space-y-0.5">
+                {lead.tasks.map(task => (
+                  <div key={task.id} className="flex items-center gap-1.5 group">
+                    <button
+                      onClick={() => toggleTask(lead.id, task.id)}
+                      className={`w-3 h-3 rounded-full border shrink-0 transition-colors ${task.completed ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-orange-400'}`}
+                    />
+                    <span className={`flex-1 text-xs truncate ${task.completed ? 'line-through text-gray-400' : 'text-gray-600'}`}>
+                      {task.title}
+                    </span>
+                    <button
+                      onClick={() => deleteTask(lead.id, task.id)}
+                      className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 shrink-0 transition-opacity"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
