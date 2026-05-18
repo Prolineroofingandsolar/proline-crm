@@ -1,5 +1,5 @@
 const API_KEY = 'AIzaSyDVDGsvnnvb1-XHCun8SV0K2WU5RJmZawo';
-const MODEL = 'gemini-1.5-flash';
+const MODEL = 'gemini-2.0-flash-lite';
 
 export interface ExtractedLead {
   name?: string;
@@ -38,7 +38,7 @@ Return ONLY a JSON object with these fields (use null for anything not found):
 Return only the JSON, no explanation.`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
