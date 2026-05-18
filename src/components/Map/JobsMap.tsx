@@ -58,13 +58,13 @@ export default function JobsMap() {
   const withCoords = mapLeads.filter(l => l.lat && l.lng);
   const needsGeocode = mapLeads.filter(l => !l.lat && l.address);
 
-  // Trigger geocoding for leads that don't have coords yet
+  const hasGeocoded = useRef(false);
   useEffect(() => {
-    if (needsGeocode.length > 0) {
+    if (needsGeocode.length > 0 && !hasGeocoded.current) {
+      hasGeocoded.current = true;
       geocodeLeads(needsGeocode.map(l => l.id));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mapLeads.length]); // re-run when leads finish loading from Supabase
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">

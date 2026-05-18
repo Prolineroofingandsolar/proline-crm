@@ -223,7 +223,7 @@ export const useStore = create<Store>()(
               const lat = parseFloat(data[0].lat);
               const lng = parseFloat(data[0].lon);
               set(s => ({ leads: s.leads.map(l => l.id === lead.id ? { ...l, lat, lng } : l) }));
-              supabase.from('leads').update({ lat, lng }).eq('id', lead.id);
+              await supabase.from('leads').update({ lat, lng }).eq('id', lead.id);
             }
           } catch { /* silently skip */ }
           await new Promise(r => setTimeout(r, 1100));
