@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -53,6 +53,7 @@ const MAP_STAGES = ['Won', 'In Progress', 'Completed', 'Paid'];
 
 export default function JobsMap() {
   const { leads, geocodeLeads, setSelectedId } = useStore();
+  const [geocodingDone, setGeocodingDone] = useState(false);
 
   const mapLeads = leads.filter(l => MAP_STAGES.includes(l.stage));
   const withCoords = mapLeads.filter(l => l.lat && l.lng);
@@ -62,9 +63,11 @@ export default function JobsMap() {
   useEffect(() => {
     if (needsGeocode.length > 0 && !hasGeocoded.current) {
       hasGeocoded.current = true;
-      geocodeLeads(needsGeocode.map(l => l.id));
+      geocodeLeads(needsGeocode.map(l => l.id)).then(() => setGeocodingDone(true));
+    } else if (needsGeocode.length === 0 && mapLeads.length > 0) {
+      setGeocodingDone(true);
     }
-  }, [mapLeads.length]); // re-run when leads finish loading from Supabase
+  }, [mapLeads.length]);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
@@ -74,7 +77,7 @@ export default function JobsMap() {
           <h2 className="font-bold text-gray-800 text-sm">Job Locations</h2>
           <p className="text-xs text-gray-400">
             {withCoords.length} of {mapLeads.length} jobs mapped
-            {needsGeocode.length > 0 && withCoords.length < mapLeads.length && (
+            {needsGeocode.length > 0 && !geocodingDone && (
               <span className="text-orange-500"> · geocoding…</span>
             )}
           </p>
@@ -96,10 +99,15 @@ export default function JobsMap() {
           <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
             <div className="text-3xl">📍</div>
             <p className="text-sm font-medium">
-              {mapLeads.length === 0 ? 'No accepted jobs yet' : 'Geocoding addresses…'}
+              {mapLeads.length === 0
+                ? 'No accepted jobs yet'
+                : geocodingDone
+                ? 'Could not locate addresses'
+                : 'Geocoding addresses…'}
             </p>
             <p className="text-xs">
-              {mapLeads.length > 0 && needsGeocode.length > 0 && 'This may take a moment'}
+              {!geocodingDone && mapLeads.length > 0 && needsGeocode.length > 0 && 'This may take a moment'}
+              {geocodingDone && withCoords.length === 0 && 'Add full addresses to jobs to see them on the map'}
             </p>
           </div>
         ) : (
