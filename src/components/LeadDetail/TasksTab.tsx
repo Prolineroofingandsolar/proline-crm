@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, CheckCircle2, Circle, ClipboardList } from 'lucide-react';
+import { Plus, X, CheckCircle2, Circle, ClipboardList, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Lead, Stage } from '../../types';
 import { useStore } from '../../store/useStore';
 import { formatDateShort } from '../../utils/helpers';
@@ -48,6 +48,8 @@ const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
 export default function TasksTab({ lead }: { lead: Lead }) {
   const { toggleTask, addTask, deleteTask } = useStore();
   const [newTask, setNewTask] = useState('');
+  const [checklistOpen, setChecklistOpen] = useState(true);
+  const [customOpen, setCustomOpen] = useState(true);
   const prevStageRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
@@ -97,8 +99,8 @@ export default function TasksTab({ lead }: { lead: Lead }) {
         <span className="text-xs text-gray-400 shrink-0">{formatDateShort(task.completedDate)}</span>
       )}
       <button onClick={() => deleteTask(lead.id, task.id)}
-        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 shrink-0 transition-opacity">
-        <Trash2 size={13} />
+        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 shrink-0 transition-opacity p-0.5 rounded">
+        <X size={13} />
       </button>
     </div>
   );
@@ -121,13 +123,24 @@ export default function TasksTab({ lead }: { lead: Lead }) {
       {/* Stage checklist */}
       {templateTasks.length > 0 && (
         <div>
-          <div className="flex items-center gap-1.5 mb-2">
+          <button
+            onClick={() => setChecklistOpen(o => !o)}
+            className="flex items-center gap-1.5 w-full mb-2 group"
+          >
             <ClipboardList size={13} className="text-orange-500" />
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">{lead.stage} Checklist</span>
-          </div>
-          <div className="space-y-1">
-            {templateTasks.map(renderTask)}
-          </div>
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide flex-1 text-left">{lead.stage} Checklist</span>
+            <span className="text-xs text-gray-400 font-normal normal-case">
+              {templateTasks.filter(t => t.completed).length}/{templateTasks.length}
+            </span>
+            {checklistOpen
+              ? <ChevronUp size={13} className="text-gray-400" />
+              : <ChevronDown size={13} className="text-gray-400" />}
+          </button>
+          {checklistOpen && (
+            <div className="space-y-1">
+              {templateTasks.map(renderTask)}
+            </div>
+          )}
         </div>
       )}
 
@@ -135,17 +148,28 @@ export default function TasksTab({ lead }: { lead: Lead }) {
       {(customTasks.length > 0 || templateTasks.length > 0) && (
         <div>
           {templateTasks.length > 0 && (
-            <div className="flex items-center gap-1.5 mb-2">
+            <button
+              onClick={() => setCustomOpen(o => !o)}
+              className="flex items-center gap-1.5 w-full mb-2"
+            >
               <Plus size={13} className="text-gray-400" />
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Custom Tasks</span>
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wide flex-1 text-left">Custom Tasks</span>
+              <span className="text-xs text-gray-400 font-normal normal-case">
+                {customTasks.filter(t => t.completed).length}/{customTasks.length}
+              </span>
+              {customOpen
+                ? <ChevronUp size={13} className="text-gray-400" />
+                : <ChevronDown size={13} className="text-gray-400" />}
+            </button>
+          )}
+          {customOpen && (
+            <div className="space-y-1">
+              {customTasks.map(renderTask)}
+              {customTasks.length === 0 && templateTasks.length > 0 && (
+                <p className="text-xs text-gray-400 text-center py-2">No custom tasks yet</p>
+              )}
             </div>
           )}
-          <div className="space-y-1">
-            {customTasks.map(renderTask)}
-            {customTasks.length === 0 && templateTasks.length > 0 && (
-              <p className="text-xs text-gray-400 text-center py-2">No custom tasks yet</p>
-            )}
-          </div>
         </div>
       )}
 
