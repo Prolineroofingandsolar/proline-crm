@@ -48,26 +48,27 @@ const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
 export default function TasksTab({ lead }: { lead: Lead }) {
   const { toggleTask, addTask, deleteTask } = useStore();
   const [newTask, setNewTask] = useState('');
-  const seededStages = useRef<Set<string>>(new Set());
+  const prevStageRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    const key = `${lead.id}:${lead.stage}`;
-    if (seededStages.current.has(key)) return;
-    seededStages.current.add(key);
+    const isStageChange = prevStageRef.current !== undefined && prevStageRef.current !== lead.stage;
+    const isFirstLoad = prevStageRef.current === undefined;
+    prevStageRef.current = lead.stage;
 
-    const stageTasks = STAGE_TASKS[lead.stage] ?? [];
-    if (stageTasks.length === 0) return;
-
-    const existingTemplateTitles = new Set(
-      lead.tasks.filter(t => t.isTemplate).map(t => t.title)
-    );
-
-    for (const title of stageTasks) {
-      if (!existingTemplateTitles.has(title)) {
-        addTask(lead.id, title, true);
-      }
+    if (isStageChange) {
+      lead.tasks.filter(t => t.isTemplate).forEach(t => deleteTask(lead.id, t.id));
     }
-  }, [lead.id, lead.stage]);
+
+    if (isFirstLoad || isStageChange) {
+      const stageTasks = STAGE_TASKS[lead.stage] ?? [];
+      const existingTitles = new Set(
+        isStageChange ? [] : lead.tasks.filter(t => t.isTemplate).map(t => t.title)
+      );
+      stageTasks.forEach(title => {
+        if (!existingTitles.has(title)) addTask(lead.id, title, true);
+      });
+    }
+  }, [lead.stage]);
 
   const templateTasks = lead.tasks.filter(t => t.isTemplate);
   const customTasks = lead.tasks.filter(t => !t.isTemplate);
