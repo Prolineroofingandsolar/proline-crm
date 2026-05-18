@@ -1,5 +1,5 @@
-const API_KEY = 'AIzaSyDVDGsvnnvb1-XHCun8SV0K2WU5RJmZawo';
-const MODEL = 'gemini-2.0-flash-lite';
+const API_KEY = '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';
+const MODEL = 'google/gemini-2.0-flash-exp:free';
 
 export interface ExtractedLead {
   name?: string;
@@ -37,30 +37,33 @@ Return ONLY a JSON object with these fields (use null for anything not found):
 }
 Return only the JSON, no explanation.`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: file.type, data: base64 } },
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:${file.type};base64,${base64}` } },
           ],
-        }],
-        generationConfig: { temperature: 0.1 },
-      }),
-    }
-  );
+        },
+      ],
+    }),
+  });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: { message?: string } }).error?.message ?? 'Gemini API error');
+    throw new Error((err as { error?: { message?: string } }).error?.message ?? 'Could not read the image — try again');
   }
 
   const data = await res.json();
-  const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  const text: string = data.choices?.[0]?.message?.content ?? '';
 
   // Strip markdown code fences if present
   const json = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
