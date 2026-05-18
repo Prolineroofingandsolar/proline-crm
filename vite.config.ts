@@ -4,4 +4,13 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    proxy: {
+      '/api/getaddress': {
+        target: 'https://api.getaddress.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/getaddress/, ''),
+      },
+    },
+  },
 })
