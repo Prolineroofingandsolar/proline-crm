@@ -6,6 +6,17 @@ interface AddressSuggestion {
   value: string;
 }
 
+const UK_POSTCODE_RE = /^[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}$/i;
+
+function formatFindAddress(raw: string, postcode: string): string {
+  const parts = raw.split(', ').map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 2 && /^\d/.test(parts[0])) {
+    parts.splice(0, 2, `${parts[0]} ${parts[1]}`);
+  }
+  parts.push(postcode.toUpperCase());
+  return parts.join(', ');
+}
+
 import type { Lead, JobType } from '../../types';
 import { useStore } from '../../store/useStore';
 import { formatCurrency, formatDate, jobTypeColor } from '../../utils/helpers';
@@ -40,21 +51,21 @@ export default function InfoTab({ lead }: { lead: Lead }) {
     addressDebounceRef.current = setTimeout(async () => {
       setAddressLoading(true);
       try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(v)}&format=json&limit=6&countrycodes=gb&addressdetails=1`
-        );
-        const data: { display_name: string; address: Record<string, string> }[] = await res.json();
-        const results: AddressSuggestion[] = data.map(r => {
-          const a = r.address;
-          const locality = a.town ?? a.city ?? a.village ?? a.suburb ?? a.hamlet ?? a.county ?? '';
-          const parts = [
-            a.house_number && a.road ? `${a.house_number} ${a.road}` : a.road,
-            locality,
-            a.postcode,
-          ].filter(Boolean);
-          const value = parts.length >= 2 ? parts.join(', ') : r.display_name.split(', ').slice(0, 3).join(', ');
-          return { display: value, value };
-        });
+        let results: AddressSuggestion[] = [];
+        if (UK_POSTCODE_RE.test(v.trim())) {
+          const cleanPostcode = v.trim().toUpperCase().replace(/\s+/g, '');
+          const res = await fetch(`/api/getaddress/find/${cleanPostcode}`);
+          const data: { addresses?: string[]; postcode?: string } = await res.json();
+          const postcode = data.postcode ?? v.trim();
+          results = (data.addresses ?? []).map(raw => ({
+            display: raw,
+            value: formatFindAddress(raw, postcode),
+          }));
+        } else {
+          const res = await fetch(`/api/getaddress/autocomplete/${encodeURIComponent(v)}`);
+          const data: { suggestions?: { address: string }[] } = await res.json();
+          results = (data.suggestions ?? []).map(s => ({ display: s.address, value: s.address }));
+        }
         setAddressSuggestions(results);
         setShowAddressSuggestions(results.length > 0);
       } catch {
