@@ -227,18 +227,20 @@ export const useStore = create<Store>()(
       // ── Contacts ────────────────────────────────────────────────────────────
       upsertContact: ({ name, phone, email, address }) => {
         const now = new Date().toISOString().split('T')[0];
-        set(s => {
-          const existing = s.contacts.find(c => c.phone === phone);
-          if (existing) {
-            const updated = s.contacts.map(c => c.phone === phone ? { ...c, name, email, address } : c);
-            const contact = updated.find(c => c.phone === phone)!;
-            supabase.from('contacts').upsert(contactToDb(contact));
-            return { contacts: updated };
-          }
+        const existing = get().contacts.find(c => c.phone === phone);
+        if (existing) {
+          const updated: Contact = { ...existing, name, email, address };
+          set(s => ({ contacts: s.contacts.map(c => c.phone === phone ? updated : c) }));
+          supabase.from('contacts').upsert(contactToDb(updated)).then(({ error }) => {
+            if (error) console.error('upsertContact sync error:', error);
+          });
+        } else {
           const contact: Contact = { id: generateId(), name, phone, email, address, createdAt: now };
-          supabase.from('contacts').insert(contactToDb(contact));
-          return { contacts: [contact, ...s.contacts] };
-        });
+          set(s => ({ contacts: [contact, ...s.contacts] }));
+          supabase.from('contacts').insert(contactToDb(contact)).then(({ error }) => {
+            if (error) console.error('upsertContact insert error:', error);
+          });
+        }
       },
 
       deleteContact: (id) => {
