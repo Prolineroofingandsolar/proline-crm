@@ -170,7 +170,23 @@ export const useStore = create<Store>()(
         }, 0);
         jobCounterN = maxNum + 1;
 
-        set({ leads, users, contacts, generalTasks, isLoaded: true });
+        // Backfill contacts for any existing lead that doesn't have one yet
+        const now = new Date().toISOString().split('T')[0];
+        const existingPhones = new Set(contacts.map(c => c.phone));
+        const missingContacts: Contact[] = [];
+        for (const lead of leads) {
+          if (!lead.phone || existingPhones.has(lead.phone)) continue;
+          existingPhones.add(lead.phone);
+          missingContacts.push({ id: generateId(), name: lead.name, phone: lead.phone, email: lead.email, address: lead.address, createdAt: now });
+        }
+        if (missingContacts.length > 0) {
+          supabase.from('contacts').insert(missingContacts.map(contactToDb)).then(({ error }) => {
+            if (error) console.error('Contact backfill error:', error);
+          });
+        }
+        const allContacts = [...contacts, ...missingContacts];
+
+        set({ leads, users, contacts: allContacts, generalTasks, isLoaded: true });
       },
 
       // ── Auth ────────────────────────────────────────────────────────────────
