@@ -186,7 +186,7 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
             <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><X size={18} /></button>
           </div>
         </div>
-        <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
+        <input ref={fileInputRef} type="file" accept="image/*"
           className="hidden" onChange={handleScanPhoto} />
 
         {/* Form */}
