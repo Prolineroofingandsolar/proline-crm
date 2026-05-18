@@ -60,7 +60,7 @@ interface Store {
   markAsWon: (id: string) => void;
 
   toggleTask: (leadId: string, taskId: string) => void;
-  addTask: (leadId: string, title: string) => void;
+  addTask: (leadId: string, title: string, isTemplate?: boolean) => void;
   deleteTask: (leadId: string, taskId: string) => void;
 
   addGeneralTask: (data: Omit<GeneralTask, 'id' | 'createdAt' | 'completed'>) => void;
@@ -304,10 +304,10 @@ export const useStore = create<Store>()(
         syncLead(leadId);
       },
 
-      addTask: (leadId, title) => {
+      addTask: (leadId, title, isTemplate = false) => {
         set(s => ({
           leads: s.leads.map(l =>
-            l.id === leadId ? { ...l, tasks: [...l.tasks, { id: generateId(), title, completed: false }] } : l
+            l.id === leadId ? { ...l, tasks: [...l.tasks, { id: generateId(), title, completed: false, isTemplate }] } : l
           ),
         }));
         syncLead(leadId);
