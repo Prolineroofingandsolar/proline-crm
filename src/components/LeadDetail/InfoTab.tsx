@@ -43,6 +43,7 @@ export default function InfoTab({ lead }: { lead: Lead }) {
 
   const handleAddressChange = (v: string) => {
     set('address', v);
+    setForm(p => ({ ...p, lat: '', lng: '' }));
     clearTimeout(addressDebounceRef.current);
     if (v.trim().length < 3) {
       setAddressSuggestions([]);
