@@ -10,6 +10,11 @@ interface NominatimResult {
     road?: string;
     town?: string;
     city?: string;
+    village?: string;
+    suburb?: string;
+    hamlet?: string;
+    neighbourhood?: string;
+    county?: string;
     postcode?: string;
   };
 }
@@ -82,13 +87,13 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
   };
 
   const selectAddress = (result: NominatimResult) => {
-    // Build a clean UK address from address components when available, else use display_name
     const a = result.address;
     let formatted = result.display_name;
     if (a) {
+      const locality = a.town ?? a.city ?? a.village ?? a.suburb ?? a.hamlet ?? a.neighbourhood ?? a.county;
       const parts = [
         a.house_number && a.road ? `${a.house_number} ${a.road}` : a.road,
-        a.town ?? a.city,
+        locality,
         a.postcode,
       ].filter(Boolean);
       if (parts.length >= 2) formatted = parts.join(', ');
@@ -213,7 +218,8 @@ export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Pro
                   {addressSuggestions.map((result, i) => {
                     const a = result.address;
                     const line1 = a?.house_number && a?.road ? `${a.house_number} ${a.road}` : a?.road ?? '';
-                    const line2 = [a?.town ?? a?.city, a?.postcode].filter(Boolean).join(' ');
+                    const locality = a?.town ?? a?.city ?? a?.village ?? a?.suburb ?? a?.hamlet ?? a?.neighbourhood ?? a?.county;
+                    const line2 = [locality, a?.postcode].filter(Boolean).join(', ');
                     return (
                       <button
                         key={i}
