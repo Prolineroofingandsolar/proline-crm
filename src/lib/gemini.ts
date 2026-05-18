@@ -1,5 +1,5 @@
 const API_KEY = 'AIzaSyDVDGsvnnvb1-XHCun8SV0K2WU5RJmZawo';
-const MODEL = 'gemini-1.5-flash';
+const MODEL = 'gemini-2.0-flash';
 
 export interface ExtractedLead {
   name?: string;
