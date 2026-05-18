@@ -59,15 +59,17 @@ export default function JobsMap() {
   const withCoords = mapLeads.filter(l => l.lat && l.lng);
   const needsGeocode = mapLeads.filter(l => !l.lat && l.address);
 
-  const hasGeocoded = useRef(false);
+  const attemptedIds = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (needsGeocode.length > 0 && !hasGeocoded.current) {
-      hasGeocoded.current = true;
-      geocodeLeads(needsGeocode.map(l => l.id)).then(() => setGeocodingDone(true));
-    } else if (needsGeocode.length === 0 && mapLeads.length > 0) {
+    const untriedIds = needsGeocode.map(l => l.id).filter(id => !attemptedIds.current.has(id));
+    if (untriedIds.length > 0) {
+      untriedIds.forEach(id => attemptedIds.current.add(id));
+      setGeocodingDone(false);
+      geocodeLeads(untriedIds).then(() => setGeocodingDone(true));
+    } else if (mapLeads.length > 0) {
       setGeocodingDone(true);
     }
-  }, [mapLeads.length]);
+  }, [needsGeocode.map(l => l.id).join(',')]);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
