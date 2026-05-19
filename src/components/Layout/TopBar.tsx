@@ -6,11 +6,12 @@ interface Props {
 }
 
 export default function TopBar({ onNewLead }: Props) {
-  const { currentPage, searchQuery, setSearchQuery } = useStore();
+  const { currentPage, searchQuery, setSearchQuery, users, currentUserId } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
 
   const titles: Record<string, string> = {
     pipeline: 'Pipeline', dashboard: 'Dashboard', leads: 'Leads',
-    jobs: 'Jobs', tasks: 'Tasks', calendar: 'Calendar',
+    jobs: 'Jobs', tasks: 'Tasks', calendar: 'Calendar', timesheet: 'Timesheet',
     contacts: 'Contacts', files: 'Files', reports: 'Reports', settings: 'Settings',
   };
 
@@ -44,13 +45,15 @@ export default function TopBar({ onNewLead }: Props) {
             <Bell size={20} />
             <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">3</span>
           </button>
-          <button
-            onClick={onNewLead}
-            className="flex items-center gap-1 md:gap-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
-          >
-            <Plus size={16} />
-            <span className="hidden sm:inline">New Lead</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={onNewLead}
+              className="flex items-center gap-1 md:gap-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+            >
+              <Plus size={16} />
+              <span className="hidden sm:inline">New Lead</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

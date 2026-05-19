@@ -8,7 +8,8 @@ import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 const LEAD_STAGES = ['New Lead', 'Survey Booked', 'Quote Sent'];
 
 export default function LeadsPage() {
-  const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead } = useStore();
+  const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead, users, currentUserId } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
@@ -38,9 +39,11 @@ export default function LeadsPage() {
             </button>
           ))}
         </div>
-        <button onClick={() => setShowAdd(true)} className="ml-auto bg-orange-600 text-white px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-700 whitespace-nowrap">
-          + Add Lead
-        </button>
+        {isAdmin && (
+          <button onClick={() => setShowAdd(true)} className="ml-auto bg-orange-600 text-white px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-700 whitespace-nowrap">
+            + Add Lead
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -52,7 +55,7 @@ export default function LeadsPage() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Job Type</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Location</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stage</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Value</th>
+              {isAdmin && <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Value</th>}
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Created</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
             </tr>
@@ -78,13 +81,13 @@ export default function LeadsPage() {
                 <td className="px-4 py-3">
                   <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 whitespace-nowrap">{lead.stage}</span>
                 </td>
-                <td className="px-4 py-3 text-sm font-semibold text-gray-700 whitespace-nowrap">{lead.value > 0 ? formatCurrency(lead.value) : '—'}</td>
+                {isAdmin && <td className="px-4 py-3 text-sm font-semibold text-gray-700 whitespace-nowrap">{lead.value > 0 ? formatCurrency(lead.value) : '—'}</td>}
                 <td className="px-4 py-3 text-sm text-gray-400 hidden lg:table-cell">{formatDate(lead.createdAt)}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                     <a href={`tel:${lead.phone}`} className="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500"><Phone size={13} /></a>
                     <a href={`mailto:${lead.email}`} className="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 hidden sm:flex"><Mail size={13} /></a>
-                    {lead.stage === 'Quote Sent' ? (
+                    {isAdmin && (lead.stage === 'Quote Sent' ? (
                       <button onClick={() => markAsWon(lead.id)} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 text-xs font-medium">
                         <Trophy size={11} /><span className="hidden sm:inline"> Won</span>
                       </button>
@@ -93,10 +96,12 @@ export default function LeadsPage() {
                         className="flex items-center gap-1 px-2 py-1 rounded-lg bg-orange-50 text-orange-700 hover:bg-orange-100 text-xs font-medium">
                         <ChevronRight size={11} /><span className="hidden sm:inline"> Move</span>
                       </button>
+                    ))}
+                    {isAdmin && (
+                      <button onClick={() => deleteLead(lead.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
+                        <Trash2 size={13} />
+                      </button>
                     )}
-                    <button onClick={() => deleteLead(lead.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
-                      <Trash2 size={13} />
-                    </button>
                   </div>
                 </td>
               </tr>

@@ -2,24 +2,26 @@ import { useState } from 'react';
 import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Contact, FolderOpen, BarChart2, Settings, ChevronDown, Kanban, LogOut, Clock } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
-const nav = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+const ALL_NAV = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, adminOnly: true },
   { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
-  { id: 'leads',     label: 'Leads',     icon: Users },
+  { id: 'leads',     label: 'Leads',     icon: Users,           adminOnly: true },
   { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
   { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
   { id: 'calendar',  label: 'Calendar',  icon: Calendar },
   { id: 'timesheet', label: 'Timesheet', icon: Clock },
-  { id: 'contacts',  label: 'Contacts',  icon: Contact },
-  { id: 'files',     label: 'Files',     icon: FolderOpen },
-  { id: 'reports',   label: 'Reports',   icon: BarChart2 },
-  { id: 'settings',  label: 'Settings',  icon: Settings },
+  { id: 'contacts',  label: 'Contacts',  icon: Contact,         adminOnly: true },
+  { id: 'files',     label: 'Files',     icon: FolderOpen,      adminOnly: true },
+  { id: 'reports',   label: 'Reports',   icon: BarChart2,       adminOnly: true },
+  { id: 'settings',  label: 'Settings',  icon: Settings,        adminOnly: true },
 ];
 
 
 export default function Sidebar() {
   const { currentPage, setCurrentPage, users, currentUserId, logout } = useStore();
   const currentUser = users.find(u => u.id === currentUserId);
+  const isAdmin = currentUser?.role === 'admin';
+  const nav = ALL_NAV.filter(n => isAdmin || !n.adminOnly);
   const initial = currentUser?.name?.[0]?.toUpperCase() ?? '?';
   const [showMenu, setShowMenu] = useState(false);
 

@@ -2,14 +2,20 @@ import { useState } from 'react';
 import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X, Clock } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
-const MAIN = [
+const ADMIN_MAIN = [
   { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
   { id: 'leads',     label: 'Leads',     icon: Users },
   { id: 'timesheet', label: 'Timesheet', icon: Clock },
   { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
 ];
+const USER_MAIN = [
+  { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
+  { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
+  { id: 'timesheet', label: 'Timesheet', icon: Clock },
+  { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
+];
 
-const MORE = [
+const ADMIN_MORE = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'calendar',  label: 'Calendar',  icon: Calendar },
   { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
@@ -18,9 +24,15 @@ const MORE = [
   { id: 'reports',   label: 'Reports',   icon: BarChart2 },
   { id: 'settings',  label: 'Settings',  icon: Settings },
 ];
+const USER_MORE = [
+  { id: 'calendar',  label: 'Calendar',  icon: Calendar },
+];
 
 export default function BottomNav() {
-  const { currentPage, setCurrentPage } = useStore();
+  const { currentPage, setCurrentPage, users, currentUserId } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
+  const MAIN = isAdmin ? ADMIN_MAIN : USER_MAIN;
+  const MORE  = isAdmin ? ADMIN_MORE : USER_MORE;
   const [showMore, setShowMore] = useState(false);
 
   const go = (id: string) => { setCurrentPage(id); setShowMore(false); };

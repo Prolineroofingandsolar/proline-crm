@@ -43,6 +43,8 @@ function LoadingScreen() {
 
 export default function App() {
   const { currentPage, currentUserId, users, isLoaded, loadData } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
+  const ADMIN_ONLY_PAGES = new Set(['dashboard', 'leads', 'contacts', 'files', 'reports', 'settings']);
   const [showNewLead, setShowNewLead] = useState(false);
 
   useEffect(() => {
@@ -76,7 +78,7 @@ export default function App() {
         <TopBar onNewLead={() => setShowNewLead(true)} />
         <main className="flex-1 overflow-hidden">
           <div className="h-full pb-16 sm:pb-0">
-            {page[currentPage] ?? <PipelinePage />}
+            {(!isAdmin && ADMIN_ONLY_PAGES.has(currentPage)) ? <PipelinePage /> : (page[currentPage] ?? <PipelinePage />)}
           </div>
         </main>
       </div>

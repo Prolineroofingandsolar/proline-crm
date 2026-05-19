@@ -24,7 +24,8 @@ import { formatCurrency, formatDate, jobTypeColor } from '../../utils/helpers';
 const JOB_TYPES: JobType[] = ['Roof Repair', 'Solar Installation', 'New Roof', 'Flat Roof', 'Solar + Battery', 'Guttering', 'Fascias & Soffits', 'Chimney Repair'];
 
 export default function InfoTab({ lead }: { lead: Lead }) {
-  const { updateLead } = useStore();
+  const { updateLead, users, currentUserId } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     name: lead.name, phone: lead.phone, email: lead.email, address: lead.address,
@@ -222,9 +223,11 @@ export default function InfoTab({ lead }: { lead: Lead }) {
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${jobTypeColor(lead.jobType)}`}>{lead.jobType}</span>
-        <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-800 font-medium">
-          <Edit3 size={13} /> Edit
-        </button>
+        {isAdmin && (
+          <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-800 font-medium">
+            <Edit3 size={13} /> Edit
+          </button>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -238,11 +241,13 @@ export default function InfoTab({ lead }: { lead: Lead }) {
         {lead.endDate && <Row label="End Date" value={formatDate(lead.endDate)} />}
         {lead.completedDate && <Row label="Completed" value={formatDate(lead.completedDate)} />}
         {lead.paidDate && <Row label="Paid" value={formatDate(lead.paidDate)} />}
-        <div className="border-t border-gray-100 pt-3 space-y-2">
-          <Row label="Job Value" value={formatCurrency(lead.value)} bold />
-          <Row label="Deposit" value={`${formatCurrency(lead.deposit)}${lead.depositPaid ? ' ✓ Paid' : ' (unpaid)'}`} />
-          <Row label="Balance" value={formatCurrency(lead.balance)} bold />
-        </div>
+        {isAdmin && (
+          <div className="border-t border-gray-100 pt-3 space-y-2">
+            <Row label="Job Value" value={formatCurrency(lead.value)} bold />
+            <Row label="Deposit" value={`${formatCurrency(lead.deposit)}${lead.depositPaid ? ' ✓ Paid' : ' (unpaid)'}`} />
+            <Row label="Balance" value={formatCurrency(lead.balance)} bold />
+          </div>
+        )}
       </div>
     </div>
   );

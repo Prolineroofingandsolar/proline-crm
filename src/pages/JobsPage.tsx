@@ -7,7 +7,8 @@ import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 const JOB_STAGES = ['Won', 'In Progress', 'Completed', 'Paid'];
 
 export default function JobsPage() {
-  const { leads, selectedId, setSelectedId, moveToStage, deleteLead } = useStore();
+  const { leads, selectedId, setSelectedId, moveToStage, deleteLead, users, currentUserId } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
 
@@ -43,8 +44,8 @@ export default function JobsPage() {
       {/* Summary bar */}
       <div className="flex gap-4 sm:gap-6 px-4 sm:px-5 py-2 bg-white border-b border-gray-100 text-xs text-gray-500">
         <span>{filtered.length} jobs</span>
-        <span>Total: <strong className="text-gray-700">{formatCurrency(totalValue)}</strong></span>
-        <span>Outstanding: <strong className="text-red-600">{formatCurrency(totalBalance)}</strong></span>
+        {isAdmin && <span>Total: <strong className="text-gray-700">{formatCurrency(totalValue)}</strong></span>}
+        {isAdmin && <span>Outstanding: <strong className="text-red-600">{formatCurrency(totalBalance)}</strong></span>}
       </div>
 
       {/* Table */}
@@ -56,8 +57,8 @@ export default function JobsPage() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Job Type</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stage</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Value</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Balance</th>
+              {isAdmin && <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Value</th>}
+              {isAdmin && <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Balance</th>}
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Progress</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Start</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">End</th>
@@ -87,10 +88,10 @@ export default function JobsPage() {
                     'bg-green-100 text-green-700'
                   }`}>{lead.stage}</span>
                 </td>
-                <td className="px-4 py-3 text-sm font-semibold text-gray-700 whitespace-nowrap">{formatCurrency(lead.value)}</td>
-                <td className={`px-4 py-3 text-sm font-semibold whitespace-nowrap hidden sm:table-cell ${lead.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {isAdmin && <td className="px-4 py-3 text-sm font-semibold text-gray-700 whitespace-nowrap">{formatCurrency(lead.value)}</td>}
+                {isAdmin && <td className={`px-4 py-3 text-sm font-semibold whitespace-nowrap hidden sm:table-cell ${lead.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
                   {lead.balance > 0 ? formatCurrency(lead.balance) : '✓ Paid'}
-                </td>
+                </td>}
                 <td className="px-4 py-3 hidden lg:table-cell">
                   {lead.stage === 'In Progress' ? (
                     <div className="flex items-center gap-2">
@@ -107,19 +108,21 @@ export default function JobsPage() {
                   <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                     <a href={`tel:${lead.phone}`} className="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500"><Phone size={13} /></a>
                     <a href={`mailto:${lead.email}`} className="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 hidden sm:flex"><Mail size={13} /></a>
-                    {lead.stage === 'In Progress' && (
+                    {isAdmin && lead.stage === 'In Progress' && (
                       <button onClick={() => moveToStage(lead.id, 'Completed')} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-medium whitespace-nowrap">
                         <CheckCircle size={11} /><span className="hidden sm:inline"> Complete</span>
                       </button>
                     )}
-                    {lead.stage === 'Completed' && (
+                    {isAdmin && lead.stage === 'Completed' && (
                       <button onClick={() => moveToStage(lead.id, 'Paid')} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 text-xs font-medium">
                         <CreditCard size={11} /><span className="hidden sm:inline"> Paid</span>
                       </button>
                     )}
-                    <button onClick={() => deleteLead(lead.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
-                      <Trash2 size={13} />
-                    </button>
+                    {isAdmin && (
+                      <button onClick={() => deleteLead(lead.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
