@@ -15,6 +15,7 @@ import FilesPage from './pages/FilesPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import TimesheetPage from './pages/TimesheetPage';
+import CISPage from './pages/CISPage';
 import AddLeadModal from './components/Pipeline/AddLeadModal';
 import AIAssistant from './components/AI/AIAssistant';
 
@@ -44,7 +45,7 @@ function LoadingScreen() {
 export default function App() {
   const { currentPage, currentUserId, users, isLoaded, loadData } = useStore();
   const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
-  const ADMIN_ONLY_PAGES = new Set(['dashboard', 'leads', 'contacts', 'files', 'reports', 'settings']);
+  const ADMIN_ONLY_PAGES = new Set(['dashboard', 'leads', 'contacts', 'files', 'reports', 'settings', 'cis']);
   const [showNewLead, setShowNewLead] = useState(false);
 
   useEffect(() => {
@@ -65,6 +66,7 @@ export default function App() {
     contacts: <ContactsPage />,
     files: <FilesPage />,
     reports: <ReportsPage />,
+    cis: <CISPage />,
     settings: <SettingsPage />,
     timesheet: <TimesheetPage />,
   };
