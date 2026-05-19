@@ -24,7 +24,8 @@ const stageColors: Record<string, string> = {
 };
 
 export default function LeadDetailPanel() {
-  const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead, updateLead } = useStore();
+  const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead, updateLead, users, currentUserId } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
   const [activeTab, setActiveTab] = useState<Tab>('Tasks');
   const [showReviewModal, setShowReviewModal] = useState(false);
 
@@ -81,15 +82,17 @@ export default function LeadDetailPanel() {
               className="p-2 rounded-lg bg-orange-50 border border-orange-200 text-orange-700 hover:bg-orange-100">
               <Mail size={15} />
             </a>
-            <button onClick={() => { deleteLead(lead.id); close(); }}
-              className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
-              <Trash2 size={15} />
-            </button>
+            {isAdmin && (
+              <button onClick={() => { deleteLead(lead.id); close(); }}
+                className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
+                <Trash2 size={15} />
+              </button>
+            )}
           </div>
         </div>
 
         {/* Review request button for paid jobs */}
-        {lead.stage === 'Paid' && (
+        {isAdmin && lead.stage === 'Paid' && (
           <div className="px-4 py-2 border-b border-gray-100 shrink-0">
             <button onClick={() => setShowReviewModal(true)}
               className={`w-full flex items-center justify-center gap-1.5 text-sm px-4 py-2 rounded-xl font-medium transition-colors ${
@@ -104,7 +107,7 @@ export default function LeadDetailPanel() {
         )}
 
         {/* Stage advance — full-width banner on mobile */}
-        {lead.stage !== 'Paid' && (
+        {isAdmin && lead.stage !== 'Paid' && (
           <div className="px-4 py-2 border-b border-gray-100 shrink-0">
             {lead.stage === 'New Lead' && (
               <button onClick={() => moveToStage(lead.id, 'Survey Booked')}
@@ -153,9 +156,11 @@ export default function LeadDetailPanel() {
             {[
               { label: 'Phone', value: lead.phone },
               { label: 'Email', value: lead.email },
+              ...(isAdmin ? [
               { label: 'Value', value: formatCurrency(lead.value), bold: true },
               { label: 'Deposit', value: `${formatCurrency(lead.deposit)}${lead.depositPaid ? ' ✓' : ''}` },
               { label: 'Balance', value: formatCurrency(lead.balance), bold: true },
+            ] : []),
             ].map(({ label, value, bold }) => value ? (
               <div key={label} className="shrink-0">
                 <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide whitespace-nowrap">{label}</p>
