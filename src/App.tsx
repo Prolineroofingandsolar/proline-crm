@@ -14,6 +14,7 @@ import ContactsPage from './pages/ContactsPage';
 import FilesPage from './pages/FilesPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import TimesheetPage from './pages/TimesheetPage';
 import AddLeadModal from './components/Pipeline/AddLeadModal';
 import AIAssistant from './components/AI/AIAssistant';
 
@@ -63,6 +64,7 @@ export default function App() {
     files: <FilesPage />,
     reports: <ReportsPage />,
     settings: <SettingsPage />,
+    timesheet: <TimesheetPage />,
   };
 
   return (

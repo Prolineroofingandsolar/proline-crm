@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask } from '../types';
+import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry } from '../types';
 import { generateId } from '../utils/helpers';
 import { hashPassword } from '../utils/crypto';
 import {
@@ -9,6 +9,7 @@ import {
   userToDb, dbToUser,
   contactToDb, dbToContact,
   generalTaskToDb, dbToGeneralTask,
+  timesheetEntryToDb, dbToTimesheetEntry,
 } from '../lib/supabase';
 
 const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
@@ -64,6 +65,7 @@ interface Store {
   leads: Lead[];
   contacts: Contact[];
   generalTasks: GeneralTask[];
+  timesheetEntries: TimesheetEntry[];
   apiKey: string;
   selectedId: string | null;
   currentPage: string;
@@ -76,6 +78,11 @@ interface Store {
   deleteUser: (id: string) => void;
   changePassword: (id: string, newPassword: string) => Promise<void>;
   updateUserName: (id: string, name: string) => void;
+  updateUserProfile: (id: string, updates: Partial<Pick<AppUser, 'dayRate' | 'cisRate' | 'utrNumber' | 'bankName' | 'bankAccountNumber' | 'bankSortCode'>>) => void;
+
+  addTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
+  upsertTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
+  deleteTimesheetEntry: (id: string) => void;
 
   setCurrentPage: (page: string) => void;
   setSelectedId: (id: string | null) => void;
@@ -143,6 +150,7 @@ export const useStore = create<Store>()(
       leads: [],
       contacts: [],
       generalTasks: [],
+      timesheetEntries: [],
       apiKey: '',
       selectedId: null,
       currentPage: 'pipeline',
@@ -151,17 +159,19 @@ export const useStore = create<Store>()(
 
       // ── Load all data from Supabase ─────────────────────────────────────────
       loadData: async () => {
-        const [leadsRes, usersRes, contactsRes, tasksRes] = await Promise.all([
+        const [leadsRes, usersRes, contactsRes, tasksRes, timesheetRes] = await Promise.all([
           supabase.from('leads').select('*').order('updated_at', { ascending: false }),
           supabase.from('app_users').select('*'),
           supabase.from('contacts').select('*').order('created_at', { ascending: false }),
           supabase.from('general_tasks').select('*').order('created_at', { ascending: false }),
+          supabase.from('timesheet_entries').select('*').order('date', { ascending: false }),
         ]);
 
         const leads = (leadsRes.data ?? []).map(r => dbToLead(r as Record<string, unknown>));
         const users = (usersRes.data ?? []).map(r => dbToUser(r as Record<string, unknown>));
         const contacts = (contactsRes.data ?? []).map(r => dbToContact(r as Record<string, unknown>));
         const generalTasks = (tasksRes.data ?? []).map(r => dbToGeneralTask(r as Record<string, unknown>));
+        const timesheetEntries = (timesheetRes.data ?? []).map(r => dbToTimesheetEntry(r as Record<string, unknown>));
 
         // Set job counter to 1 above the highest existing job number
         const maxNum = leads.reduce((max, l) => {
@@ -186,7 +196,7 @@ export const useStore = create<Store>()(
         }
         const allContacts = [...contacts, ...missingContacts];
 
-        set({ leads, users, contacts: allContacts, generalTasks, isLoaded: true });
+        set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, isLoaded: true });
       },
 
       // ── Auth ────────────────────────────────────────────────────────────────
@@ -228,6 +238,47 @@ export const useStore = create<Store>()(
       updateUserName: (id, name) => {
         set(s => ({ users: s.users.map(u => u.id === id ? { ...u, name } : u) }));
         supabase.from('app_users').update({ name }).eq('id', id);
+      },
+
+      updateUserProfile: (id, updates) => {
+        set(s => ({ users: s.users.map(u => u.id === id ? { ...u, ...updates } : u) }));
+        const dbUpdates: Record<string, unknown> = {};
+        if (updates.dayRate !== undefined) dbUpdates.day_rate = updates.dayRate;
+        if (updates.cisRate !== undefined) dbUpdates.cis_rate = updates.cisRate;
+        if (updates.utrNumber !== undefined) dbUpdates.utr_number = updates.utrNumber;
+        if (updates.bankName !== undefined) dbUpdates.bank_name = updates.bankName;
+        if (updates.bankAccountNumber !== undefined) dbUpdates.bank_account_number = updates.bankAccountNumber;
+        if (updates.bankSortCode !== undefined) dbUpdates.bank_sort_code = updates.bankSortCode;
+        supabase.from('app_users').update(dbUpdates).eq('id', id);
+      },
+
+      upsertTimesheetEntry: (data) => {
+        const now = new Date().toISOString().split('T')[0];
+        const existing = get().timesheetEntries.find(e => e.userId === data.userId && e.date === data.date);
+        if (existing) {
+          const updated: TimesheetEntry = { ...existing, ...data };
+          set(s => ({ timesheetEntries: s.timesheetEntries.map(e => e.id === existing.id ? updated : e) }));
+          supabase.from('timesheet_entries').update(timesheetEntryToDb(updated)).eq('id', existing.id)
+            .then(({ error }) => { if (error) console.error('timesheet update error:', error); });
+        } else {
+          const entry: TimesheetEntry = { ...data, id: generateId(), createdAt: now };
+          set(s => ({ timesheetEntries: [entry, ...s.timesheetEntries] }));
+          supabase.from('timesheet_entries').insert(timesheetEntryToDb(entry))
+            .then(({ error }) => { if (error) console.error('timesheet insert error:', error); });
+        }
+      },
+
+      addTimesheetEntry: (data) => {
+        const now = new Date().toISOString().split('T')[0];
+        const entry: TimesheetEntry = { ...data, id: generateId(), createdAt: now };
+        set(s => ({ timesheetEntries: [entry, ...s.timesheetEntries] }));
+        supabase.from('timesheet_entries').insert(timesheetEntryToDb(entry))
+          .then(({ error }) => { if (error) console.error('timesheet insert error:', error); });
+      },
+
+      deleteTimesheetEntry: (id) => {
+        set(s => ({ timesheetEntries: s.timesheetEntries.filter(e => e.id !== id) }));
+        supabase.from('timesheet_entries').delete().eq('id', id);
       },
 
       // ── UI ──────────────────────────────────────────────────────────────────

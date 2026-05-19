@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Contact, FolderOpen, BarChart2, Settings, ChevronDown, Kanban, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Contact, FolderOpen, BarChart2, Settings, ChevronDown, Kanban, LogOut, Clock } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 const nav = [
@@ -9,6 +9,7 @@ const nav = [
   { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
   { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
   { id: 'calendar',  label: 'Calendar',  icon: Calendar },
+  { id: 'timesheet', label: 'Timesheet', icon: Clock },
   { id: 'contacts',  label: 'Contacts',  icon: Contact },
   { id: 'files',     label: 'Files',     icon: FolderOpen },
   { id: 'reports',   label: 'Reports',   icon: BarChart2 },
@@ -63,7 +64,7 @@ export default function Sidebar() {
         {showMenu && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-            <div className="absolute bottom-full left-2 right-2 mb-2 z-50 bg-gray-800 rounded-xl shadow-xl overflow-hidden border border-white/10">
+            <div className="absolute bottom-full left-2 mb-2 z-50 bg-gray-800 rounded-xl shadow-xl overflow-hidden border border-white/10 w-52">
               <div className="px-4 py-3 border-b border-white/10">
                 <p className="text-white text-sm font-semibold truncate">{currentUser?.name ?? 'User'}</p>
                 <p className="text-white/50 text-xs capitalize">@{currentUser?.username} · {currentUser?.role}</p>

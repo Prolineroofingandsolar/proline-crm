@@ -67,6 +67,22 @@ export interface AppUser {
   passwordHash: string;
   role: 'admin' | 'user';
   createdAt: string;
+  dayRate?: number;
+  cisRate?: 20 | 30;
+  utrNumber?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankSortCode?: string;
+}
+
+export interface TimesheetEntry {
+  id: string;
+  userId: string;
+  leadId: string;
+  date: string; // YYYY-MM-DD
+  type: 'full' | 'half';
+  amount: number;
+  createdAt: string;
 }
 
 export interface Contact {

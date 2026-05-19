@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Lead, Contact, AppUser, GeneralTask } from '../types';
+import type { Lead, Contact, AppUser, GeneralTask, TimesheetEntry } from '../types';
 
 export const supabase = createClient(
   'https://qzvdzzvkocmulcfujyea.supabase.co',
@@ -94,6 +94,12 @@ export function dbToUser(r: Record<string, unknown>): AppUser {
     passwordHash: r.password_hash as string,
     role: r.role as AppUser['role'],
     createdAt: r.created_at as string,
+    dayRate: (r.day_rate as number) ?? undefined,
+    cisRate: (r.cis_rate as 20 | 30) ?? undefined,
+    utrNumber: (r.utr_number as string) ?? undefined,
+    bankName: (r.bank_name as string) ?? undefined,
+    bankAccountNumber: (r.bank_account_number as string) ?? undefined,
+    bankSortCode: (r.bank_sort_code as string) ?? undefined,
   };
 }
 
@@ -105,6 +111,40 @@ export function userToDb(u: AppUser): Record<string, unknown> {
     password_hash: u.passwordHash,
     role: u.role,
     created_at: u.createdAt,
+    // Only include payment fields when they exist — omitting keeps inserts
+    // compatible with databases that haven't run the timesheet migration yet.
+    ...(u.dayRate !== undefined && { day_rate: u.dayRate }),
+    ...(u.cisRate !== undefined && { cis_rate: u.cisRate }),
+    ...(u.utrNumber !== undefined && { utr_number: u.utrNumber }),
+    ...(u.bankName !== undefined && { bank_name: u.bankName }),
+    ...(u.bankAccountNumber !== undefined && { bank_account_number: u.bankAccountNumber }),
+    ...(u.bankSortCode !== undefined && { bank_sort_code: u.bankSortCode }),
+  };
+}
+
+// ── TimesheetEntry ─────────────────────────────────────────────────────────────
+
+export function dbToTimesheetEntry(r: Record<string, unknown>): TimesheetEntry {
+  return {
+    id: r.id as string,
+    userId: r.user_id as string,
+    leadId: r.lead_id as string,
+    date: r.date as string,
+    type: r.type as TimesheetEntry['type'],
+    amount: r.amount as number,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function timesheetEntryToDb(e: TimesheetEntry): Record<string, unknown> {
+  return {
+    id: e.id,
+    user_id: e.userId,
+    lead_id: e.leadId,
+    date: e.date,
+    type: e.type,
+    amount: e.amount,
+    created_at: e.createdAt,
   };
 }
 

@@ -1,17 +1,18 @@
 import { useState } from 'react';
-import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X } from 'lucide-react';
+import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X, Clock } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 const MAIN = [
-  { id: 'pipeline', label: 'Pipeline', icon: Kanban },
-  { id: 'leads',    label: 'Leads',    icon: Users },
-  { id: 'jobs',     label: 'Jobs',     icon: Briefcase },
-  { id: 'tasks',    label: 'Tasks',    icon: CheckSquare },
+  { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
+  { id: 'leads',     label: 'Leads',     icon: Users },
+  { id: 'timesheet', label: 'Timesheet', icon: Clock },
+  { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
 ];
 
 const MORE = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'calendar',  label: 'Calendar',  icon: Calendar },
+  { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
   { id: 'contacts',  label: 'Contacts',  icon: Contact },
   { id: 'files',     label: 'Files',     icon: FolderOpen },
   { id: 'reports',   label: 'Reports',   icon: BarChart2 },
