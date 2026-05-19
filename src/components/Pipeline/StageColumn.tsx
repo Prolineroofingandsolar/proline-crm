@@ -3,6 +3,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Lead, Stage } from '../../types';
 import { formatCurrency } from '../../utils/helpers';
+import { useStore } from '../../store/useStore';
 import LeadCard from './LeadCard';
 
 const stageConfig: Record<Stage, { header: string; dot: string; bg: string; dropBg: string }> = {
@@ -23,6 +24,8 @@ interface Props {
 }
 
 export default function StageColumn({ stage, leads, onCardClick, onAddLead }: Props) {
+  const { users, currentUserId } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
   const cfg = stageConfig[stage];
   const total = leads.reduce((s, l) => s + l.value, 0);
 
@@ -42,7 +45,7 @@ export default function StageColumn({ stage, leads, onCardClick, onAddLead }: Pr
       </div>
 
       {/* Value summary */}
-      {total > 0 && (
+      {isAdmin && total > 0 && (
         <div className="bg-white border-b border-gray-100 px-3 py-1.5 text-xs text-gray-500 font-medium">
           Total: <span className="text-gray-700 font-bold">{formatCurrency(total)}</span>
         </div>
