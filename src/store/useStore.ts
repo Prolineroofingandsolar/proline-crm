@@ -259,12 +259,22 @@ export const useStore = create<Store>()(
           const updated: TimesheetEntry = { ...existing, ...data };
           set(s => ({ timesheetEntries: s.timesheetEntries.map(e => e.id === existing.id ? updated : e) }));
           supabase.from('timesheet_entries').update(timesheetEntryToDb(updated)).eq('id', existing.id)
-            .then(({ error }) => { if (error) console.error('timesheet update error:', error); });
+            .then(({ error }) => {
+              if (error) {
+                console.error('timesheet update error:', error);
+                get().showToast('Save failed — check your connection', 'error');
+              }
+            });
         } else {
           const entry: TimesheetEntry = { ...data, id: generateId(), createdAt: now };
           set(s => ({ timesheetEntries: [entry, ...s.timesheetEntries] }));
           supabase.from('timesheet_entries').insert(timesheetEntryToDb(entry))
-            .then(({ error }) => { if (error) console.error('timesheet insert error:', error); });
+            .then(({ error }) => {
+              if (error) {
+                console.error('timesheet insert error:', error);
+                get().showToast('Save failed — check your connection', 'error');
+              }
+            });
         }
       },
 
