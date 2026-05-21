@@ -80,6 +80,16 @@ alter table app_users add column if not exists bank_name text;
 alter table app_users add column if not exists bank_account_number text;
 alter table app_users add column if not exists bank_sort_code text;
 
+create table if not exists push_subscriptions (
+  id text primary key,
+  user_id text not null default '',
+  endpoint text unique not null,
+  subscription jsonb not null,
+  created_at text not null default ''
+);
+
+alter table push_subscriptions disable row level security;
+
 create table if not exists timesheet_entries (
   id text primary key,
   user_id text not null default '',

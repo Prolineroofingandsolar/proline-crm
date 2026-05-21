@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry } from '../types';
 import { generateId } from '../utils/helpers';
 import { hashPassword } from '../utils/crypto';
+import { subscribeToPush } from '../utils/push';
 import {
   supabase,
   leadToDb, dbToLead,
@@ -80,6 +81,9 @@ interface Store {
   updateUserName: (id: string, name: string) => void;
   updateUserProfile: (id: string, updates: Partial<Pick<AppUser, 'dayRate' | 'cisRate' | 'utrNumber' | 'bankName' | 'bankAccountNumber' | 'bankSortCode'>>) => void;
 
+  pushEnabled: boolean;
+  enablePushNotifications: () => Promise<void>;
+
   addTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
   upsertTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
   deleteTimesheetEntry: (id: string) => void;
@@ -152,6 +156,7 @@ export const useStore = create<Store>()(
       generalTasks: [],
       timesheetEntries: [],
       apiKey: '',
+      pushEnabled: false,
       selectedId: null,
       currentPage: 'pipeline',
       searchQuery: '',
@@ -291,6 +296,34 @@ export const useStore = create<Store>()(
         supabase.from('timesheet_entries').delete().eq('id', id);
       },
 
+      enablePushNotifications: async () => {
+        const subscription = await subscribeToPush();
+        if (!subscription) {
+          if ('Notification' in window && Notification.permission === 'denied') {
+            get().showToast('Notifications blocked — allow in device Settings', 'error');
+          }
+          return;
+        }
+        const now = new Date().toISOString().split('T')[0];
+        const { error } = await supabase.from('push_subscriptions').upsert(
+          {
+            id: generateId(),
+            user_id: get().currentUserId ?? '',
+            endpoint: subscription.endpoint,
+            subscription: subscription.toJSON(),
+            created_at: now,
+          },
+          { onConflict: 'endpoint' }
+        );
+        if (error) {
+          console.error('push subscription save error:', error);
+          get().showToast('Failed to save notification subscription', 'error');
+          return;
+        }
+        set({ pushEnabled: true });
+        get().showToast('Push notifications enabled');
+      },
+
       // ── UI ──────────────────────────────────────────────────────────────────
       setCurrentPage: (page) => set({ currentPage: page, selectedId: null }),
       setSelectedId: (id) => set({ selectedId: id }),
@@ -361,6 +394,9 @@ export const useStore = create<Store>()(
         });
         get().upsertContact({ name: data.name, phone: data.phone, email: data.email, address: data.address });
         get().showToast(`New lead added: ${data.name}`);
+        supabase.functions.invoke('send-push', {
+          body: { title: 'New Lead Added', body: `${data.name} — ${data.jobType ?? 'Job'}` },
+        });
       },
 
       updateLead: (id, updates) => {
@@ -394,6 +430,17 @@ export const useStore = create<Store>()(
         set(s => ({ leads: s.leads.map(l => l.id === id ? { ...l, ...updates } : l) }));
         syncLead(id);
         get().showToast(`Moved to ${stage}`);
+        const pushTitles: Partial<Record<Stage, string>> = {
+          Won: 'Job Won',
+          Completed: 'Job Completed',
+          Paid: 'Payment Received',
+        };
+        const pushTitle = pushTitles[stage];
+        if (pushTitle) {
+          supabase.functions.invoke('send-push', {
+            body: { title: pushTitle, body: `${lead.name} — ${lead.jobRef}` },
+          });
+        }
       },
 
       markAsWon: (id) => {
@@ -567,6 +614,7 @@ export const useStore = create<Store>()(
         currentUserId: state.currentUserId,
         apiKey: state.apiKey,
         currentPage: state.currentPage,
+        pushEnabled: state.pushEnabled,
       }),
     }
   )
