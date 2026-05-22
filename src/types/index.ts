@@ -104,6 +104,7 @@ export interface GeneralTask {
   category: string;
   notes?: string;
   createdAt: string;
+  assignedTo: string[]; // empty = visible to everyone
 }
 
 export interface Lead {

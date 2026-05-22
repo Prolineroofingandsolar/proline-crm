@@ -101,3 +101,22 @@ create table if not exists timesheet_entries (
 );
 
 alter table timesheet_entries disable row level security;
+
+-- Task assignment migration
+alter table general_tasks add column if not exists assigned_to jsonb not null default '[]';
+
+-- RPC used by the Scriptable lock screen widget to get incomplete job tasks
+create or replace function get_incomplete_job_tasks()
+returns table(lead_name text, lead_ref text, task_id text, task_title text)
+language sql
+as $$
+  select
+    l.name       as lead_name,
+    l.job_ref    as lead_ref,
+    t->>'id'     as task_id,
+    t->>'title'  as task_title
+  from leads l,
+       jsonb_array_elements(l.tasks) as t
+  where l.stage in ('Won', 'In Progress', 'Completed')
+    and (t->>'completed')::boolean = false;
+$$;

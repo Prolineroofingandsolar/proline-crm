@@ -1,7 +1,8 @@
-﻿import { useState } from 'react';
-import { CheckCircle2, Circle, ChevronRight, Plus, Trash2, Flag, Calendar, Tag, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle2, Circle, ChevronRight, Plus, Trash2, Flag, Calendar, Tag, X, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import type { GeneralTask } from '../store/useStore';
+import type { AppUser } from '../types';
 import { formatDate, formatDateShort, jobTypeColor } from '../utils/helpers';
 import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 
@@ -13,7 +14,7 @@ const PRIORITIES: { value: GeneralTask['priority']; label: string; color: string
 
 const CATEGORIES = ['Admin', 'Finance', 'Vehicle', 'Marketing', 'Health & Safety', 'Staff', 'Supplies', 'Other'];
 
-type View = 'all' | 'todo' | 'done';
+type View = 'all' | 'todo' | 'done' | 'mine';
 
 function PriorityBadge({ priority }: { priority: GeneralTask['priority'] }) {
   const p = PRIORITIES.find(x => x.value === priority)!;
@@ -25,19 +26,47 @@ function PriorityBadge({ priority }: { priority: GeneralTask['priority'] }) {
   );
 }
 
+function AssigneeBadges({ assignedTo, teamUsers }: { assignedTo: string[]; teamUsers: AppUser[] }) {
+  if (assignedTo.length === 0) return null;
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {assignedTo.map(uid => {
+        const user = teamUsers.find(u => u.id === uid);
+        if (!user) return null;
+        const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+        return (
+          <span key={uid} title={user.name}
+            className="inline-flex items-center text-xs bg-blue-50 text-blue-700 border border-blue-100 px-1.5 py-0.5 rounded-full font-medium">
+            {initials}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Add General Task form ────────────────────────────────────────────────────
-function AddGeneralTaskForm({ onClose }: { onClose: () => void }) {
+function AddGeneralTaskForm({ onClose, teamUsers }: { onClose: () => void; teamUsers: AppUser[] }) {
   const { addGeneralTask } = useStore();
-  const [title, setTitle]       = useState('');
-  const [priority, setPriority] = useState<GeneralTask['priority']>('medium');
-  const [category, setCategory] = useState('Admin');
-  const [dueDate, setDueDate]   = useState('');
-  const [notes, setNotes]       = useState('');
+  const [title, setTitle]         = useState('');
+  const [priority, setPriority]   = useState<GeneralTask['priority']>('medium');
+  const [category, setCategory]   = useState('Admin');
+  const [dueDate, setDueDate]     = useState('');
+  const [notes, setNotes]         = useState('');
+  const [assignedTo, setAssignedTo] = useState<string[]>([]);
+
+  const toggleUser = (uid: string) =>
+    setAssignedTo(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    addGeneralTask({ title: title.trim(), priority, category, dueDate: dueDate || undefined, notes: notes || undefined });
+    addGeneralTask({
+      title: title.trim(), priority, category,
+      dueDate: dueDate || undefined,
+      notes: notes || undefined,
+      assignedTo,
+    });
     onClose();
   };
 
@@ -82,6 +111,31 @@ function AddGeneralTaskForm({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
+      {teamUsers.length > 0 && (
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
+            <Users size={11} /> Assign to
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {teamUsers.map(u => (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => toggleUser(u.id)}
+                className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                  assignedTo.includes(u.id)
+                    ? 'bg-orange-600 text-white border-orange-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300'
+                }`}
+              >
+                {u.name}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Leave empty to show for everyone</p>
+        </div>
+      )}
+
       <div className="flex gap-2 pt-1">
         <button type="button" onClick={onClose}
           className="flex-1 border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 py-2 rounded-xl text-sm font-medium">
@@ -97,15 +151,32 @@ function AddGeneralTaskForm({ onClose }: { onClose: () => void }) {
 }
 
 // ── General Tasks section ────────────────────────────────────────────────────
-function GeneralTasksSection({ view }: { view: View }) {
+function GeneralTasksSection({
+  view, currentUserId, isAdmin, teamUsers,
+}: {
+  view: View;
+  currentUserId: string | null;
+  isAdmin: boolean;
+  teamUsers: AppUser[];
+}) {
   const { generalTasks, toggleGeneralTask, deleteGeneralTask } = useStore();
   const [adding, setAdding] = useState(false);
 
-  const filtered = generalTasks.filter(t =>
-    view === 'all' ? true : view === 'todo' ? !t.completed : t.completed
-  );
+  // Non-admins only see tasks assigned to them or unassigned (visible to all)
+  const visibleTasks = isAdmin
+    ? generalTasks
+    : generalTasks.filter(t =>
+        t.assignedTo.length === 0 || (currentUserId ? t.assignedTo.includes(currentUserId) : false)
+      );
 
-  const pending = generalTasks.filter(t => !t.completed).length;
+  const filtered = visibleTasks.filter(t => {
+    if (view === 'mine') return t.assignedTo.length === 0 || (currentUserId ? t.assignedTo.includes(currentUserId) : false);
+    if (view === 'todo') return !t.completed;
+    if (view === 'done') return t.completed;
+    return true;
+  });
+
+  const pending = visibleTasks.filter(t => !t.completed).length;
 
   const isOverdue = (t: GeneralTask) =>
     !t.completed && t.dueDate && new Date(t.dueDate) < new Date();
@@ -127,17 +198,19 @@ function GeneralTasksSection({ view }: { view: View }) {
           {pending > 0 && (
             <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2 py-0.5 rounded-full">{pending} pending</span>
           )}
-          <button
-            onClick={() => setAdding(a => !a)}
-            className="flex items-center gap-1 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-          >
-            <Plus size={13} /> Add Task
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setAdding(a => !a)}
+              className="flex items-center gap-1 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <Plus size={13} /> Add Task
+            </button>
+          )}
         </div>
       </div>
 
       <div className="p-4 space-y-3">
-        {adding && <AddGeneralTaskForm onClose={() => setAdding(false)} />}
+        {adding && <AddGeneralTaskForm onClose={() => setAdding(false)} teamUsers={teamUsers} />}
 
         {filtered.length === 0 && !adding && (
           <div className="text-center py-6">
@@ -145,7 +218,7 @@ function GeneralTasksSection({ view }: { view: View }) {
             <p className="text-sm text-gray-400">
               {view === 'done' ? 'No completed general tasks' : 'No pending general tasks'}
             </p>
-            {view !== 'done' && (
+            {view !== 'done' && isAdmin && (
               <button onClick={() => setAdding(true)} className="mt-2 text-xs text-orange-500 hover:text-orange-700 font-medium">
                 + Add your first task
               </button>
@@ -186,6 +259,7 @@ function GeneralTasksSection({ view }: { view: View }) {
                     {isOverdue(task) ? 'Overdue · ' : ''}{formatDateShort(task.dueDate)}
                   </span>
                 )}
+                <AssigneeBadges assignedTo={task.assignedTo} teamUsers={teamUsers} />
                 {task.completedDate && (
                   <span className="text-xs text-gray-300">Done {formatDate(task.completedDate)}</span>
                 )}
@@ -193,10 +267,12 @@ function GeneralTasksSection({ view }: { view: View }) {
               {task.notes && <p className="text-xs text-gray-400 mt-1 italic">{task.notes}</p>}
             </div>
 
-            <button onClick={() => deleteGeneralTask(task.id)}
-              className="opacity-0 group-hover:opacity-100 shrink-0 text-gray-300 hover:text-red-500 transition-all mt-0.5">
-              <Trash2 size={14} />
-            </button>
+            {isAdmin && (
+              <button onClick={() => deleteGeneralTask(task.id)}
+                className="opacity-0 group-hover:opacity-100 shrink-0 text-gray-300 hover:text-red-500 transition-all mt-0.5">
+                <Trash2 size={14} />
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -215,7 +291,7 @@ function JobTasksSection({ view }: { view: View }) {
 
   const leadsWithMatchingTasks = activeLeads.map(lead => {
     const tasks = lead.tasks.filter(t =>
-      view === 'all' ? true : view === 'todo' ? !t.completed : t.completed
+      view === 'all' || view === 'mine' ? true : view === 'todo' ? !t.completed : t.completed
     );
     return { lead, tasks };
   }).filter(({ tasks }) => tasks.length > 0);
@@ -307,12 +383,27 @@ function JobTasksSection({ view }: { view: View }) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function TasksPage() {
-  const { leads, generalTasks, selectedId } = useStore();
+  const { leads, generalTasks, selectedId, currentUserId, users } = useStore();
   const [view, setView] = useState<View>('todo');
 
-  const pendingGeneral = generalTasks.filter(t => !t.completed).length;
+  const currentUser = users.find(u => u.id === currentUserId);
+  const isAdmin = currentUser?.role === 'admin';
+  const teamUsers = users.filter(u => u.role !== 'casual');
+
+  const myVisibleGeneral = isAdmin
+    ? generalTasks
+    : generalTasks.filter(t => t.assignedTo.length === 0 || (currentUserId ? t.assignedTo.includes(currentUserId) : false));
+
+  const pendingGeneral = myVisibleGeneral.filter(t => !t.completed).length;
   const pendingJob     = leads.flatMap(l => l.tasks).filter(t => !t.completed).length;
   const totalPending   = pendingGeneral + pendingJob;
+
+  const TABS: { v: View; label: string }[] = [
+    { v: 'todo', label: 'To Do' },
+    { v: 'mine', label: 'Mine' },
+    { v: 'done', label: 'Done' },
+    { v: 'all',  label: 'All' },
+  ];
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -327,12 +418,12 @@ export default function TasksPage() {
           </p>
         </div>
         <div className="flex gap-1 ml-auto">
-          {(['todo', 'done', 'all'] as View[]).map(v => (
+          {TABS.map(({ v, label }) => (
             <button key={v} onClick={() => setView(v)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors capitalize ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                 view === v ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}>
-              {v === 'todo' ? 'To Do' : v === 'done' ? 'Done' : 'All'}
+              {label}
             </button>
           ))}
         </div>
@@ -341,17 +432,24 @@ export default function TasksPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         {/* General tasks always at the top */}
-        <GeneralTasksSection view={view} />
+        <GeneralTasksSection
+          view={view}
+          currentUserId={currentUserId}
+          isAdmin={!!isAdmin}
+          teamUsers={teamUsers}
+        />
 
-        {/* Divider */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Job Tasks</span>
-          <div className="flex-1 h-px bg-gray-200" />
-        </div>
-
-        {/* Job tasks grouped by card */}
-        <JobTasksSection view={view} />
+        {/* Job tasks — visible to all admins */}
+        {isAdmin && (
+          <>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Job Tasks</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+            <JobTasksSection view={view} />
+          </>
+        )}
       </div>
 
       {selectedId && <LeadDetailPanel />}

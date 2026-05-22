@@ -185,6 +185,7 @@ export function dbToGeneralTask(r: Record<string, unknown>): GeneralTask {
     category: r.category as string,
     notes: (r.notes as string) ?? undefined,
     createdAt: r.created_at as string,
+    assignedTo: (r.assigned_to as string[]) ?? [],
   };
 }
 
@@ -199,5 +200,6 @@ export function generalTaskToDb(t: GeneralTask): Record<string, unknown> {
     category: t.category,
     notes: t.notes ?? null,
     created_at: t.createdAt,
+    assigned_to: t.assignedTo,
   };
 }
