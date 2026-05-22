@@ -77,6 +77,8 @@ interface Store {
   logout: () => void;
   addUser: (name: string, username: string, password: string, role: 'admin' | 'user') => Promise<{ ok: boolean; error?: string }>;
   deleteUser: (id: string) => void;
+  addCasualWorker: (name: string, dayRate: number, cisRate: 20 | 30) => void;
+  removeCasualWorker: (id: string) => void;
   changePassword: (id: string, newPassword: string) => Promise<void>;
   updateUserName: (id: string, name: string) => void;
   updateUserProfile: (id: string, updates: Partial<Pick<AppUser, 'dayRate' | 'cisRate' | 'utrNumber' | 'bankName' | 'bankAccountNumber' | 'bankSortCode'>>) => void;
@@ -232,6 +234,25 @@ export const useStore = create<Store>()(
       deleteUser: (id) => {
         set(s => ({ users: s.users.filter(u => u.id !== id) }));
         supabase.from('app_users').delete().eq('id', id);
+      },
+
+      addCasualWorker: (name, dayRate, cisRate) => {
+        const now = new Date().toISOString().split('T')[0];
+        const id = generateId();
+        const user: AppUser = { id, name, username: `casual_${id.slice(0, 8)}`, passwordHash: '', role: 'casual', createdAt: now, dayRate, cisRate };
+        set(s => ({ users: [...s.users, user] }));
+        supabase.from('app_users').insert(userToDb(user)).then(({ error }) => {
+          if (error) console.error('addCasualWorker error:', error);
+        });
+      },
+
+      removeCasualWorker: (id) => {
+        set(s => ({
+          users: s.users.filter(u => u.id !== id),
+          timesheetEntries: s.timesheetEntries.filter(e => e.userId !== id),
+        }));
+        supabase.from('app_users').delete().eq('id', id);
+        supabase.from('timesheet_entries').delete().eq('user_id', id);
       },
 
       changePassword: async (id, newPassword) => {

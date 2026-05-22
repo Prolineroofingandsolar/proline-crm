@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Pencil, Check, X, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Pencil, Check, X, Trash2, UserPlus } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import type { AppUser } from '../types';
 
@@ -289,13 +289,28 @@ function DayRow({ date, label, entry, dayRate, cisRate, leads, onSave, onDelete,
 // ── Main page ───────────────────────────────────────────────────────────────────
 
 export default function TimesheetPage() {
-  const { users, currentUserId, leads, timesheetEntries, upsertTimesheetEntry, deleteTimesheetEntry } = useStore();
+  const { users, currentUserId, leads, timesheetEntries, upsertTimesheetEntry, deleteTimesheetEntry, addCasualWorker, removeCasualWorker } = useStore();
   const currentUser = users.find(u => u.id === currentUserId)!;
   const isAdmin = currentUser?.role === 'admin';
 
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [viewUserId, setViewUserId] = useState(currentUserId ?? '');
   const [showProfile, setShowProfile] = useState(false);
+  const [showAddCasual, setShowAddCasual] = useState(false);
+  const [casualName, setCasualName] = useState('');
+  const [casualDayRate, setCasualDayRate] = useState('');
+  const [casualCisRate, setCasualCisRate] = useState<20 | 30>(20);
+
+  const casualWorkers = useMemo(() => users.filter(u => u.role === 'casual'), [users]);
+
+  const saveCasualWorker = () => {
+    if (!casualName.trim() || !casualDayRate) return;
+    addCasualWorker(casualName.trim(), parseFloat(casualDayRate), casualCisRate);
+    setCasualName('');
+    setCasualDayRate('');
+    setCasualCisRate(20);
+    setShowAddCasual(false);
+  };
 
   const viewUser = users.find(u => u.id === viewUserId) ?? currentUser;
   const dayRate = viewUser?.dayRate ?? 0;
@@ -321,7 +336,7 @@ export default function TimesheetPage() {
 
   const adminSummary = useMemo(() => {
     if (!isAdmin) return [];
-    return users.map(u => {
+    return users.filter(u => u.role !== 'casual').map(u => {
       const entries = timesheetEntries.filter(e => e.userId === u.id && weekDays.some(d => d.date === e.date));
       const days = entries.reduce((s, e) => s + (e.type === 'full' ? 1 : 0.5), 0);
       const gross = entries.reduce((s, e) => s + e.amount, 0);
@@ -352,7 +367,14 @@ export default function TimesheetPage() {
               onChange={e => setViewUserId(e.target.value)}
               className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
-              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              <optgroup label="Team">
+                {users.filter(u => u.role !== 'casual').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </optgroup>
+              {casualWorkers.length > 0 && (
+                <optgroup label="Casual Workers">
+                  {casualWorkers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </optgroup>
+              )}
             </select>
           )}
         </div>
@@ -491,10 +513,132 @@ export default function TimesheetPage() {
             </div>
           </div>
         )}
+
+        {/* Casual day workers — admin only */}
+        {isAdmin && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div className="text-sm font-semibold text-gray-700">Casual Day Workers</div>
+              <button
+                onClick={() => setShowAddCasual(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors"
+              >
+                <UserPlus size={13} /> Add worker
+              </button>
+            </div>
+            {casualWorkers.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-gray-400 italic">
+                No casual workers yet — add someone who does a day here and there
+              </div>
+            ) : (
+              casualWorkers.map(worker => {
+                const wEntries = timesheetEntries.filter(e => e.userId === worker.id && weekDays.some(d => d.date === e.date));
+                const wDays = wEntries.reduce((s, e) => s + (e.type === 'full' ? 1 : 0.5), 0);
+                const wGross = wEntries.reduce((s, e) => s + e.amount, 0);
+                const wRate = worker.cisRate ?? 20;
+                const wNet = wGross * (1 - wRate / 100);
+                return (
+                  <div key={worker.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0">
+                    <div className="flex-1 min-w-0">
+                      <button
+                        onClick={() => setViewUserId(worker.id)}
+                        className="text-sm font-medium text-gray-800 hover:text-orange-600 transition-colors text-left"
+                      >
+                        {worker.name}
+                      </button>
+                      <div className="text-[11px] text-gray-400">
+                        {worker.dayRate ? `£${worker.dayRate}/day` : 'No rate set'}
+                        {wDays > 0 && ` · ${wDays} ${wDays === 1 ? 'day' : 'days'} this week`}
+                      </div>
+                    </div>
+                    {wDays > 0 && (
+                      <div className="text-right shrink-0 mr-1">
+                        <div className="text-xs text-gray-500">£{wGross.toFixed(0)} gross</div>
+                        <div className="text-sm font-bold text-green-700">£{wNet.toFixed(0)} net</div>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => { if (window.confirm(`Remove ${worker.name} and their timesheet entries?`)) removeCasualWorker(worker.id); }}
+                      className="text-gray-300 hover:text-red-500 shrink-0 transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
 
       {showProfile && viewUser && (
         <ProfileModal user={viewUser} onClose={() => setShowProfile(false)} />
+      )}
+
+      {showAddCasual && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-gray-900">Add Casual Worker</h2>
+              <button onClick={() => setShowAddCasual(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+                <input
+                  type="text" value={casualName}
+                  onChange={e => setCasualName(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="e.g. Dave Smith"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Day Rate (£ gross)</label>
+                  <input
+                    type="number" min="0" step="1" value={casualDayRate}
+                    onChange={e => setCasualDayRate(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    placeholder="e.g. 150"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">CIS Deduction Rate</label>
+                  <div className="flex rounded-lg overflow-hidden border border-gray-200 h-[38px]">
+                    <button type="button" onClick={() => setCasualCisRate(20)} className={`flex-1 text-sm font-medium transition-colors ${casualCisRate === 20 ? 'bg-orange-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>20%</button>
+                    <button type="button" onClick={() => setCasualCisRate(30)} className={`flex-1 text-sm font-medium transition-colors ${casualCisRate === 30 ? 'bg-orange-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>30%</button>
+                  </div>
+                </div>
+              </div>
+              {casualName && casualDayRate && (
+                <div className="bg-gray-50 rounded-xl px-4 py-3 flex justify-between text-sm">
+                  <div className="space-y-0.5">
+                    <div className="text-gray-500">Gross (full day)</div>
+                    <div className="text-gray-500">CIS ({casualCisRate}%)</div>
+                    <div className="font-semibold text-gray-800">Net take-home</div>
+                  </div>
+                  <div className="space-y-0.5 text-right">
+                    <div className="text-gray-700">£{parseFloat(casualDayRate || '0').toFixed(0)}</div>
+                    <div className="text-red-500">−£{(parseFloat(casualDayRate || '0') * casualCisRate / 100).toFixed(0)}</div>
+                    <div className="font-semibold text-green-700">£{(parseFloat(casualDayRate || '0') * (1 - casualCisRate / 100)).toFixed(0)}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+              <button onClick={() => setShowAddCasual(false)} className="flex-1 border border-gray-200 text-gray-600 text-sm font-medium py-2 rounded-xl hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={saveCasualWorker}
+                disabled={!casualName.trim() || !casualDayRate}
+                className="flex-1 bg-orange-600 text-white text-sm font-medium py-2 rounded-xl hover:bg-orange-700 disabled:opacity-40 transition-colors"
+              >
+                Add Worker
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

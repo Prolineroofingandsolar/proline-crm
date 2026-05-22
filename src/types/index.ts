@@ -65,7 +65,7 @@ export interface AppUser {
   name: string;
   username: string;
   passwordHash: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'casual';
   createdAt: string;
   dayRate?: number;
   cisRate?: 20 | 30;

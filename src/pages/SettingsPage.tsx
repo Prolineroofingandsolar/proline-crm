@@ -122,7 +122,7 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="p-5 space-y-3">
-          {users.map(u => (
+          {users.filter(u => u.role !== 'casual').map(u => (
             <div key={u.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${u.id === currentUserId ? 'border-orange-200 bg-orange-50' : 'border-gray-100 hover:border-gray-200'}`}>
               <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-700 font-bold flex items-center justify-center shrink-0 text-sm">
                 {u.name[0].toUpperCase()}
