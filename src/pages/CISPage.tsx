@@ -18,7 +18,7 @@ type WorkerRow = {
   user: AppUser;
   entries: TimesheetEntry[];
   gross: number;
-  cisRate: number;
+  cisRate: 20 | 30;
   deduction: number;
   net: number;
 };
@@ -172,7 +172,7 @@ export default function CISPage() {
   });
 
   const workerIds = [...new Set(monthEntries.map(e => e.userId))];
-  const rows: WorkerRow[] = workerIds.map(uid => {
+  const rows = workerIds.map(uid => {
     const user = users.find(u => u.id === uid);
     if (!user) return null;
     const entries = monthEntries.filter(e => e.userId === uid).sort((a, b) => a.date.localeCompare(b.date));
