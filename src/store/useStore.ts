@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry } from '../types';
 import { generateId } from '../utils/helpers';
 import { hashPassword } from '../utils/crypto';
+import { subscribeToPush } from '../utils/push';
 import {
   supabase,
   leadToDb, dbToLead,
@@ -76,9 +77,14 @@ interface Store {
   logout: () => void;
   addUser: (name: string, username: string, password: string, role: 'admin' | 'user') => Promise<{ ok: boolean; error?: string }>;
   deleteUser: (id: string) => void;
+  addCasualWorker: (name: string, dayRate: number, cisRate: 20 | 30) => void;
+  removeCasualWorker: (id: string) => void;
   changePassword: (id: string, newPassword: string) => Promise<void>;
   updateUserName: (id: string, name: string) => void;
   updateUserProfile: (id: string, updates: Partial<Pick<AppUser, 'dayRate' | 'cisRate' | 'utrNumber' | 'bankName' | 'bankAccountNumber' | 'bankSortCode'>>) => void;
+
+  pushEnabled: boolean;
+  enablePushNotifications: () => Promise<void>;
 
   addTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
   upsertTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
@@ -152,6 +158,7 @@ export const useStore = create<Store>()(
       generalTasks: [],
       timesheetEntries: [],
       apiKey: '',
+      pushEnabled: false,
       selectedId: null,
       currentPage: 'pipeline',
       searchQuery: '',
@@ -229,6 +236,25 @@ export const useStore = create<Store>()(
         supabase.from('app_users').delete().eq('id', id);
       },
 
+      addCasualWorker: (name, dayRate, cisRate) => {
+        const now = new Date().toISOString().split('T')[0];
+        const id = generateId();
+        const user: AppUser = { id, name, username: `casual_${id.slice(0, 8)}`, passwordHash: '', role: 'casual', createdAt: now, dayRate, cisRate };
+        set(s => ({ users: [...s.users, user] }));
+        supabase.from('app_users').insert(userToDb(user)).then(({ error }) => {
+          if (error) console.error('addCasualWorker error:', error);
+        });
+      },
+
+      removeCasualWorker: (id) => {
+        set(s => ({
+          users: s.users.filter(u => u.id !== id),
+          timesheetEntries: s.timesheetEntries.filter(e => e.userId !== id),
+        }));
+        supabase.from('app_users').delete().eq('id', id);
+        supabase.from('timesheet_entries').delete().eq('user_id', id);
+      },
+
       changePassword: async (id, newPassword) => {
         const hash = await hashPassword(newPassword);
         set(s => ({ users: s.users.map(u => u.id === id ? { ...u, passwordHash: hash } : u) }));
@@ -259,12 +285,22 @@ export const useStore = create<Store>()(
           const updated: TimesheetEntry = { ...existing, ...data };
           set(s => ({ timesheetEntries: s.timesheetEntries.map(e => e.id === existing.id ? updated : e) }));
           supabase.from('timesheet_entries').update(timesheetEntryToDb(updated)).eq('id', existing.id)
-            .then(({ error }) => { if (error) console.error('timesheet update error:', error); });
+            .then(({ error }) => {
+              if (error) {
+                console.error('timesheet update error:', error);
+                get().showToast('Save failed — check your connection', 'error');
+              }
+            });
         } else {
           const entry: TimesheetEntry = { ...data, id: generateId(), createdAt: now };
           set(s => ({ timesheetEntries: [entry, ...s.timesheetEntries] }));
           supabase.from('timesheet_entries').insert(timesheetEntryToDb(entry))
-            .then(({ error }) => { if (error) console.error('timesheet insert error:', error); });
+            .then(({ error }) => {
+              if (error) {
+                console.error('timesheet insert error:', error);
+                get().showToast('Save failed — check your connection', 'error');
+              }
+            });
         }
       },
 
@@ -279,6 +315,34 @@ export const useStore = create<Store>()(
       deleteTimesheetEntry: (id) => {
         set(s => ({ timesheetEntries: s.timesheetEntries.filter(e => e.id !== id) }));
         supabase.from('timesheet_entries').delete().eq('id', id);
+      },
+
+      enablePushNotifications: async () => {
+        const subscription = await subscribeToPush();
+        if (!subscription) {
+          if ('Notification' in window && Notification.permission === 'denied') {
+            get().showToast('Notifications blocked — allow in device Settings', 'error');
+          }
+          return;
+        }
+        const now = new Date().toISOString().split('T')[0];
+        const { error } = await supabase.from('push_subscriptions').upsert(
+          {
+            id: generateId(),
+            user_id: get().currentUserId ?? '',
+            endpoint: subscription.endpoint,
+            subscription: subscription.toJSON(),
+            created_at: now,
+          },
+          { onConflict: 'endpoint' }
+        );
+        if (error) {
+          console.error('push subscription save error:', error);
+          get().showToast('Failed to save notification subscription', 'error');
+          return;
+        }
+        set({ pushEnabled: true });
+        get().showToast('Push notifications enabled');
       },
 
       // ── UI ──────────────────────────────────────────────────────────────────
@@ -351,6 +415,9 @@ export const useStore = create<Store>()(
         });
         get().upsertContact({ name: data.name, phone: data.phone, email: data.email, address: data.address });
         get().showToast(`New lead added: ${data.name}`);
+        supabase.functions.invoke('send-push', {
+          body: { title: 'New Lead Added', body: `${data.name} — ${data.jobType ?? 'Job'}` },
+        });
       },
 
       updateLead: (id, updates) => {
@@ -384,6 +451,17 @@ export const useStore = create<Store>()(
         set(s => ({ leads: s.leads.map(l => l.id === id ? { ...l, ...updates } : l) }));
         syncLead(id);
         get().showToast(`Moved to ${stage}`);
+        const pushTitles: Partial<Record<Stage, string>> = {
+          Won: 'Job Won',
+          Completed: 'Job Completed',
+          Paid: 'Payment Received',
+        };
+        const pushTitle = pushTitles[stage];
+        if (pushTitle) {
+          supabase.functions.invoke('send-push', {
+            body: { title: pushTitle, body: `${lead.name} — ${lead.jobRef}` },
+          });
+        }
       },
 
       markAsWon: (id) => {
@@ -557,6 +635,7 @@ export const useStore = create<Store>()(
         currentUserId: state.currentUserId,
         apiKey: state.apiKey,
         currentPage: state.currentPage,
+        pushEnabled: state.pushEnabled,
       }),
     }
   )
