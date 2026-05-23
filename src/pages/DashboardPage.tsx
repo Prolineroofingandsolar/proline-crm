@@ -50,6 +50,7 @@ export default function DashboardPage() {
   const upcomingSurveys = leads.filter(l => l.surveyDate && l.surveyDate >= today).sort((a, b) => (a.surveyDate ?? '').localeCompare(b.surveyDate ?? '')).slice(0, 5);
 
   return (
+    <>
     <div className="p-4 sm:p-5 lg:p-6 overflow-y-auto h-full bg-white space-y-4 lg:space-y-6">
 
       {/* Automations / Action Required */}
@@ -171,6 +172,7 @@ export default function DashboardPage() {
     </div>
 
     {selectedId && <LeadDetailPanel />}
+    </>
   );
 }
 
