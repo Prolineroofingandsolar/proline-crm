@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { formatCurrency, jobTypeColor } from '../../utils/helpers';
 import type { Lead } from '../../types';
@@ -21,21 +22,21 @@ const STAGE_COLOR: Record<string, string> = {
   'Paid':        '#0d9488',
 };
 
-function makeIcon(color: string) {
+function makeIcon(color: string, active: boolean) {
+  const size = active ? 18 : 14;
   return L.divIcon({
     className: '',
     html: `<div style="
-      width:14px;height:14px;border-radius:50%;
-      background:${color};border:2.5px solid white;
-      box-shadow:0 2px 6px rgba(0,0,0,0.35);
+      width:${size}px;height:${size}px;border-radius:50%;
+      background:${color};border:${active ? '3px' : '2.5px'} solid white;
+      box-shadow:0 2px 8px rgba(0,0,0,${active ? '0.5' : '0.35'});
+      transition:all 0.15s;
     "></div>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-    popupAnchor: [0, -10],
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
 }
 
-// Auto-fit map to markers
 function FitBounds({ leads }: { leads: Lead[] }) {
   const map = useMap();
   const fitted = useRef(false);
@@ -54,6 +55,7 @@ const MAP_STAGES = ['Won', 'In Progress', 'Completed', 'Paid'];
 export default function JobsMap() {
   const { leads, geocodeLeads, setSelectedId } = useStore();
   const [geocodingDone, setGeocodingDone] = useState(false);
+  const [activeLead, setActiveLead] = useState<Lead | null>(null);
 
   const mapLeads = leads.filter(l => MAP_STAGES.includes(l.stage));
   const withCoords = mapLeads.filter(l => l.lat && l.lng);
@@ -84,7 +86,6 @@ export default function JobsMap() {
             )}
           </p>
         </div>
-        {/* Legend */}
         <div className="flex items-center gap-3 flex-wrap justify-end">
           {MAP_STAGES.map(s => (
             <div key={s} className="flex items-center gap-1">
@@ -113,50 +114,65 @@ export default function JobsMap() {
             </p>
           </div>
         ) : (
-          <MapContainer
-            center={[53.5, -1.5]}
-            zoom={6}
-            style={{ height: '100%', width: '100%' }}
-            scrollWheelZoom={false}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            />
-            <FitBounds leads={withCoords} />
-            {withCoords.map(lead => (
-              <Marker
-                key={lead.id}
-                position={[lead.lat!, lead.lng!]}
-                icon={makeIcon(STAGE_COLOR[lead.stage] ?? '#6b7280')}
-                eventHandlers={{ click: () => setSelectedId(lead.id) }}
-              >
-                <Popup>
-                  <div className="text-sm min-w-[160px]">
-                    <p className="font-bold text-gray-800">{lead.name}</p>
-                    <p className="text-gray-500 text-xs mt-0.5">{lead.address}</p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${jobTypeColor(lead.jobType)}`}>{lead.jobType}</span>
-                    </div>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-xs font-bold text-gray-700">{formatCurrency(lead.value)}</span>
-                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
-                        style={{ background: STAGE_COLOR[lead.stage] + '20', color: STAGE_COLOR[lead.stage] }}>
-                        {lead.stage}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setSelectedId(lead.id)}
-                      className="mt-2 w-full text-xs text-white rounded-lg py-1 font-medium"
-                      style={{ background: '#ea580c' }}
-                    >
-                      View details →
-                    </button>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
+          <>
+            <MapContainer
+              center={[53.5, -1.5]}
+              zoom={6}
+              style={{ height: '100%', width: '100%' }}
+              scrollWheelZoom={false}
+            >
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              />
+              <FitBounds leads={withCoords} />
+              {withCoords.map(lead => (
+                <Marker
+                  key={lead.id}
+                  position={[lead.lat!, lead.lng!]}
+                  icon={makeIcon(STAGE_COLOR[lead.stage] ?? '#6b7280', activeLead?.id === lead.id)}
+                  eventHandlers={{
+                    click: () => setActiveLead(prev => prev?.id === lead.id ? null : lead),
+                  }}
+                />
+              ))}
+            </MapContainer>
+
+            {/* Custom overlay card — lives in normal React DOM so onClick works */}
+            {activeLead && (
+              <div className="absolute top-3 left-3 z-[1000] bg-white rounded-2xl shadow-xl border border-gray-100 p-4 min-w-[190px] max-w-[220px]">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <p className="font-bold text-gray-900 text-sm leading-tight">{activeLead.name}</p>
+                  <button
+                    onClick={() => setActiveLead(null)}
+                    className="text-gray-300 hover:text-gray-500 shrink-0 -mt-0.5"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <p className="text-gray-400 text-xs mb-2 truncate">{activeLead.address}</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${jobTypeColor(activeLead.jobType)}`}>
+                    {activeLead.jobType}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-bold text-gray-800">{formatCurrency(activeLead.value)}</span>
+                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
+                    style={{ background: (STAGE_COLOR[activeLead.stage] ?? '#6b7280') + '20', color: STAGE_COLOR[activeLead.stage] ?? '#6b7280' }}>
+                    {activeLead.stage}
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setSelectedId(activeLead.id); setActiveLead(null); }}
+                  className="w-full text-xs text-white rounded-xl py-2 font-semibold"
+                  style={{ background: '#ea580c' }}
+                >
+                  View details →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
