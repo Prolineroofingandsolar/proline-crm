@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { X } from 'lucide-react';
@@ -7,7 +7,6 @@ import { useStore } from '../../store/useStore';
 import { formatCurrency, jobTypeColor } from '../../utils/helpers';
 import type { Lead } from '../../types';
 
-// Fix Leaflet default marker icon broken by bundlers
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -26,12 +25,7 @@ function makeIcon(color: string, active: boolean) {
   const size = active ? 18 : 14;
   return L.divIcon({
     className: '',
-    html: `<div style="
-      width:${size}px;height:${size}px;border-radius:50%;
-      background:${color};border:${active ? '3px' : '2.5px'} solid white;
-      box-shadow:0 2px 8px rgba(0,0,0,${active ? '0.5' : '0.35'});
-      transition:all 0.15s;
-    "></div>`,
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:${active ? '3px' : '2.5px'} solid white;box-shadow:0 2px 8px rgba(0,0,0,${active ? '0.5' : '0.35'});"></div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
@@ -50,12 +44,39 @@ function FitBounds({ leads }: { leads: Lead[] }) {
   return null;
 }
 
+// Re-syncs card pixel position when map pans/zooms
+function CardPositionTracker({
+  lead,
+  onPixel,
+}: {
+  lead: Lead | null;
+  onPixel: (x: number, y: number) => void;
+}) {
+  const map = useMap();
+
+  const sync = useCallback(() => {
+    if (!lead?.lat || !lead?.lng) return;
+    const pt = map.latLngToContainerPoint([lead.lat, lead.lng]);
+    onPixel(pt.x, pt.y);
+  }, [lead, map, onPixel]);
+
+  useMapEvents({ moveend: sync, zoomend: sync, move: sync });
+
+  useEffect(() => { sync(); }, [sync]);
+
+  return null;
+}
+
 const MAP_STAGES = ['Won', 'In Progress', 'Completed', 'Paid'];
+const CARD_W = 210;
+const CARD_H = 188;
 
 export default function JobsMap() {
   const { leads, geocodeLeads, setSelectedId } = useStore();
   const [geocodingDone, setGeocodingDone] = useState(false);
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
+  const [cardPos, setCardPos] = useState<{ x: number; y: number } | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
 
   const mapLeads = leads.filter(l => MAP_STAGES.includes(l.stage));
   const withCoords = mapLeads.filter(l => l.lat && l.lng);
@@ -72,6 +93,18 @@ export default function JobsMap() {
       setGeocodingDone(true);
     }
   }, [needsGeocode.map(l => `${l.id}:${l.address}`).join(',')]);
+
+  const clampedPos = useCallback((markerX: number, markerY: number) => {
+    const container = mapContainerRef.current;
+    if (!container) return;
+    const W = container.clientWidth;
+    const H = container.clientHeight;
+    let x = markerX - CARD_W / 2;
+    let y = markerY - CARD_H - 18;
+    x = Math.max(8, Math.min(x, W - CARD_W - 8));
+    y = Math.max(8, Math.min(y, H - CARD_H - 8));
+    setCardPos({ x, y });
+  }, []);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
@@ -96,17 +129,18 @@ export default function JobsMap() {
         </div>
       </div>
 
-      {/* Map */}
-      <div className="h-72 relative">
+      {/*
+        isolation: isolate creates a new stacking context here.
+        Leaflet's internal panes use z-index 200–800 but without this they
+        escape into the page stacking context and paint over the fixed
+        LeadDetailPanel (z-50). Isolation contains them.
+      */}
+      <div ref={mapContainerRef} className="h-72 relative" style={{ isolation: 'isolate' }}>
         {withCoords.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
             <div className="text-3xl">📍</div>
             <p className="text-sm font-medium">
-              {mapLeads.length === 0
-                ? 'No accepted jobs yet'
-                : geocodingDone
-                ? 'Could not locate addresses'
-                : 'Geocoding addresses…'}
+              {mapLeads.length === 0 ? 'No accepted jobs yet' : geocodingDone ? 'Could not locate addresses' : 'Geocoding addresses…'}
             </p>
             <p className="text-xs">
               {!geocodingDone && mapLeads.length > 0 && needsGeocode.length > 0 && 'This may take a moment'}
@@ -126,27 +160,33 @@ export default function JobsMap() {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               />
               <FitBounds leads={withCoords} />
+              <CardPositionTracker lead={activeLead} onPixel={clampedPos} />
               {withCoords.map(lead => (
                 <Marker
                   key={lead.id}
                   position={[lead.lat!, lead.lng!]}
                   icon={makeIcon(STAGE_COLOR[lead.stage] ?? '#6b7280', activeLead?.id === lead.id)}
                   eventHandlers={{
-                    click: () => setActiveLead(prev => prev?.id === lead.id ? null : lead),
+                    click: (e) => {
+                      const map = e.target._map as L.Map;
+                      const px = map.latLngToContainerPoint([lead.lat!, lead.lng!]);
+                      clampedPos(px.x, px.y);
+                      setActiveLead(prev => prev?.id === lead.id ? null : lead);
+                    },
                   }}
                 />
               ))}
             </MapContainer>
 
-            {/* Custom overlay card — lives in normal React DOM so onClick works */}
-            {activeLead && (
-              <div className="absolute top-3 left-3 z-[1000] bg-white rounded-2xl shadow-xl border border-gray-100 p-4 min-w-[190px] max-w-[220px]">
+            {/* Card lives inside the isolated div so it shares the same stacking context */}
+            {activeLead && cardPos && (
+              <div
+                className="absolute bg-white rounded-2xl shadow-xl border border-gray-100 p-4"
+                style={{ left: cardPos.x, top: cardPos.y, width: CARD_W, zIndex: 900 }}
+              >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <p className="font-bold text-gray-900 text-sm leading-tight">{activeLead.name}</p>
-                  <button
-                    onClick={() => setActiveLead(null)}
-                    className="text-gray-300 hover:text-gray-500 shrink-0 -mt-0.5"
-                  >
+                  <button onClick={() => setActiveLead(null)} className="text-gray-300 hover:text-gray-500 shrink-0 -mt-0.5">
                     <X size={14} />
                   </button>
                 </div>
