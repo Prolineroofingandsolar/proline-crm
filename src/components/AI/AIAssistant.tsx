@@ -262,6 +262,7 @@ function executeTool(name: string, input: Record<string, unknown>): unknown {
         category: input.category as string,
         dueDate: (input.due_date as string) ?? undefined,
         notes: (input.notes as string) ?? undefined,
+        assignedTo: [],
       });
       return { success: true, message: `Reminder added: "${input.title}"` };
     }

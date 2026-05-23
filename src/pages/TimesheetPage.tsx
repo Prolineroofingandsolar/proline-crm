@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Clock, Pencil, Check, X, Trash2, UserPlus, Banknote, CalendarCheck, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import type { AppUser } from '../types';
+import type { AppUser, TimesheetEntry, PaymentRun } from '../types';
 
 // ── Date helpers ────────────────────────────────────────────────────────────────
 
@@ -298,14 +298,14 @@ const STATUS_META: Record<string, { label: string; pill: string; icon: React.Rea
 
 function PaymentsTab({ users, timesheetEntries, paymentRuns, updatePaymentStatus }: {
   users: AppUser[];
-  timesheetEntries: ReturnType<typeof useStore>['timesheetEntries'];
-  paymentRuns: ReturnType<typeof useStore>['paymentRuns'];
-  updatePaymentStatus: ReturnType<typeof useStore>['updatePaymentStatus'];
+  timesheetEntries: TimesheetEntry[];
+  paymentRuns: PaymentRun[];
+  updatePaymentStatus: (userId: string, weekStart: string, status: PaymentRun['status']) => void;
 }) {
   const [filter, setFilter] = useState<PayFilter>('all');
 
   const summaries = useMemo(() => {
-    const map = new Map<string, { userId: string; weekStart: string; entries: typeof timesheetEntries }>();
+    const map = new Map<string, { userId: string; weekStart: string; entries: TimesheetEntry[] }>();
     for (const entry of timesheetEntries) {
       const d = new Date(entry.date + 'T00:00:00');
       const ws = toYMD(getMonday(d));
