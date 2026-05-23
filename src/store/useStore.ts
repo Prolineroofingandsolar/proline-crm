@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry } from '../types';
+import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry, PaymentRun } from '../types';
 import { generateId } from '../utils/helpers';
 import { hashPassword } from '../utils/crypto';
 import { subscribeToPush } from '../utils/push';
@@ -11,6 +11,7 @@ import {
   contactToDb, dbToContact,
   generalTaskToDb, dbToGeneralTask,
   timesheetEntryToDb, dbToTimesheetEntry,
+  paymentRunToDb, dbToPaymentRun,
 } from '../lib/supabase';
 
 const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
@@ -90,6 +91,9 @@ interface Store {
   upsertTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
   deleteTimesheetEntry: (id: string) => void;
 
+  paymentRuns: PaymentRun[];
+  updatePaymentStatus: (userId: string, weekStart: string, status: PaymentRun['status']) => void;
+
   setCurrentPage: (page: string) => void;
   setSelectedId: (id: string | null) => void;
   setSearchQuery: (q: string) => void;
@@ -157,6 +161,7 @@ export const useStore = create<Store>()(
       contacts: [],
       generalTasks: [],
       timesheetEntries: [],
+      paymentRuns: [],
       apiKey: '',
       pushEnabled: false,
       selectedId: null,
@@ -166,12 +171,13 @@ export const useStore = create<Store>()(
 
       // ── Load all data from Supabase ─────────────────────────────────────────
       loadData: async () => {
-        const [leadsRes, usersRes, contactsRes, tasksRes, timesheetRes] = await Promise.all([
+        const [leadsRes, usersRes, contactsRes, tasksRes, timesheetRes, paymentRunsRes] = await Promise.all([
           supabase.from('leads').select('*').order('updated_at', { ascending: false }),
           supabase.from('app_users').select('*'),
           supabase.from('contacts').select('*').order('created_at', { ascending: false }),
           supabase.from('general_tasks').select('*').order('created_at', { ascending: false }),
           supabase.from('timesheet_entries').select('*').order('date', { ascending: false }),
+          supabase.from('payment_runs').select('*'),
         ]);
 
         const leads = (leadsRes.data ?? []).map(r => dbToLead(r as Record<string, unknown>));
@@ -179,6 +185,7 @@ export const useStore = create<Store>()(
         const contacts = (contactsRes.data ?? []).map(r => dbToContact(r as Record<string, unknown>));
         const generalTasks = (tasksRes.data ?? []).map(r => dbToGeneralTask(r as Record<string, unknown>));
         const timesheetEntries = (timesheetRes.data ?? []).map(r => dbToTimesheetEntry(r as Record<string, unknown>));
+        const paymentRuns = (paymentRunsRes.data ?? []).map(r => dbToPaymentRun(r as Record<string, unknown>));
 
         // Set job counter to 1 above the highest existing job number
         const maxNum = leads.reduce((max, l) => {
@@ -203,7 +210,7 @@ export const useStore = create<Store>()(
         }
         const allContacts = [...contacts, ...missingContacts];
 
-        set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, isLoaded: true });
+        set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, paymentRuns, isLoaded: true });
       },
 
       // ── Auth ────────────────────────────────────────────────────────────────
@@ -315,6 +322,20 @@ export const useStore = create<Store>()(
       deleteTimesheetEntry: (id) => {
         set(s => ({ timesheetEntries: s.timesheetEntries.filter(e => e.id !== id) }));
         supabase.from('timesheet_entries').delete().eq('id', id);
+      },
+
+      updatePaymentStatus: (userId, weekStart, status) => {
+        const now = new Date().toISOString().split('T')[0];
+        const existing = get().paymentRuns.find(r => r.userId === userId && r.weekStart === weekStart);
+        const run: PaymentRun = existing
+          ? { ...existing, status, paidDate: status === 'paid' ? now : existing.paidDate }
+          : { id: generateId(), userId, weekStart, status, paidDate: status === 'paid' ? now : undefined, createdAt: now };
+        set(s => ({
+          paymentRuns: existing
+            ? s.paymentRuns.map(r => r.userId === userId && r.weekStart === weekStart ? run : r)
+            : [...s.paymentRuns, run],
+        }));
+        supabase.from('payment_runs').upsert(paymentRunToDb(run), { onConflict: 'user_id,week_start' });
       },
 
       enablePushNotifications: async () => {

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Lead, Contact, AppUser, GeneralTask, TimesheetEntry } from '../types';
+import type { Lead, Contact, AppUser, GeneralTask, TimesheetEntry, PaymentRun } from '../types';
 
 export const supabase = createClient(
   'https://qzvdzzvkocmulcfujyea.supabase.co',
@@ -172,6 +172,32 @@ export function contactToDb(c: Contact): Record<string, unknown> {
   };
 }
 
+// ── PaymentRun ────────────────────────────────────────────────────────────────
+
+export function dbToPaymentRun(r: Record<string, unknown>): PaymentRun {
+  return {
+    id: r.id as string,
+    userId: r.user_id as string,
+    weekStart: r.week_start as string,
+    status: r.status as PaymentRun['status'],
+    paidDate: (r.paid_date as string) ?? undefined,
+    notes: (r.notes as string) ?? undefined,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function paymentRunToDb(p: PaymentRun): Record<string, unknown> {
+  return {
+    id: p.id,
+    user_id: p.userId,
+    week_start: p.weekStart,
+    status: p.status,
+    paid_date: p.paidDate ?? null,
+    notes: p.notes ?? null,
+    created_at: p.createdAt,
+  };
+}
+
 // ── GeneralTask ───────────────────────────────────────────────────────────────
 
 export function dbToGeneralTask(r: Record<string, unknown>): GeneralTask {
@@ -185,6 +211,7 @@ export function dbToGeneralTask(r: Record<string, unknown>): GeneralTask {
     category: r.category as string,
     notes: (r.notes as string) ?? undefined,
     createdAt: r.created_at as string,
+    assignedTo: (r.assigned_to as string[]) ?? [],
   };
 }
 
@@ -199,5 +226,6 @@ export function generalTaskToDb(t: GeneralTask): Record<string, unknown> {
     category: t.category,
     notes: t.notes ?? null,
     created_at: t.createdAt,
+    assigned_to: t.assignedTo,
   };
 }

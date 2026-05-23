@@ -85,6 +85,16 @@ export interface TimesheetEntry {
   createdAt: string;
 }
 
+export interface PaymentRun {
+  id: string;
+  userId: string;
+  weekStart: string; // YYYY-MM-DD Monday
+  status: 'due' | 'scheduled' | 'paid';
+  paidDate?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Contact {
   id: string;
   name: string;
@@ -104,6 +114,7 @@ export interface GeneralTask {
   category: string;
   notes?: string;
   createdAt: string;
+  assignedTo: string[]; // empty = visible to everyone
 }
 
 export interface Lead {

@@ -2,9 +2,10 @@ import { TrendingUp, Briefcase, PoundSterling, CheckCircle2, Clock, Trophy, User
 import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate, jobTypeColor } from '../utils/helpers';
 import JobsMap from '../components/Map/JobsMap';
+import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 
 export default function DashboardPage() {
-  const { leads, setSelectedId, setCurrentPage } = useStore();
+  const { leads, setSelectedId, setCurrentPage, selectedId } = useStore();
 
   const today = new Date().toISOString().split('T')[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
@@ -49,6 +50,7 @@ export default function DashboardPage() {
   const upcomingSurveys = leads.filter(l => l.surveyDate && l.surveyDate >= today).sort((a, b) => (a.surveyDate ?? '').localeCompare(b.surveyDate ?? '')).slice(0, 5);
 
   return (
+    <>
     <div className="p-4 sm:p-5 lg:p-6 overflow-y-auto h-full bg-white space-y-4 lg:space-y-6">
 
       {/* Automations / Action Required */}
@@ -168,6 +170,9 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+
+    {selectedId && <LeadDetailPanel />}
+    </>
   );
 }
 

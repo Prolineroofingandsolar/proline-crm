@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Pencil, Check, X, Trash2, UserPlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Pencil, Check, X, Trash2, UserPlus, Banknote, CalendarCheck, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import type { AppUser } from '../types';
+import type { AppUser, TimesheetEntry, PaymentRun } from '../types';
 
 // ── Date helpers ────────────────────────────────────────────────────────────────
 
@@ -286,12 +286,177 @@ function DayRow({ date, label, entry, dayRate, cisRate, leads, onSave, onDelete,
   );
 }
 
+// ── Payments tab ─────────────────────────────────────────────────────────────
+
+type PayFilter = 'all' | 'due' | 'scheduled' | 'paid';
+
+const STATUS_META: Record<string, { label: string; pill: string; icon: React.ReactNode }> = {
+  due:       { label: 'Due',       pill: 'bg-amber-100 text-amber-700 border-amber-200',   icon: <Clock size={11} /> },
+  scheduled: { label: 'Scheduled', pill: 'bg-blue-100 text-blue-700 border-blue-200',      icon: <CalendarCheck size={11} /> },
+  paid:      { label: 'Paid',      pill: 'bg-green-100 text-green-700 border-green-200',   icon: <CheckCircle2 size={11} /> },
+};
+
+function PaymentsTab({ users, timesheetEntries, paymentRuns, updatePaymentStatus }: {
+  users: AppUser[];
+  timesheetEntries: TimesheetEntry[];
+  paymentRuns: PaymentRun[];
+  updatePaymentStatus: (userId: string, weekStart: string, status: PaymentRun['status']) => void;
+}) {
+  const [filter, setFilter] = useState<PayFilter>('all');
+
+  const summaries = useMemo(() => {
+    const map = new Map<string, { userId: string; weekStart: string; entries: TimesheetEntry[] }>();
+    for (const entry of timesheetEntries) {
+      const d = new Date(entry.date + 'T00:00:00');
+      const ws = toYMD(getMonday(d));
+      const key = `${entry.userId}_${ws}`;
+      if (!map.has(key)) map.set(key, { userId: entry.userId, weekStart: ws, entries: [] });
+      map.get(key)!.entries.push(entry);
+    }
+    return Array.from(map.values()).map(({ userId, weekStart, entries }) => {
+      const user = users.find(u => u.id === userId);
+      const days = entries.reduce((s, e) => s + (e.type === 'full' ? 1 : 0.5), 0);
+      const gross = entries.reduce((s, e) => s + e.amount, 0);
+      const rate = user?.cisRate ?? 20;
+      const net = gross * (1 - rate / 100);
+      const run = paymentRuns.find(r => r.userId === userId && r.weekStart === weekStart);
+      const status = (run?.status ?? 'due') as 'due' | 'scheduled' | 'paid';
+      // week range label
+      const mon = new Date(weekStart + 'T00:00:00');
+      const sun = addDays(mon, 6);
+      const weekLabel = fmtRange(mon);
+      const weekEndLabel = sun.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      return { userId, weekStart, user, days, gross, net, rate, status, paidDate: run?.paidDate, weekLabel, weekEndLabel };
+    }).sort((a, b) => b.weekStart.localeCompare(a.weekStart) || (a.user?.name ?? '').localeCompare(b.user?.name ?? ''));
+  }, [users, timesheetEntries, paymentRuns]);
+
+  const filtered = filter === 'all' ? summaries : summaries.filter(s => s.status === filter);
+
+  const totals = useMemo(() => ({
+    due:       summaries.filter(s => s.status === 'due').reduce((t, s) => t + s.net, 0),
+    scheduled: summaries.filter(s => s.status === 'scheduled').reduce((t, s) => t + s.net, 0),
+    paid:      summaries.filter(s => s.status === 'paid').reduce((t, s) => t + s.net, 0),
+  }), [summaries]);
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-3 gap-3">
+        {(['due', 'scheduled', 'paid'] as const).map(s => {
+          const m = STATUS_META[s];
+          const amt = totals[s];
+          return (
+            <button key={s} onClick={() => setFilter(f => f === s ? 'all' : s)}
+              className={`rounded-2xl p-3 text-center border transition-all ${
+                filter === s ? 'ring-2 ring-orange-500' : ''
+              } ${
+                s === 'due' ? 'bg-amber-50 border-amber-100' :
+                s === 'scheduled' ? 'bg-blue-50 border-blue-100' :
+                'bg-green-50 border-green-100'
+              }`}
+            >
+              <div className={`text-xs font-semibold uppercase tracking-wide mb-1 ${
+                s === 'due' ? 'text-amber-600' : s === 'scheduled' ? 'text-blue-600' : 'text-green-700'
+              }`}>{m.label}</div>
+              <div className={`text-lg font-bold ${
+                s === 'due' ? 'text-amber-700' : s === 'scheduled' ? 'text-blue-700' : 'text-green-700'
+              }`}>£{amt.toFixed(0)}</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">
+                {summaries.filter(x => x.status === s).length} payment{summaries.filter(x => x.status === s).length !== 1 ? 's' : ''}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Filter pills */}
+      <div className="flex gap-1.5">
+        {(['all', 'due', 'scheduled', 'paid'] as PayFilter[]).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors capitalize ${
+              filter === f ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}>
+            {f === 'all' ? 'All' : STATUS_META[f].label}
+            {f !== 'all' && <span className="ml-1 opacity-70">({summaries.filter(s => s.status === f).length})</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Payment rows */}
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+          <Banknote size={32} className="mx-auto text-gray-200 mb-2" />
+          <p className="text-sm text-gray-400">No payments here yet</p>
+          <p className="text-xs text-gray-300 mt-1">Payments appear once timesheet entries are logged</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          {filtered.map((s, i) => {
+            const meta = STATUS_META[s.status];
+            const initials = (s.user?.name ?? '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+            return (
+              <div key={`${s.userId}_${s.weekStart}`}
+                className={`flex items-center gap-3 px-4 py-3.5 ${i < filtered.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                {/* Avatar */}
+                <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center text-orange-700 font-bold text-sm shrink-0">
+                  {initials}
+                </div>
+                {/* Name + week */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-800 truncate">{s.user?.name ?? 'Unknown'}</div>
+                  <div className="text-[11px] text-gray-400">{s.weekLabel}</div>
+                  <div className="text-[11px] text-gray-400">{s.days} {s.days === 1 ? 'day' : 'days'}</div>
+                </div>
+                {/* Amounts */}
+                <div className="text-right shrink-0 mr-1 hidden sm:block">
+                  <div className="text-xs text-gray-400">£{s.gross.toFixed(0)} gross</div>
+                  <div className="text-xs text-red-400">−£{(s.gross - s.net).toFixed(0)} CIS {s.rate}%</div>
+                  <div className="text-sm font-bold text-gray-800">£{s.net.toFixed(0)} net</div>
+                </div>
+                {/* Status + action */}
+                <div className="shrink-0 flex flex-col items-end gap-1.5 min-w-[90px]">
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${meta.pill}`}>
+                    {meta.icon} {meta.label}
+                  </span>
+                  {s.status === 'due' && (
+                    <button
+                      onClick={() => updatePaymentStatus(s.userId, s.weekStart, 'scheduled')}
+                      className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition-colors"
+                    >
+                      Schedule
+                    </button>
+                  )}
+                  {s.status === 'scheduled' && (
+                    <button
+                      onClick={() => updatePaymentStatus(s.userId, s.weekStart, 'paid')}
+                      className="text-[11px] font-semibold text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-md transition-colors"
+                    >
+                      Mark Paid
+                    </button>
+                  )}
+                  {s.status === 'paid' && s.paidDate && (
+                    <span className="text-[10px] text-gray-400">
+                      {new Date(s.paidDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ───────────────────────────────────────────────────────────────────
 
 export default function TimesheetPage() {
-  const { users, currentUserId, leads, timesheetEntries, upsertTimesheetEntry, deleteTimesheetEntry, addCasualWorker, removeCasualWorker } = useStore();
+  const { users, currentUserId, leads, timesheetEntries, paymentRuns, upsertTimesheetEntry, deleteTimesheetEntry, updatePaymentStatus, addCasualWorker, removeCasualWorker } = useStore();
   const currentUser = users.find(u => u.id === currentUserId)!;
   const isAdmin = currentUser?.role === 'admin';
+
+  const [tab, setTab] = useState<'timesheet' | 'payments'>('timesheet');
 
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [viewUserId, setViewUserId] = useState(currentUserId ?? '');
@@ -361,7 +526,7 @@ export default function TimesheetPage() {
               <p className="text-xs text-gray-500">Track your daily hours</p>
             </div>
           </div>
-          {isAdmin && (
+          {isAdmin && tab === 'timesheet' && (
             <select
               value={viewUserId}
               onChange={e => setViewUserId(e.target.value)}
@@ -378,6 +543,40 @@ export default function TimesheetPage() {
             </select>
           )}
         </div>
+
+        {/* Tab switcher — admin only */}
+        {isAdmin && (
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+            <button
+              onClick={() => setTab('timesheet')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-lg transition-colors ${
+                tab === 'timesheet' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Clock size={14} /> Timesheet
+            </button>
+            <button
+              onClick={() => setTab('payments')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-lg transition-colors ${
+                tab === 'payments' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Banknote size={14} /> Payments
+            </button>
+          </div>
+        )}
+
+        {tab === 'payments' && isAdmin && (
+          <PaymentsTab
+            users={users}
+            timesheetEntries={timesheetEntries}
+            paymentRuns={paymentRuns}
+            updatePaymentStatus={updatePaymentStatus}
+          />
+        )}
+
+        {/* Timesheet content */}
+        {tab === 'timesheet' && <>
 
         {/* Profile card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
@@ -569,6 +768,8 @@ export default function TimesheetPage() {
             )}
           </div>
         )}
+
+        </> /* end tab === 'timesheet' */}
       </div>
 
       {showProfile && viewUser && (
