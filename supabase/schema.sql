@@ -102,6 +102,19 @@ create table if not exists timesheet_entries (
 
 alter table timesheet_entries disable row level security;
 
+create table if not exists payment_runs (
+  id text primary key,
+  user_id text not null,
+  week_start text not null,
+  status text not null default 'due',
+  paid_date text,
+  notes text,
+  created_at text not null default '',
+  unique(user_id, week_start)
+);
+
+alter table payment_runs disable row level security;
+
 -- Task assignment migration
 alter table general_tasks add column if not exists assigned_to jsonb not null default '[]';
 
