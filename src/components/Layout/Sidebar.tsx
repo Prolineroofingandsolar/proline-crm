@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Contact, FolderOpen, BarChart2, Settings, ChevronDown, Kanban, LogOut, Clock, Receipt } from 'lucide-react';
+import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Contact, FolderOpen, BarChart2, Settings, ChevronDown, Kanban, LogOut, Clock, Receipt, Layers } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 const ALL_NAV = [
@@ -7,6 +7,7 @@ const ALL_NAV = [
   { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
   { id: 'leads',     label: 'Leads',     icon: Users,           adminOnly: true },
   { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
+  { id: 'services',  label: 'Services',  icon: Layers },
   { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
   { id: 'calendar',  label: 'Calendar',  icon: Calendar },
   { id: 'timesheet', label: 'Timesheet', icon: Clock },

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X, Clock } from 'lucide-react';
+import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X, Clock, Layers } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 const ADMIN_MAIN = [
@@ -19,6 +19,7 @@ const ADMIN_MORE = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'calendar',  label: 'Calendar',  icon: Calendar },
   { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
+  { id: 'services',  label: 'Services',  icon: Layers },
   { id: 'contacts',  label: 'Contacts',  icon: Contact },
   { id: 'files',     label: 'Files',     icon: FolderOpen },
   { id: 'reports',   label: 'Reports',   icon: BarChart2 },
@@ -26,6 +27,7 @@ const ADMIN_MORE = [
 ];
 const USER_MORE = [
   { id: 'calendar',  label: 'Calendar',  icon: Calendar },
+  { id: 'services',  label: 'Services',  icon: Layers },
 ];
 
 export default function BottomNav() {

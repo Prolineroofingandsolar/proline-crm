@@ -16,6 +16,7 @@ import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import TimesheetPage from './pages/TimesheetPage';
 import CISPage from './pages/CISPage';
+import ServicesPage from './pages/ServicesPage';
 import AddLeadModal from './components/Pipeline/AddLeadModal';
 import AIAssistant from './components/AI/AIAssistant';
 
@@ -61,6 +62,7 @@ export default function App() {
     pipeline: <PipelinePage />,
     leads: <LeadsPage />,
     jobs: <JobsPage />,
+    services: <ServicesPage />,
     tasks: <TasksPage />,
     calendar: <CalendarPage />,
     contacts: <ContactsPage />,

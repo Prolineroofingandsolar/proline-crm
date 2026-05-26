@@ -26,13 +26,14 @@ const SOURCES = ['Website', 'Referral', 'Google', 'Facebook', 'Checkatrade', 'My
 interface Props {
   onClose: () => void;
   defaultStage?: Stage;
+  preselectedJobType?: JobType;
 }
 
-export default function AddLeadModal({ onClose, defaultStage = 'New Lead' }: Props) {
+export default function AddLeadModal({ onClose, defaultStage = 'New Lead', preselectedJobType }: Props) {
   const { addLead, contacts } = useStore();
   const [form, setForm] = useState({
     name: '', phone: '', email: '', address: '', lat: '', lng: '',
-    jobType: 'Roof Repair' as JobType,
+    jobType: (preselectedJobType ?? 'Roof Repair') as JobType,
     stage: defaultStage as Stage,
     source: 'Website',
     value: '', deposit: '',
