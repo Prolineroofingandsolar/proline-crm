@@ -450,8 +450,15 @@ export const useStore = create<Store>()(
       },
 
       deleteLead: (id) => {
+        const snapshot = get().leads.find(l => l.id === id);
         set(s => ({ leads: s.leads.filter(l => l.id !== id), selectedId: s.selectedId === id ? null : s.selectedId }));
-        supabase.from('leads').delete().eq('id', id);
+        supabase.from('leads').delete().eq('id', id).then(({ error }) => {
+          if (error) {
+            console.error('deleteLead sync error:', error);
+            if (snapshot) set(s => ({ leads: [snapshot, ...s.leads] }));
+            get().showToast('Delete failed — check your connection', 'error');
+          }
+        });
         get().showToast('Lead deleted', 'info');
       },
 
