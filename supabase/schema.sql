@@ -133,3 +133,27 @@ as $$
   where l.stage in ('Won', 'In Progress', 'Completed')
     and (t->>'completed')::boolean = false;
 $$;
+
+-- Trigger: send push notification whenever a lead is inserted from any source
+-- (covers both the CRM app and external websites posting directly to Supabase)
+CREATE OR REPLACE FUNCTION notify_new_lead()
+RETURNS trigger AS $$
+BEGIN
+  PERFORM net.http_post(
+    url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'SUPABASE_URL') || '/functions/v1/send-push',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'SUPABASE_ANON_KEY')
+    ),
+    body := jsonb_build_object(
+      'title', 'New Lead Added',
+      'body', NEW.name || ' — ' || COALESCE(NEW.job_type, 'Job')
+    )
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_lead_inserted
+AFTER INSERT ON leads
+FOR EACH ROW EXECUTE FUNCTION notify_new_lead();

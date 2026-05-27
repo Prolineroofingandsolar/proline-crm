@@ -498,11 +498,8 @@ export const useStore = create<Store>()(
         });
         get().upsertContact({ name: data.name, phone: data.phone, email: data.email, address: data.address });
         get().showToast(`New lead added: ${data.name}`);
-        if (get().pushEnabled && get().pushPreferences.newLead) {
-          supabase.functions.invoke('send-push', {
-            body: { title: 'New Lead Added', body: `${data.name} — ${data.jobType ?? 'Job'}` },
-          });
-        }
+        // Push notification for new leads is handled by the Supabase DB trigger
+        // so it fires regardless of whether the lead came from the CRM or another source.
       },
 
       updateLead: (id, updates) => {
