@@ -1,25 +1,38 @@
 import { useState } from 'react';
-import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X } from 'lucide-react';
+import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X, Clock } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
-const MAIN = [
-  { id: 'pipeline', label: 'Pipeline', icon: Kanban },
-  { id: 'leads',    label: 'Leads',    icon: Users },
-  { id: 'jobs',     label: 'Jobs',     icon: Briefcase },
-  { id: 'tasks',    label: 'Tasks',    icon: CheckSquare },
+const ADMIN_MAIN = [
+  { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
+  { id: 'leads',     label: 'Leads',     icon: Users },
+  { id: 'timesheet', label: 'Timesheet', icon: Clock },
+  { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
+];
+const USER_MAIN = [
+  { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
+  { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
+  { id: 'timesheet', label: 'Timesheet', icon: Clock },
+  { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
 ];
 
-const MORE = [
+const ADMIN_MORE = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'calendar',  label: 'Calendar',  icon: Calendar },
+  { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
   { id: 'contacts',  label: 'Contacts',  icon: Contact },
   { id: 'files',     label: 'Files',     icon: FolderOpen },
   { id: 'reports',   label: 'Reports',   icon: BarChart2 },
   { id: 'settings',  label: 'Settings',  icon: Settings },
 ];
+const USER_MORE = [
+  { id: 'calendar',  label: 'Calendar',  icon: Calendar },
+];
 
 export default function BottomNav() {
-  const { currentPage, setCurrentPage } = useStore();
+  const { currentPage, setCurrentPage, users, currentUserId } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
+  const MAIN = isAdmin ? ADMIN_MAIN : USER_MAIN;
+  const MORE  = isAdmin ? ADMIN_MORE : USER_MORE;
   const [showMore, setShowMore] = useState(false);
 
   const go = (id: string) => { setCurrentPage(id); setShowMore(false); };
@@ -31,7 +44,7 @@ export default function BottomNav() {
       {showMore && (
         <>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowMore(false)} />
-          <div className="fixed bottom-16 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl p-4 pb-safe">
+          <div className="fixed left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl p-4" style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' }}>
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
             <div className="grid grid-cols-3 gap-3">
               {MORE.map(({ id, label, icon: Icon }) => (

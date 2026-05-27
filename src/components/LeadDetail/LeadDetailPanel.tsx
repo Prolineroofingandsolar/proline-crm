@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Phone, MessageSquare, Mail, Trophy, Play, CheckCircle, CreditCard, ChevronRight, Trash2, Calendar } from 'lucide-react';
+import { X, Phone, MessageSquare, Mail, Trophy, Play, CheckCircle, CreditCard, ChevronRight, Trash2, Calendar, Star } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { formatCurrency, jobTypeColor } from '../../utils/helpers';
 import TasksTab from './TasksTab';
@@ -8,6 +8,7 @@ import MaterialsTab from './MaterialsTab';
 import NotesTab from './NotesTab';
 import FilesTab from './FilesTab';
 import InfoTab from './InfoTab';
+import ReviewRequestModal from '../Reviews/ReviewRequestModal';
 
 const TABS = ['Tasks', 'Photos', 'Materials', 'Notes', 'Files', 'Info'] as const;
 type Tab = typeof TABS[number];
@@ -23,22 +24,29 @@ const stageColors: Record<string, string> = {
 };
 
 export default function LeadDetailPanel() {
-  const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead, updateLead } = useStore();
+  const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead, updateLead, users, currentUserId } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
   const [activeTab, setActiveTab] = useState<Tab>('Tasks');
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
   const lead = leads.find(l => l.id === selectedId);
   if (!lead) return null;
 
   const close = () => setSelectedId(null);
 
+  const handleMarkPaid = () => {
+    moveToStage(lead.id, 'Paid');
+    if (!lead.reviewRequestSent) setShowReviewModal(true);
+  };
+
   return (
     <>
       {/* Backdrop */}
       <div className="fixed inset-0 z-40 bg-black/20" onClick={close} />
 
-      {/* Panel — full width, 85vh on mobile / 60vh capped desktop */}
+      {/* Panel — full width, 92dvh on mobile (leaves room for top bar) / capped on desktop */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl flex flex-col"
-        style={{ height: 'min(85dvh, 680px)' }}>
+        style={{ height: 'min(92dvh, 720px)' }}>
 
         {/* Header */}
         <div className="flex items-start justify-between px-4 py-3 border-b border-gray-100 shrink-0 gap-2">
@@ -74,15 +82,32 @@ export default function LeadDetailPanel() {
               className="p-2 rounded-lg bg-orange-50 border border-orange-200 text-orange-700 hover:bg-orange-100">
               <Mail size={15} />
             </a>
-            <button onClick={() => { deleteLead(lead.id); close(); }}
-              className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
-              <Trash2 size={15} />
-            </button>
+            {isAdmin && (
+              <button onClick={() => { deleteLead(lead.id); close(); }}
+                className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
+                <Trash2 size={15} />
+              </button>
+            )}
           </div>
         </div>
 
+        {/* Review request button for paid jobs */}
+        {isAdmin && lead.stage === 'Paid' && (
+          <div className="px-4 py-2 border-b border-gray-100 shrink-0">
+            <button onClick={() => setShowReviewModal(true)}
+              className={`w-full flex items-center justify-center gap-1.5 text-sm px-4 py-2 rounded-xl font-medium transition-colors ${
+                lead.reviewRequestSent
+                  ? 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+              }`}>
+              <Star size={15} />
+              {lead.reviewRequestSent ? 'Review Request Sent — Send Again' : 'Send Review Request'}
+            </button>
+          </div>
+        )}
+
         {/* Stage advance — full-width banner on mobile */}
-        {lead.stage !== 'Paid' && (
+        {isAdmin && lead.stage !== 'Paid' && (
           <div className="px-4 py-2 border-b border-gray-100 shrink-0">
             {lead.stage === 'New Lead' && (
               <button onClick={() => moveToStage(lead.id, 'Survey Booked')}
@@ -115,7 +140,7 @@ export default function LeadDetailPanel() {
               </button>
             )}
             {lead.stage === 'Completed' && (
-              <button onClick={() => moveToStage(lead.id, 'Paid')}
+              <button onClick={handleMarkPaid}
                 className="w-full flex items-center justify-center gap-1.5 text-sm bg-teal-600 text-white hover:bg-teal-700 px-4 py-2 rounded-xl font-medium transition-colors">
                 <CreditCard size={15} /> Mark Paid
               </button>
@@ -131,9 +156,11 @@ export default function LeadDetailPanel() {
             {[
               { label: 'Phone', value: lead.phone },
               { label: 'Email', value: lead.email },
+              ...(isAdmin ? [
               { label: 'Value', value: formatCurrency(lead.value), bold: true },
               { label: 'Deposit', value: `${formatCurrency(lead.deposit)}${lead.depositPaid ? ' ✓' : ''}` },
               { label: 'Balance', value: formatCurrency(lead.balance), bold: true },
+            ] : []),
             ].map(({ label, value, bold }) => value ? (
               <div key={label} className="shrink-0">
                 <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide whitespace-nowrap">{label}</p>
@@ -196,7 +223,7 @@ export default function LeadDetailPanel() {
                 </button>
               ))}
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto pb-safe">
               {activeTab === 'Tasks'     && <TasksTab lead={lead} />}
               {activeTab === 'Photos'    && <PhotosTab lead={lead} />}
               {activeTab === 'Materials' && <MaterialsTab lead={lead} />}
@@ -207,6 +234,14 @@ export default function LeadDetailPanel() {
           </div>
         </div>
       </div>
+
+      {showReviewModal && (
+        <ReviewRequestModal
+          lead={lead}
+          onClose={() => setShowReviewModal(false)}
+          onMarkSent={() => updateLead(lead.id, { reviewRequestSent: true })}
+        />
+      )}
     </>
   );
 }

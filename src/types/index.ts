@@ -23,6 +23,7 @@ export interface Task {
   completed: boolean;
   completedDate?: string;
   dueDate?: string;
+  isTemplate?: boolean;
 }
 
 export interface Photo {
@@ -64,7 +65,33 @@ export interface AppUser {
   name: string;
   username: string;
   passwordHash: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'casual';
+  createdAt: string;
+  dayRate?: number;
+  cisRate?: 20 | 30;
+  utrNumber?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankSortCode?: string;
+}
+
+export interface TimesheetEntry {
+  id: string;
+  userId: string;
+  leadId: string;
+  date: string; // YYYY-MM-DD
+  type: 'full' | 'half';
+  amount: number;
+  createdAt: string;
+}
+
+export interface PaymentRun {
+  id: string;
+  userId: string;
+  weekStart: string; // YYYY-MM-DD Monday
+  status: 'due' | 'scheduled' | 'paid';
+  paidDate?: string;
+  notes?: string;
   createdAt: string;
 }
 
@@ -87,6 +114,7 @@ export interface GeneralTask {
   category: string;
   notes?: string;
   createdAt: string;
+  assignedTo: string[]; // empty = visible to everyone
 }
 
 export interface Lead {
@@ -114,6 +142,8 @@ export interface Lead {
   source: string;
   assignedTo: string;
   wonDate?: string;
+  myBuilderUrl?: string;
+  reviewRequestSent?: boolean;
   lat?: number;
   lng?: number;
   tasks: Task[];

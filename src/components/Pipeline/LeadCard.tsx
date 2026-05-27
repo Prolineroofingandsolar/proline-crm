@@ -1,4 +1,5 @@
-﻿import { Phone, Calendar, ChevronRight, Trophy, Play, CheckCircle, CreditCard, Clock, MessageSquare, Mail, GripVertical } from 'lucide-react';
+﻿import { useState } from 'react';
+import { Phone, Calendar, ChevronRight, Trophy, Play, CheckCircle, CreditCard, Clock, MessageSquare, Mail, GripVertical, X, ChevronDown, ChevronUp, ClipboardList } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Lead } from '../../types';
@@ -12,7 +13,9 @@ interface Props {
 }
 
 export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
-  const { moveToStage, markAsWon } = useStore();
+  const { moveToStage, markAsWon, deleteTask, toggleTask, users, currentUserId } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
+  const [tasksOpen, setTasksOpen] = useState(false);
 
   const {
     attributes,
@@ -95,7 +98,7 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
 
         {lead.stage === 'Quote Sent' && (
           <div className="space-y-1">
-            {lead.value > 0 && <p className="text-sm font-bold text-gray-800">{formatCurrency(lead.value)}</p>}
+            {isAdmin && lead.value > 0 && <p className="text-sm font-bold text-gray-800">{formatCurrency(lead.value)}</p>}
             {lead.updatedAt && (
               <div className="flex items-center gap-1 text-xs text-amber-600">
                 <Clock size={11} />
@@ -107,7 +110,7 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
 
         {lead.stage === 'Won' && (
           <div className="space-y-1">
-            <p className="text-sm font-bold text-gray-800">{formatCurrency(lead.value)}</p>
+            {isAdmin && <p className="text-sm font-bold text-gray-800">{formatCurrency(lead.value)}</p>}
             <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
               Won {dayLabel(lead.wonDate ?? lead.updatedAt).toLowerCase()}
             </span>
@@ -128,7 +131,7 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
 
         {lead.stage === 'Completed' && (
           <div className="flex items-center justify-between">
-            <p className="text-sm font-bold text-gray-800">{formatCurrency(lead.value)}</p>
+            {isAdmin && <p className="text-sm font-bold text-gray-800">{formatCurrency(lead.value)}</p>}
             {lead.photos.length > 0 ? (
               <img src={lead.photos[lead.photos.length - 1].url} className="w-10 h-10 rounded-lg object-cover" alt="job" />
             ) : (
@@ -140,7 +143,7 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
         {lead.stage === 'Paid' && (
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-bold text-gray-800">{formatCurrency(lead.value)}</p>
+              {isAdmin && <p className="text-sm font-bold text-gray-800">{formatCurrency(lead.value)}</p>}
               <p className="text-xs text-gray-400">Paid {formatDateShort(lead.paidDate)}</p>
             </div>
             <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -149,45 +152,86 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
           </div>
         )}
 
-        {/* Action buttons */}
-        <div className="mt-2 flex gap-1.5" onClick={e => e.stopPropagation()}>
-          {lead.stage === 'New Lead' && (
-            <button onClick={stopProp(() => moveToStage(lead.id, 'Survey Booked'))}
-              className="flex-1 flex items-center justify-center gap-1 text-xs bg-orange-50 text-orange-700 hover:bg-orange-100 py-1 rounded-lg font-medium transition-colors">
-              <Calendar size={11} /> Book Survey
+        {/* Tasks section */}
+        {lead.tasks.length > 0 && (
+          <div className="mt-2" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setTasksOpen(o => !o)}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-orange-600 transition-colors w-full"
+            >
+              <ClipboardList size={11} />
+              <span className="font-medium">
+                Tasks ({lead.tasks.filter(t => t.completed).length}/{lead.tasks.length})
+              </span>
+              {tasksOpen ? <ChevronUp size={11} className="ml-auto" /> : <ChevronDown size={11} className="ml-auto" />}
             </button>
-          )}
-          {lead.stage === 'Survey Booked' && (
-            <button onClick={stopProp(() => moveToStage(lead.id, 'Quote Sent'))}
-              className="flex-1 flex items-center justify-center gap-1 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 py-1 rounded-lg font-medium transition-colors">
-              <ChevronRight size={11} /> Send Quote
-            </button>
-          )}
-          {lead.stage === 'Quote Sent' && (
-            <button onClick={stopProp(() => markAsWon(lead.id))}
-              className="flex-1 flex items-center justify-center gap-1 text-xs bg-green-600 text-white hover:bg-green-700 py-1 rounded-lg font-medium transition-colors">
-              <Trophy size={11} /> Mark as Won
-            </button>
-          )}
-          {lead.stage === 'Won' && (
-            <button onClick={stopProp(() => moveToStage(lead.id, 'In Progress'))}
-              className="flex-1 flex items-center justify-center gap-1 text-xs bg-orange-600 text-white hover:bg-orange-700 py-1 rounded-lg font-medium transition-colors">
-              <Play size={11} /> Start Job
-            </button>
-          )}
-          {lead.stage === 'In Progress' && (
-            <button onClick={stopProp(() => moveToStage(lead.id, 'Completed'))}
-              className="flex-1 flex items-center justify-center gap-1 text-xs bg-emerald-600 text-white hover:bg-emerald-700 py-1 rounded-lg font-medium transition-colors">
-              <CheckCircle size={11} /> Mark Complete
-            </button>
-          )}
-          {lead.stage === 'Completed' && (
-            <button onClick={stopProp(() => moveToStage(lead.id, 'Paid'))}
-              className="flex-1 flex items-center justify-center gap-1 text-xs bg-green-600 text-white hover:bg-green-700 py-1 rounded-lg font-medium transition-colors">
-              <CreditCard size={11} /> Mark Paid
-            </button>
-          )}
-        </div>
+            {tasksOpen && (
+              <div className="mt-1.5 space-y-0.5">
+                {lead.tasks.map(task => (
+                  <div key={task.id} className="flex items-center gap-1.5 group">
+                    <button
+                      onClick={() => toggleTask(lead.id, task.id)}
+                      className={`w-3 h-3 rounded-full border shrink-0 transition-colors ${task.completed ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-orange-400'}`}
+                    />
+                    <span className={`flex-1 text-xs truncate ${task.completed ? 'line-through text-gray-400' : 'text-gray-600'}`}>
+                      {task.title}
+                    </span>
+                    {isAdmin && (
+                      <button
+                        onClick={() => deleteTask(lead.id, task.id)}
+                        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 shrink-0 transition-opacity"
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Action buttons — admin only */}
+        {isAdmin && (
+          <div className="mt-2 flex gap-1.5" onClick={e => e.stopPropagation()}>
+            {lead.stage === 'New Lead' && (
+              <button onClick={stopProp(() => moveToStage(lead.id, 'Survey Booked'))}
+                className="flex-1 flex items-center justify-center gap-1 text-xs bg-orange-50 text-orange-700 hover:bg-orange-100 py-1 rounded-lg font-medium transition-colors">
+                <Calendar size={11} /> Book Survey
+              </button>
+            )}
+            {lead.stage === 'Survey Booked' && (
+              <button onClick={stopProp(() => moveToStage(lead.id, 'Quote Sent'))}
+                className="flex-1 flex items-center justify-center gap-1 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 py-1 rounded-lg font-medium transition-colors">
+                <ChevronRight size={11} /> Send Quote
+              </button>
+            )}
+            {lead.stage === 'Quote Sent' && (
+              <button onClick={stopProp(() => markAsWon(lead.id))}
+                className="flex-1 flex items-center justify-center gap-1 text-xs bg-green-600 text-white hover:bg-green-700 py-1 rounded-lg font-medium transition-colors">
+                <Trophy size={11} /> Mark as Won
+              </button>
+            )}
+            {lead.stage === 'Won' && (
+              <button onClick={stopProp(() => moveToStage(lead.id, 'In Progress'))}
+                className="flex-1 flex items-center justify-center gap-1 text-xs bg-orange-600 text-white hover:bg-orange-700 py-1 rounded-lg font-medium transition-colors">
+                <Play size={11} /> Start Job
+              </button>
+            )}
+            {lead.stage === 'In Progress' && (
+              <button onClick={stopProp(() => moveToStage(lead.id, 'Completed'))}
+                className="flex-1 flex items-center justify-center gap-1 text-xs bg-emerald-600 text-white hover:bg-emerald-700 py-1 rounded-lg font-medium transition-colors">
+                <CheckCircle size={11} /> Mark Complete
+              </button>
+            )}
+            {lead.stage === 'Completed' && (
+              <button onClick={stopProp(() => moveToStage(lead.id, 'Paid'))}
+                className="flex-1 flex items-center justify-center gap-1 text-xs bg-green-600 text-white hover:bg-green-700 py-1 rounded-lg font-medium transition-colors">
+                <CreditCard size={11} /> Mark Paid
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

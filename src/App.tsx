@@ -14,6 +14,8 @@ import ContactsPage from './pages/ContactsPage';
 import FilesPage from './pages/FilesPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import TimesheetPage from './pages/TimesheetPage';
+import CISPage from './pages/CISPage';
 import AddLeadModal from './components/Pipeline/AddLeadModal';
 import AIAssistant from './components/AI/AIAssistant';
 
@@ -42,6 +44,8 @@ function LoadingScreen() {
 
 export default function App() {
   const { currentPage, currentUserId, users, isLoaded, loadData } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
+  const ADMIN_ONLY_PAGES = new Set(['dashboard', 'leads', 'contacts', 'files', 'reports', 'settings', 'cis']);
   const [showNewLead, setShowNewLead] = useState(false);
 
   useEffect(() => {
@@ -62,7 +66,9 @@ export default function App() {
     contacts: <ContactsPage />,
     files: <FilesPage />,
     reports: <ReportsPage />,
+    cis: <CISPage />,
     settings: <SettingsPage />,
+    timesheet: <TimesheetPage />,
   };
 
   return (
@@ -74,7 +80,7 @@ export default function App() {
         <TopBar onNewLead={() => setShowNewLead(true)} />
         <main className="flex-1 overflow-hidden">
           <div className="h-full pb-16 sm:pb-0">
-            {page[currentPage] ?? <PipelinePage />}
+            {(!isAdmin && ADMIN_ONLY_PAGES.has(currentPage)) ? <PipelinePage /> : (page[currentPage] ?? <PipelinePage />)}
           </div>
         </main>
       </div>

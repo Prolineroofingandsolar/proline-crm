@@ -1,21 +1,59 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask } from '../types';
+import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry, PaymentRun } from '../types';
 import { generateId } from '../utils/helpers';
 import { hashPassword } from '../utils/crypto';
+import { subscribeToPush } from '../utils/push';
 import {
   supabase,
   leadToDb, dbToLead,
   userToDb, dbToUser,
   contactToDb, dbToContact,
   generalTaskToDb, dbToGeneralTask,
+  timesheetEntryToDb, dbToTimesheetEntry,
+  paymentRunToDb, dbToPaymentRun,
 } from '../lib/supabase';
 
-const DEFAULT_TASKS = [
-  'Order materials', 'Scaffold booked', 'Confirm start date with customer',
-  'Deposit received', 'Before photos', 'Remove old roof', 'Install new roof',
-  'Snagging / Quality check', 'After photos', 'Send invoice & request review',
-];
+const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
+  'New Lead': [
+    'Call customer to discuss requirements',
+    'Confirm contact details',
+    'Check job location / access',
+  ],
+  'Survey Booked': [
+    'Confirm survey appointment with customer',
+    'Prepare survey checklist',
+    'Review job requirements before visit',
+  ],
+  'Quote Sent': [
+    'Follow up on quote within 3 days',
+    'Answer any customer questions',
+    'Chase quote if no response after 7 days',
+  ],
+  'Won': [
+    'Collect deposit',
+    'Confirm start date with customer',
+    'Order materials',
+    'Brief the team on job details',
+  ],
+  'In Progress': [
+    'Confirm materials delivered',
+    'Daily progress check',
+    'Take before & during photos',
+    'Keep customer updated',
+  ],
+  'Completed': [
+    'Final inspection with customer',
+    'Take completion photos',
+    'Send final invoice',
+    'Collect outstanding balance',
+  ],
+  'Paid': [
+    'File all job paperwork',
+    'Request customer review / referral',
+    'Update job records',
+  ],
+};
 
 // Re-export for components that imported GeneralTask from here
 export type { GeneralTask };
@@ -29,6 +67,7 @@ interface Store {
   leads: Lead[];
   contacts: Contact[];
   generalTasks: GeneralTask[];
+  timesheetEntries: TimesheetEntry[];
   apiKey: string;
   selectedId: string | null;
   currentPage: string;
@@ -39,8 +78,30 @@ interface Store {
   logout: () => void;
   addUser: (name: string, username: string, password: string, role: 'admin' | 'user') => Promise<{ ok: boolean; error?: string }>;
   deleteUser: (id: string) => void;
+  addCasualWorker: (name: string, dayRate: number, cisRate: 20 | 30) => void;
+  removeCasualWorker: (id: string) => void;
   changePassword: (id: string, newPassword: string) => Promise<void>;
   updateUserName: (id: string, name: string) => void;
+  updateUserProfile: (id: string, updates: Partial<Pick<AppUser, 'dayRate' | 'cisRate' | 'utrNumber' | 'bankName' | 'bankAccountNumber' | 'bankSortCode'>>) => void;
+
+  pushEnabled: boolean;
+  pushPreferences: {
+    newLead: boolean;
+    surveyBooked: boolean;
+    jobWon: boolean;
+    jobStarted: boolean;
+    jobCompleted: boolean;
+    paymentReceived: boolean;
+  };
+  enablePushNotifications: () => Promise<void>;
+  setPushPreference: (key: keyof Store['pushPreferences'], value: boolean) => void;
+
+  addTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
+  upsertTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
+  deleteTimesheetEntry: (id: string) => void;
+
+  paymentRuns: PaymentRun[];
+  updatePaymentStatus: (userId: string, weekStart: string, status: PaymentRun['status']) => void;
 
   setCurrentPage: (page: string) => void;
   setSelectedId: (id: string | null) => void;
@@ -60,7 +121,7 @@ interface Store {
   markAsWon: (id: string) => void;
 
   toggleTask: (leadId: string, taskId: string) => void;
-  addTask: (leadId: string, title: string) => void;
+  addTask: (leadId: string, title: string, isTemplate?: boolean) => void;
   deleteTask: (leadId: string, taskId: string) => void;
 
   addGeneralTask: (data: Omit<GeneralTask, 'id' | 'createdAt' | 'completed'>) => void;
@@ -86,14 +147,40 @@ let jobCounterN = 1;
 
 export const useStore = create<Store>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      // Sync the current state of a lead to Supabase after a local update.
+      // Uses update (not upsert) so stale local data can never silently insert a duplicate.
+      const syncLead = (leadId: string) => {
+        const lead = get().leads.find(l => l.id === leadId);
+        if (!lead) return;
+        supabase.from('leads').update(leadToDb(lead)).eq('id', leadId)
+          .then(({ error }) => {
+            if (error) {
+              console.error('Lead sync error:', error);
+              get().showToast('Save failed — check your connection', 'error');
+            }
+          });
+      };
+
+      return {
       isLoaded: false,
       users: [],
       currentUserId: null,
       leads: [],
       contacts: [],
       generalTasks: [],
+      timesheetEntries: [],
+      paymentRuns: [],
       apiKey: '',
+      pushEnabled: false,
+      pushPreferences: {
+        newLead: true,
+        surveyBooked: true,
+        jobWon: true,
+        jobStarted: false,
+        jobCompleted: true,
+        paymentReceived: true,
+      },
       selectedId: null,
       currentPage: 'pipeline',
       searchQuery: '',
@@ -101,17 +188,28 @@ export const useStore = create<Store>()(
 
       // ── Load all data from Supabase ─────────────────────────────────────────
       loadData: async () => {
-        const [leadsRes, usersRes, contactsRes, tasksRes] = await Promise.all([
+        const [leadsRes, usersRes, contactsRes, tasksRes, timesheetRes, paymentRunsRes] = await Promise.all([
           supabase.from('leads').select('*').order('updated_at', { ascending: false }),
           supabase.from('app_users').select('*'),
           supabase.from('contacts').select('*').order('created_at', { ascending: false }),
           supabase.from('general_tasks').select('*').order('created_at', { ascending: false }),
+          supabase.from('timesheet_entries').select('*').order('date', { ascending: false }),
+          supabase.from('payment_runs').select('*'),
         ]);
+
+        if (leadsRes.error || usersRes.error) {
+          console.error('loadData error:', leadsRes.error ?? usersRes.error);
+          get().showToast('Failed to load data — check your connection', 'error');
+          set({ isLoaded: true });
+          return;
+        }
 
         const leads = (leadsRes.data ?? []).map(r => dbToLead(r as Record<string, unknown>));
         const users = (usersRes.data ?? []).map(r => dbToUser(r as Record<string, unknown>));
         const contacts = (contactsRes.data ?? []).map(r => dbToContact(r as Record<string, unknown>));
         const generalTasks = (tasksRes.data ?? []).map(r => dbToGeneralTask(r as Record<string, unknown>));
+        const timesheetEntries = (timesheetRes.data ?? []).map(r => dbToTimesheetEntry(r as Record<string, unknown>));
+        const paymentRuns = (paymentRunsRes.data ?? []).map(r => dbToPaymentRun(r as Record<string, unknown>));
 
         // Set job counter to 1 above the highest existing job number
         const maxNum = leads.reduce((max, l) => {
@@ -120,7 +218,42 @@ export const useStore = create<Store>()(
         }, 0);
         jobCounterN = maxNum + 1;
 
-        set({ leads, users, contacts, generalTasks, isLoaded: true });
+        // Backfill contacts for any existing lead that doesn't have one yet
+        const now = new Date().toISOString().split('T')[0];
+        const existingPhones = new Set(contacts.map(c => c.phone));
+        const missingContacts: Contact[] = [];
+        for (const lead of leads) {
+          if (!lead.phone || existingPhones.has(lead.phone)) continue;
+          existingPhones.add(lead.phone);
+          missingContacts.push({ id: generateId(), name: lead.name, phone: lead.phone, email: lead.email, address: lead.address, createdAt: now });
+        }
+        if (missingContacts.length > 0) {
+          supabase.from('contacts').insert(missingContacts.map(contactToDb)).then(({ error }) => {
+            if (error) console.error('Contact backfill error:', error);
+          });
+        }
+        const allContacts = [...contacts, ...missingContacts];
+
+        set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, paymentRuns, isLoaded: true });
+
+        // Real-time: keep leads in sync across devices/tabs without refresh
+        supabase
+          .channel('leads-realtime')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, ({ new: row }) => {
+            const lead = dbToLead(row as Record<string, unknown>);
+            set(s => {
+              if (s.leads.find(l => l.id === lead.id)) return s;
+              return { leads: [lead, ...s.leads] };
+            });
+          })
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, ({ new: row }) => {
+            const lead = dbToLead(row as Record<string, unknown>);
+            set(s => ({ leads: s.leads.map(l => l.id === lead.id ? lead : l) }));
+          })
+          .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'leads' }, ({ old: row }) => {
+            set(s => ({ leads: s.leads.filter(l => l.id !== (row as Record<string, unknown>).id) }));
+          })
+          .subscribe();
       },
 
       // ── Auth ────────────────────────────────────────────────────────────────
@@ -153,6 +286,25 @@ export const useStore = create<Store>()(
         supabase.from('app_users').delete().eq('id', id);
       },
 
+      addCasualWorker: (name, dayRate, cisRate) => {
+        const now = new Date().toISOString().split('T')[0];
+        const id = generateId();
+        const user: AppUser = { id, name, username: `casual_${id.slice(0, 8)}`, passwordHash: '', role: 'casual', createdAt: now, dayRate, cisRate };
+        set(s => ({ users: [...s.users, user] }));
+        supabase.from('app_users').insert(userToDb(user)).then(({ error }) => {
+          if (error) console.error('addCasualWorker error:', error);
+        });
+      },
+
+      removeCasualWorker: (id) => {
+        set(s => ({
+          users: s.users.filter(u => u.id !== id),
+          timesheetEntries: s.timesheetEntries.filter(e => e.userId !== id),
+        }));
+        supabase.from('app_users').delete().eq('id', id);
+        supabase.from('timesheet_entries').delete().eq('user_id', id);
+      },
+
       changePassword: async (id, newPassword) => {
         const hash = await hashPassword(newPassword);
         set(s => ({ users: s.users.map(u => u.id === id ? { ...u, passwordHash: hash } : u) }));
@@ -163,6 +315,102 @@ export const useStore = create<Store>()(
         set(s => ({ users: s.users.map(u => u.id === id ? { ...u, name } : u) }));
         supabase.from('app_users').update({ name }).eq('id', id);
       },
+
+      updateUserProfile: (id, updates) => {
+        set(s => ({ users: s.users.map(u => u.id === id ? { ...u, ...updates } : u) }));
+        const dbUpdates: Record<string, unknown> = {};
+        if (updates.dayRate !== undefined) dbUpdates.day_rate = updates.dayRate;
+        if (updates.cisRate !== undefined) dbUpdates.cis_rate = updates.cisRate;
+        if (updates.utrNumber !== undefined) dbUpdates.utr_number = updates.utrNumber;
+        if (updates.bankName !== undefined) dbUpdates.bank_name = updates.bankName;
+        if (updates.bankAccountNumber !== undefined) dbUpdates.bank_account_number = updates.bankAccountNumber;
+        if (updates.bankSortCode !== undefined) dbUpdates.bank_sort_code = updates.bankSortCode;
+        supabase.from('app_users').update(dbUpdates).eq('id', id);
+      },
+
+      upsertTimesheetEntry: (data) => {
+        const now = new Date().toISOString().split('T')[0];
+        const existing = get().timesheetEntries.find(e => e.userId === data.userId && e.date === data.date);
+        if (existing) {
+          const updated: TimesheetEntry = { ...existing, ...data };
+          set(s => ({ timesheetEntries: s.timesheetEntries.map(e => e.id === existing.id ? updated : e) }));
+          supabase.from('timesheet_entries').update(timesheetEntryToDb(updated)).eq('id', existing.id)
+            .then(({ error }) => {
+              if (error) {
+                console.error('timesheet update error:', error);
+                get().showToast('Save failed — check your connection', 'error');
+              }
+            });
+        } else {
+          const entry: TimesheetEntry = { ...data, id: generateId(), createdAt: now };
+          set(s => ({ timesheetEntries: [entry, ...s.timesheetEntries] }));
+          supabase.from('timesheet_entries').insert(timesheetEntryToDb(entry))
+            .then(({ error }) => {
+              if (error) {
+                console.error('timesheet insert error:', error);
+                get().showToast('Save failed — check your connection', 'error');
+              }
+            });
+        }
+      },
+
+      addTimesheetEntry: (data) => {
+        const now = new Date().toISOString().split('T')[0];
+        const entry: TimesheetEntry = { ...data, id: generateId(), createdAt: now };
+        set(s => ({ timesheetEntries: [entry, ...s.timesheetEntries] }));
+        supabase.from('timesheet_entries').insert(timesheetEntryToDb(entry))
+          .then(({ error }) => { if (error) console.error('timesheet insert error:', error); });
+      },
+
+      deleteTimesheetEntry: (id) => {
+        set(s => ({ timesheetEntries: s.timesheetEntries.filter(e => e.id !== id) }));
+        supabase.from('timesheet_entries').delete().eq('id', id);
+      },
+
+      updatePaymentStatus: (userId, weekStart, status) => {
+        const now = new Date().toISOString().split('T')[0];
+        const existing = get().paymentRuns.find(r => r.userId === userId && r.weekStart === weekStart);
+        const run: PaymentRun = existing
+          ? { ...existing, status, paidDate: status === 'paid' ? now : existing.paidDate }
+          : { id: generateId(), userId, weekStart, status, paidDate: status === 'paid' ? now : undefined, createdAt: now };
+        set(s => ({
+          paymentRuns: existing
+            ? s.paymentRuns.map(r => r.userId === userId && r.weekStart === weekStart ? run : r)
+            : [...s.paymentRuns, run],
+        }));
+        supabase.from('payment_runs').upsert(paymentRunToDb(run), { onConflict: 'user_id,week_start' });
+      },
+
+      enablePushNotifications: async () => {
+        const subscription = await subscribeToPush();
+        if (!subscription) {
+          if ('Notification' in window && Notification.permission === 'denied') {
+            get().showToast('Notifications blocked — allow in device Settings', 'error');
+          }
+          return;
+        }
+        const now = new Date().toISOString().split('T')[0];
+        const { error } = await supabase.from('push_subscriptions').upsert(
+          {
+            id: generateId(),
+            user_id: get().currentUserId ?? '',
+            endpoint: subscription.endpoint,
+            subscription: subscription.toJSON(),
+            created_at: now,
+          },
+          { onConflict: 'endpoint' }
+        );
+        if (error) {
+          console.error('push subscription save error:', error);
+          get().showToast('Failed to save notification subscription', 'error');
+          return;
+        }
+        set({ pushEnabled: true });
+        get().showToast('Push notifications enabled');
+      },
+
+      setPushPreference: (key, value) =>
+        set(s => ({ pushPreferences: { ...s.pushPreferences, [key]: value } })),
 
       // ── UI ──────────────────────────────────────────────────────────────────
       setCurrentPage: (page) => set({ currentPage: page, selectedId: null }),
@@ -177,18 +425,20 @@ export const useStore = create<Store>()(
       // ── Contacts ────────────────────────────────────────────────────────────
       upsertContact: ({ name, phone, email, address }) => {
         const now = new Date().toISOString().split('T')[0];
-        set(s => {
-          const existing = s.contacts.find(c => c.phone === phone);
-          if (existing) {
-            const updated = s.contacts.map(c => c.phone === phone ? { ...c, name, email, address } : c);
-            const contact = updated.find(c => c.phone === phone)!;
-            supabase.from('contacts').upsert(contactToDb(contact));
-            return { contacts: updated };
-          }
+        const existing = get().contacts.find(c => c.phone === phone);
+        if (existing) {
+          const updated: Contact = { ...existing, name, email, address };
+          set(s => ({ contacts: s.contacts.map(c => c.phone === phone ? updated : c) }));
+          supabase.from('contacts').upsert(contactToDb(updated)).then(({ error }) => {
+            if (error) console.error('upsertContact sync error:', error);
+          });
+        } else {
           const contact: Contact = { id: generateId(), name, phone, email, address, createdAt: now };
-          supabase.from('contacts').insert(contactToDb(contact));
-          return { contacts: [contact, ...s.contacts] };
-        });
+          set(s => ({ contacts: [contact, ...s.contacts] }));
+          supabase.from('contacts').insert(contactToDb(contact)).then(({ error }) => {
+            if (error) console.error('upsertContact insert error:', error);
+          });
+        }
       },
 
       deleteContact: (id) => {
@@ -208,7 +458,7 @@ export const useStore = create<Store>()(
               const lat = parseFloat(data[0].lat);
               const lng = parseFloat(data[0].lon);
               set(s => ({ leads: s.leads.map(l => l.id === lead.id ? { ...l, lat, lng } : l) }));
-              supabase.from('leads').update({ lat, lng }).eq('id', lead.id);
+              await supabase.from('leads').update({ lat, lng }).eq('id', lead.id);
             }
           } catch { /* silently skip */ }
           await new Promise(r => setTimeout(r, 1100));
@@ -225,10 +475,18 @@ export const useStore = create<Store>()(
         };
         set(s => ({ leads: [lead, ...s.leads] }));
         supabase.from('leads').insert(leadToDb(lead)).then(({ error }) => {
-          if (error) console.error('addLead sync error:', error);
+          if (error) {
+            console.error('addLead sync error:', error);
+            get().showToast('Lead saved locally but failed to sync — check connection', 'error');
+          }
         });
         get().upsertContact({ name: data.name, phone: data.phone, email: data.email, address: data.address });
         get().showToast(`New lead added: ${data.name}`);
+        if (get().pushEnabled && get().pushPreferences.newLead) {
+          supabase.functions.invoke('send-push', {
+            body: { title: 'New Lead Added', body: `${data.name} — ${data.jobType ?? 'Job'}` },
+          });
+        }
       },
 
       updateLead: (id, updates) => {
@@ -236,13 +494,19 @@ export const useStore = create<Store>()(
         set(s => ({
           leads: s.leads.map(l => l.id === id ? { ...l, ...updates, updatedAt } : l),
         }));
-        const lead = get().leads.find(l => l.id === id);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(id);
       },
 
       deleteLead: (id) => {
+        const snapshot = get().leads.find(l => l.id === id);
         set(s => ({ leads: s.leads.filter(l => l.id !== id), selectedId: s.selectedId === id ? null : s.selectedId }));
-        supabase.from('leads').delete().eq('id', id);
+        supabase.from('leads').delete().eq('id', id).then(({ error }) => {
+          if (error) {
+            console.error('deleteLead sync error:', error);
+            if (snapshot) set(s => ({ leads: [snapshot, ...s.leads] }));
+            get().showToast('Delete failed — check your connection', 'error');
+          }
+        });
         get().showToast('Lead deleted', 'info');
       },
 
@@ -252,18 +516,30 @@ export const useStore = create<Store>()(
         const now = new Date().toISOString().split('T')[0];
         const updates: Partial<Lead> = { stage, updatedAt: now };
         if (stage === 'Won') updates.wonDate = now;
-        if (stage === 'In Progress') {
-          if (!lead.startDate) updates.startDate = now;
-          if (lead.tasks.length === 0) {
-            updates.tasks = DEFAULT_TASKS.map((title, i) => ({ id: `${id}_t${i}`, title, completed: false }));
-          }
-        }
+        if (stage === 'In Progress' && !lead.startDate) updates.startDate = now;
         if (stage === 'Completed') updates.completedDate = now;
         if (stage === 'Paid') { updates.paidDate = now; updates.balance = 0; }
+        const customTasks = lead.tasks.filter(t => !t.isTemplate);
+        const newTemplateTasks = (STAGE_TASKS[stage] ?? []).map(title => ({
+          id: generateId(), title, completed: false, isTemplate: true as const,
+        }));
+        updates.tasks = [...newTemplateTasks, ...customTasks];
         set(s => ({ leads: s.leads.map(l => l.id === id ? { ...l, ...updates } : l) }));
-        const updated = get().leads.find(l => l.id === id);
-        if (updated) supabase.from('leads').upsert(leadToDb(updated));
+        syncLead(id);
         get().showToast(`Moved to ${stage}`);
+        const pushTitles: Partial<Record<Stage, { title: string; pref: keyof Store['pushPreferences'] }>> = {
+          'Survey Booked': { title: 'Survey Booked',   pref: 'surveyBooked' },
+          Won:             { title: 'Job Won',          pref: 'jobWon' },
+          'In Progress':   { title: 'Job Started',      pref: 'jobStarted' },
+          Completed:       { title: 'Job Completed',    pref: 'jobCompleted' },
+          Paid:            { title: 'Payment Received', pref: 'paymentReceived' },
+        };
+        const pushEntry = pushTitles[stage];
+        if (pushEntry && get().pushEnabled && get().pushPreferences[pushEntry.pref]) {
+          supabase.functions.invoke('send-push', {
+            body: { title: pushEntry.title, body: `${lead.name} — ${lead.jobRef}` },
+          });
+        }
       },
 
       markAsWon: (id) => {
@@ -285,18 +561,16 @@ export const useStore = create<Store>()(
             return { ...l, tasks, progress };
           }),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
-      addTask: (leadId, title) => {
+      addTask: (leadId, title, isTemplate = false) => {
         set(s => ({
           leads: s.leads.map(l =>
-            l.id === leadId ? { ...l, tasks: [...l.tasks, { id: generateId(), title, completed: false }] } : l
+            l.id === leadId ? { ...l, tasks: [...l.tasks, { id: generateId(), title, completed: false, isTemplate }] } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       deleteTask: (leadId, taskId) => {
@@ -305,8 +579,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, tasks: l.tasks.filter(t => t.id !== taskId) } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       // ── General tasks ────────────────────────────────────────────────────────
@@ -352,8 +625,7 @@ export const useStore = create<Store>()(
               : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       deleteNote: (leadId, noteId) => {
@@ -362,8 +634,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, notes: l.notes.filter(n => n.id !== noteId) } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       // ── Materials ────────────────────────────────────────────────────────────
@@ -373,8 +644,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, materials: [...l.materials, { ...mat, id: generateId() }] } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       updateMaterial: (leadId, matId, updates) => {
@@ -385,8 +655,7 @@ export const useStore = create<Store>()(
               : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       deleteMaterial: (leadId, matId) => {
@@ -395,8 +664,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, materials: l.materials.filter(m => m.id !== matId) } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       // ── Files ────────────────────────────────────────────────────────────────
@@ -406,8 +674,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, files: [...l.files, { ...file, id: generateId() }] } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       deleteFile: (leadId, fileId) => {
@@ -416,8 +683,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, files: l.files.filter(f => f.id !== fileId) } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       // ── Photos ───────────────────────────────────────────────────────────────
@@ -427,8 +693,7 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, photos: [...l.photos, { ...photo, id: generateId() }] } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
 
       deletePhoto: (leadId, photoId) => {
@@ -437,10 +702,10 @@ export const useStore = create<Store>()(
             l.id === leadId ? { ...l, photos: l.photos.filter(p => p.id !== photoId) } : l
           ),
         }));
-        const lead = get().leads.find(l => l.id === leadId);
-        if (lead) supabase.from('leads').upsert(leadToDb(lead));
+        syncLead(leadId);
       },
-    }),
+    };
+    },
     {
       name: 'proline-crm-auth',
       // Only persist auth state locally — everything else comes from Supabase
@@ -448,6 +713,8 @@ export const useStore = create<Store>()(
         currentUserId: state.currentUserId,
         apiKey: state.apiKey,
         currentPage: state.currentPage,
+        pushEnabled: state.pushEnabled,
+        pushPreferences: state.pushPreferences,
       }),
     }
   )
