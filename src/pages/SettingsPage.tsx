@@ -7,7 +7,7 @@ type AddUserForm = { name: string; username: string; password: string; confirm: 
 type ChangePwForm = { id: string; newPw: string; confirm: string };
 
 export default function SettingsPage() {
-  const { leads, users, currentUserId, addUser, deleteUser, changePassword, logout, enablePushNotifications, pushEnabled } = useStore();
+  const { leads, users, currentUserId, addUser, deleteUser, changePassword, logout, enablePushNotifications, pushEnabled, pushPreferences, setPushPreference } = useStore();
 
   const [business, setBusiness] = useState({ name: 'Proline Roofing & Solar Ltd', phone: '01234 567890', email: 'info@proline.co.uk', address: 'Birmingham, West Midlands', vat: 'GB123456789' });
   const [saved, setSaved] = useState(false);
@@ -266,11 +266,29 @@ export default function SettingsPage() {
               <p className="text-sm text-gray-500">
                 Get notified on this device for key events. Each team member enables notifications on their own phone.
               </p>
-              <div className="space-y-2">
-                {['New lead added', 'Job won', 'Job completed', 'Payment received'].map(item => (
-                  <div key={item} className="flex items-center gap-2 text-sm text-gray-600">
-                    <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                    {item}
+              <div className="space-y-1">
+                {([
+                  { key: 'newLead',        label: 'New lead added' },
+                  { key: 'surveyBooked',   label: 'Survey booked' },
+                  { key: 'jobWon',         label: 'Job won' },
+                  { key: 'jobStarted',     label: 'Job started' },
+                  { key: 'jobCompleted',   label: 'Job completed' },
+                  { key: 'paymentReceived', label: 'Payment received' },
+                ] as const).map(({ key, label }) => (
+                  <div key={key} className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-gray-50">
+                    <span className={`text-sm ${pushEnabled ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
+                    <button
+                      role="switch"
+                      aria-checked={pushPreferences[key]}
+                      disabled={!pushEnabled}
+                      onClick={() => setPushPreference(key, !pushPreferences[key])}
+                      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none ${
+                        !pushEnabled ? 'cursor-not-allowed opacity-40' :
+                        pushPreferences[key] ? 'bg-orange-500' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${pushPreferences[key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
                   </div>
                 ))}
               </div>

@@ -85,7 +85,16 @@ interface Store {
   updateUserProfile: (id: string, updates: Partial<Pick<AppUser, 'dayRate' | 'cisRate' | 'utrNumber' | 'bankName' | 'bankAccountNumber' | 'bankSortCode'>>) => void;
 
   pushEnabled: boolean;
+  pushPreferences: {
+    newLead: boolean;
+    surveyBooked: boolean;
+    jobWon: boolean;
+    jobStarted: boolean;
+    jobCompleted: boolean;
+    paymentReceived: boolean;
+  };
   enablePushNotifications: () => Promise<void>;
+  setPushPreference: (key: keyof Store['pushPreferences'], value: boolean) => void;
 
   addTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
   upsertTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
@@ -164,6 +173,14 @@ export const useStore = create<Store>()(
       paymentRuns: [],
       apiKey: '',
       pushEnabled: false,
+      pushPreferences: {
+        newLead: true,
+        surveyBooked: true,
+        jobWon: true,
+        jobStarted: false,
+        jobCompleted: true,
+        paymentReceived: true,
+      },
       selectedId: null,
       currentPage: 'pipeline',
       searchQuery: '',
@@ -373,6 +390,9 @@ export const useStore = create<Store>()(
         get().showToast('Push notifications enabled');
       },
 
+      setPushPreference: (key, value) =>
+        set(s => ({ pushPreferences: { ...s.pushPreferences, [key]: value } })),
+
       // ── UI ──────────────────────────────────────────────────────────────────
       setCurrentPage: (page) => set({ currentPage: page, selectedId: null }),
       setSelectedId: (id) => set({ selectedId: id }),
@@ -443,9 +463,11 @@ export const useStore = create<Store>()(
         });
         get().upsertContact({ name: data.name, phone: data.phone, email: data.email, address: data.address });
         get().showToast(`New lead added: ${data.name}`);
-        supabase.functions.invoke('send-push', {
-          body: { title: 'New Lead Added', body: `${data.name} — ${data.jobType ?? 'Job'}` },
-        });
+        if (get().pushEnabled && get().pushPreferences.newLead) {
+          supabase.functions.invoke('send-push', {
+            body: { title: 'New Lead Added', body: `${data.name} — ${data.jobType ?? 'Job'}` },
+          });
+        }
       },
 
       updateLead: (id, updates) => {
@@ -486,15 +508,17 @@ export const useStore = create<Store>()(
         set(s => ({ leads: s.leads.map(l => l.id === id ? { ...l, ...updates } : l) }));
         syncLead(id);
         get().showToast(`Moved to ${stage}`);
-        const pushTitles: Partial<Record<Stage, string>> = {
-          Won: 'Job Won',
-          Completed: 'Job Completed',
-          Paid: 'Payment Received',
+        const pushTitles: Partial<Record<Stage, { title: string; pref: keyof Store['pushPreferences'] }>> = {
+          'Survey Booked': { title: 'Survey Booked',   pref: 'surveyBooked' },
+          Won:             { title: 'Job Won',          pref: 'jobWon' },
+          'In Progress':   { title: 'Job Started',      pref: 'jobStarted' },
+          Completed:       { title: 'Job Completed',    pref: 'jobCompleted' },
+          Paid:            { title: 'Payment Received', pref: 'paymentReceived' },
         };
-        const pushTitle = pushTitles[stage];
-        if (pushTitle) {
+        const pushEntry = pushTitles[stage];
+        if (pushEntry && get().pushEnabled && get().pushPreferences[pushEntry.pref]) {
           supabase.functions.invoke('send-push', {
-            body: { title: pushTitle, body: `${lead.name} — ${lead.jobRef}` },
+            body: { title: pushEntry.title, body: `${lead.name} — ${lead.jobRef}` },
           });
         }
       },
@@ -671,6 +695,7 @@ export const useStore = create<Store>()(
         apiKey: state.apiKey,
         currentPage: state.currentPage,
         pushEnabled: state.pushEnabled,
+        pushPreferences: state.pushPreferences,
       }),
     }
   )
