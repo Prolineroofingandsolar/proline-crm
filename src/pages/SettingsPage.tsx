@@ -7,7 +7,7 @@ type AddUserForm = { name: string; username: string; password: string; confirm: 
 type ChangePwForm = { id: string; newPw: string; confirm: string };
 
 export default function SettingsPage() {
-  const { leads, users, currentUserId, addUser, deleteUser, changePassword, logout, enablePushNotifications, pushEnabled, pushPreferences, setPushPreference } = useStore();
+  const { leads, users, currentUserId, addUser, deleteUser, changePassword, logout, enablePushNotifications, disablePushNotifications, pushEnabled, pushPreferences, setPushPreference } = useStore();
 
   const [business, setBusiness] = useState({ name: 'Proline Roofing & Solar Ltd', phone: '01234 567890', email: 'info@proline.co.uk', address: 'Birmingham, West Midlands', vat: 'GB123456789' });
   const [saved, setSaved] = useState(false);
@@ -292,35 +292,31 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
-              <button
-                onClick={handleEnableNotifications}
-                disabled={
-                  notifPermission === 'denied' ||
-                  notifPermission === 'unsupported' ||
-                  notifLoading ||
-                  (notifPermission === 'granted' && pushEnabled)
-                }
-                className={`flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                  notifPermission === 'granted' && pushEnabled
-                    ? 'bg-green-100 text-green-700'
-                    : notifPermission === 'denied'
-                    ? 'bg-red-50 text-red-500 cursor-not-allowed'
-                    : notifPermission === 'unsupported'
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-orange-600 text-white hover:bg-orange-700'
-                }`}
-              >
-                <Bell size={15} />
-                {notifPermission === 'granted' && pushEnabled
-                  ? 'Notifications enabled on this device'
-                  : notifPermission === 'denied'
-                  ? 'Blocked — allow in device Settings'
-                  : notifPermission === 'unsupported'
-                  ? 'Not supported on this browser'
-                  : notifLoading
-                  ? 'Enabling…'
-                  : 'Enable push notifications'}
-              </button>
+              <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <Bell size={15} className={pushEnabled ? 'text-orange-500' : 'text-gray-400'} />
+                  <span className="text-sm font-medium text-gray-700">
+                    {notifPermission === 'denied' ? 'Blocked in device Settings'
+                      : notifPermission === 'unsupported' ? 'Not supported on this browser'
+                      : pushEnabled ? 'Notifications on'
+                      : notifLoading ? 'Enabling…'
+                      : 'Notifications off'}
+                  </span>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={pushEnabled}
+                  disabled={notifPermission === 'denied' || notifPermission === 'unsupported' || notifLoading}
+                  onClick={pushEnabled ? disablePushNotifications : handleEnableNotifications}
+                  className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none ${
+                    notifPermission === 'denied' || notifPermission === 'unsupported' ? 'cursor-not-allowed opacity-40 bg-gray-200'
+                    : pushEnabled ? 'bg-orange-500'
+                    : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${pushEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
               {notifPermission === 'denied' && (
                 <p className="text-xs text-red-400">
                   Go to Settings → {isIOS ? 'Safari → ProLine' : 'your browser'} → Notifications → Allow.

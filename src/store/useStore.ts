@@ -94,6 +94,7 @@ interface Store {
     paymentReceived: boolean;
   };
   enablePushNotifications: () => Promise<void>;
+  disablePushNotifications: () => void;
   setPushPreference: (key: keyof Store['pushPreferences'], value: boolean) => void;
 
   addTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
@@ -407,6 +408,21 @@ export const useStore = create<Store>()(
         }
         set({ pushEnabled: true });
         get().showToast('Push notifications enabled');
+      },
+
+      disablePushNotifications: () => {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then(reg =>
+            reg.pushManager.getSubscription().then(sub => {
+              if (sub) {
+                supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+                sub.unsubscribe();
+              }
+            })
+          );
+        }
+        set({ pushEnabled: false });
+        get().showToast('Push notifications disabled', 'info');
       },
 
       setPushPreference: (key, value) =>
