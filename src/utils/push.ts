@@ -1,4 +1,4 @@
-const VAPID_PUBLIC_KEY = 'BLNH0hlGqOYw8tgHw8QwfR8_Nv0FV5V1FqLqMhlyAh1xLZA3QncJ9v-ClF2w0ARtT0lEsUz3H8UvbwcUKkDMR4A';
+const VAPID_PUBLIC_KEY = 'BK03ElAcOOzgwT4bjpm1ZEjefRgzWvQg-G0MgGEcOF5EfEjfWLNLQ2NUPwAfLX2qneu2f_iFvVUlNYrPWMYuoaw';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
