@@ -235,6 +235,25 @@ export const useStore = create<Store>()(
         const allContacts = [...contacts, ...missingContacts];
 
         set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, paymentRuns, isLoaded: true });
+
+        // Real-time: keep leads in sync across devices/tabs without refresh
+        supabase
+          .channel('leads-realtime')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, ({ new: row }) => {
+            const lead = dbToLead(row as Record<string, unknown>);
+            set(s => {
+              if (s.leads.find(l => l.id === lead.id)) return s;
+              return { leads: [lead, ...s.leads] };
+            });
+          })
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, ({ new: row }) => {
+            const lead = dbToLead(row as Record<string, unknown>);
+            set(s => ({ leads: s.leads.map(l => l.id === lead.id ? lead : l) }));
+          })
+          .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'leads' }, ({ old: row }) => {
+            set(s => ({ leads: s.leads.filter(l => l.id !== (row as Record<string, unknown>).id) }));
+          })
+          .subscribe();
       },
 
       // ── Auth ────────────────────────────────────────────────────────────────
