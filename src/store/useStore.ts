@@ -180,6 +180,13 @@ export const useStore = create<Store>()(
           supabase.from('payment_runs').select('*'),
         ]);
 
+        if (leadsRes.error || usersRes.error) {
+          console.error('loadData error:', leadsRes.error ?? usersRes.error);
+          get().showToast('Failed to load data — check your connection', 'error');
+          set({ isLoaded: true });
+          return;
+        }
+
         const leads = (leadsRes.data ?? []).map(r => dbToLead(r as Record<string, unknown>));
         const users = (usersRes.data ?? []).map(r => dbToUser(r as Record<string, unknown>));
         const contacts = (contactsRes.data ?? []).map(r => dbToContact(r as Record<string, unknown>));
