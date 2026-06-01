@@ -65,7 +65,7 @@ export interface AppUser {
   name: string;
   username: string;
   passwordHash: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'casual';
   createdAt: string;
   dayRate?: number;
   cisRate?: 20 | 30;
@@ -82,6 +82,25 @@ export interface TimesheetEntry {
   date: string; // YYYY-MM-DD
   type: 'full' | 'half';
   amount: number;
+  createdAt: string;
+}
+
+export interface PaymentRun {
+  id: string;
+  userId: string;
+  weekStart: string; // YYYY-MM-DD Monday
+  status: 'due' | 'scheduled' | 'paid';
+  paidDate?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface WorkerPayment {
+  id: string;
+  userId: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  notes?: string;
   createdAt: string;
 }
 
@@ -104,6 +123,7 @@ export interface GeneralTask {
   category: string;
   notes?: string;
   createdAt: string;
+  assignedTo: string[]; // empty = visible to everyone
 }
 
 export interface Lead {

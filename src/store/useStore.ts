@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry } from '../types';
+import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry, PaymentRun, WorkerPayment } from '../types';
 import { generateId } from '../utils/helpers';
 import { hashPassword } from '../utils/crypto';
+import { subscribeToPush } from '../utils/push';
 import {
   supabase,
   leadToDb, dbToLead,
@@ -10,6 +11,8 @@ import {
   contactToDb, dbToContact,
   generalTaskToDb, dbToGeneralTask,
   timesheetEntryToDb, dbToTimesheetEntry,
+  paymentRunToDb, dbToPaymentRun,
+  workerPaymentToDb, dbToWorkerPayment,
 } from '../lib/supabase';
 
 const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
@@ -76,13 +79,35 @@ interface Store {
   logout: () => void;
   addUser: (name: string, username: string, password: string, role: 'admin' | 'user') => Promise<{ ok: boolean; error?: string }>;
   deleteUser: (id: string) => void;
+  addCasualWorker: (name: string, dayRate: number, cisRate: 20 | 30) => void;
+  removeCasualWorker: (id: string) => void;
   changePassword: (id: string, newPassword: string) => Promise<void>;
   updateUserName: (id: string, name: string) => void;
   updateUserProfile: (id: string, updates: Partial<Pick<AppUser, 'dayRate' | 'cisRate' | 'utrNumber' | 'bankName' | 'bankAccountNumber' | 'bankSortCode'>>) => void;
 
+  pushEnabled: boolean;
+  pushPreferences: {
+    newLead: boolean;
+    surveyBooked: boolean;
+    jobWon: boolean;
+    jobStarted: boolean;
+    jobCompleted: boolean;
+    paymentReceived: boolean;
+  };
+  enablePushNotifications: () => Promise<void>;
+  disablePushNotifications: () => void;
+  setPushPreference: (key: keyof Store['pushPreferences'], value: boolean) => void;
+
   addTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
   upsertTimesheetEntry: (data: Omit<TimesheetEntry, 'id' | 'createdAt'>) => void;
   deleteTimesheetEntry: (id: string) => void;
+
+  paymentRuns: PaymentRun[];
+  updatePaymentStatus: (userId: string, weekStart: string, status: PaymentRun['status']) => void;
+
+  workerPayments: WorkerPayment[];
+  addWorkerPayment: (userId: string, amount: number, date: string, notes?: string) => void;
+  deleteWorkerPayment: (id: string) => void;
 
   setCurrentPage: (page: string) => void;
   setSelectedId: (id: string | null) => void;
@@ -151,7 +176,18 @@ export const useStore = create<Store>()(
       contacts: [],
       generalTasks: [],
       timesheetEntries: [],
+      paymentRuns: [],
+      workerPayments: [],
       apiKey: '',
+      pushEnabled: false,
+      pushPreferences: {
+        newLead: true,
+        surveyBooked: true,
+        jobWon: true,
+        jobStarted: false,
+        jobCompleted: true,
+        paymentReceived: true,
+      },
       selectedId: null,
       currentPage: 'pipeline',
       searchQuery: '',
@@ -159,19 +195,30 @@ export const useStore = create<Store>()(
 
       // ── Load all data from Supabase ─────────────────────────────────────────
       loadData: async () => {
-        const [leadsRes, usersRes, contactsRes, tasksRes, timesheetRes] = await Promise.all([
+        const [leadsRes, usersRes, contactsRes, tasksRes, timesheetRes, paymentRunsRes, workerPaymentsRes] = await Promise.all([
           supabase.from('leads').select('*').order('updated_at', { ascending: false }),
           supabase.from('app_users').select('*'),
           supabase.from('contacts').select('*').order('created_at', { ascending: false }),
           supabase.from('general_tasks').select('*').order('created_at', { ascending: false }),
           supabase.from('timesheet_entries').select('*').order('date', { ascending: false }),
+          supabase.from('payment_runs').select('*'),
+          supabase.from('worker_payments').select('*').order('date', { ascending: false }),
         ]);
+
+        if (leadsRes.error || usersRes.error) {
+          console.error('loadData error:', leadsRes.error ?? usersRes.error);
+          get().showToast('Failed to load data — check your connection', 'error');
+          set({ isLoaded: true });
+          return;
+        }
 
         const leads = (leadsRes.data ?? []).map(r => dbToLead(r as Record<string, unknown>));
         const users = (usersRes.data ?? []).map(r => dbToUser(r as Record<string, unknown>));
         const contacts = (contactsRes.data ?? []).map(r => dbToContact(r as Record<string, unknown>));
         const generalTasks = (tasksRes.data ?? []).map(r => dbToGeneralTask(r as Record<string, unknown>));
         const timesheetEntries = (timesheetRes.data ?? []).map(r => dbToTimesheetEntry(r as Record<string, unknown>));
+        const paymentRuns = (paymentRunsRes.data ?? []).map(r => dbToPaymentRun(r as Record<string, unknown>));
+        const workerPayments = (workerPaymentsRes.data ?? []).map(r => dbToWorkerPayment(r as Record<string, unknown>));
 
         // Set job counter to 1 above the highest existing job number
         const maxNum = leads.reduce((max, l) => {
@@ -196,7 +243,26 @@ export const useStore = create<Store>()(
         }
         const allContacts = [...contacts, ...missingContacts];
 
-        set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, isLoaded: true });
+        set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, paymentRuns, workerPayments, isLoaded: true });
+
+        // Real-time: keep leads in sync across devices/tabs without refresh
+        supabase
+          .channel('leads-realtime')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, ({ new: row }) => {
+            const lead = dbToLead(row as Record<string, unknown>);
+            set(s => {
+              if (s.leads.find(l => l.id === lead.id)) return s;
+              return { leads: [lead, ...s.leads] };
+            });
+          })
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, ({ new: row }) => {
+            const lead = dbToLead(row as Record<string, unknown>);
+            set(s => ({ leads: s.leads.map(l => l.id === lead.id ? lead : l) }));
+          })
+          .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'leads' }, ({ old: row }) => {
+            set(s => ({ leads: s.leads.filter(l => l.id !== (row as Record<string, unknown>).id) }));
+          })
+          .subscribe();
       },
 
       // ── Auth ────────────────────────────────────────────────────────────────
@@ -229,6 +295,25 @@ export const useStore = create<Store>()(
         supabase.from('app_users').delete().eq('id', id);
       },
 
+      addCasualWorker: (name, dayRate, cisRate) => {
+        const now = new Date().toISOString().split('T')[0];
+        const id = generateId();
+        const user: AppUser = { id, name, username: `casual_${id.slice(0, 8)}`, passwordHash: '', role: 'casual', createdAt: now, dayRate, cisRate };
+        set(s => ({ users: [...s.users, user] }));
+        supabase.from('app_users').insert(userToDb(user)).then(({ error }) => {
+          if (error) console.error('addCasualWorker error:', error);
+        });
+      },
+
+      removeCasualWorker: (id) => {
+        set(s => ({
+          users: s.users.filter(u => u.id !== id),
+          timesheetEntries: s.timesheetEntries.filter(e => e.userId !== id),
+        }));
+        supabase.from('app_users').delete().eq('id', id);
+        supabase.from('timesheet_entries').delete().eq('user_id', id);
+      },
+
       changePassword: async (id, newPassword) => {
         const hash = await hashPassword(newPassword);
         set(s => ({ users: s.users.map(u => u.id === id ? { ...u, passwordHash: hash } : u) }));
@@ -249,7 +334,12 @@ export const useStore = create<Store>()(
         if (updates.bankName !== undefined) dbUpdates.bank_name = updates.bankName;
         if (updates.bankAccountNumber !== undefined) dbUpdates.bank_account_number = updates.bankAccountNumber;
         if (updates.bankSortCode !== undefined) dbUpdates.bank_sort_code = updates.bankSortCode;
-        supabase.from('app_users').update(dbUpdates).eq('id', id);
+        supabase.from('app_users').update(dbUpdates).eq('id', id).then(({ error }) => {
+          if (error) {
+            console.error('updateUserProfile error:', error);
+            get().showToast('Profile save failed — check your connection', 'error');
+          }
+        });
       },
 
       upsertTimesheetEntry: (data) => {
@@ -259,12 +349,22 @@ export const useStore = create<Store>()(
           const updated: TimesheetEntry = { ...existing, ...data };
           set(s => ({ timesheetEntries: s.timesheetEntries.map(e => e.id === existing.id ? updated : e) }));
           supabase.from('timesheet_entries').update(timesheetEntryToDb(updated)).eq('id', existing.id)
-            .then(({ error }) => { if (error) console.error('timesheet update error:', error); });
+            .then(({ error }) => {
+              if (error) {
+                console.error('timesheet update error:', error);
+                get().showToast('Save failed — check your connection', 'error');
+              }
+            });
         } else {
           const entry: TimesheetEntry = { ...data, id: generateId(), createdAt: now };
           set(s => ({ timesheetEntries: [entry, ...s.timesheetEntries] }));
           supabase.from('timesheet_entries').insert(timesheetEntryToDb(entry))
-            .then(({ error }) => { if (error) console.error('timesheet insert error:', error); });
+            .then(({ error }) => {
+              if (error) {
+                console.error('timesheet insert error:', error);
+                get().showToast('Save failed — check your connection', 'error');
+              }
+            });
         }
       },
 
@@ -280,6 +380,85 @@ export const useStore = create<Store>()(
         set(s => ({ timesheetEntries: s.timesheetEntries.filter(e => e.id !== id) }));
         supabase.from('timesheet_entries').delete().eq('id', id);
       },
+
+      updatePaymentStatus: (userId, weekStart, status) => {
+        const now = new Date().toISOString().split('T')[0];
+        const existing = get().paymentRuns.find(r => r.userId === userId && r.weekStart === weekStart);
+        const run: PaymentRun = existing
+          ? { ...existing, status, paidDate: status === 'paid' ? now : existing.paidDate }
+          : { id: generateId(), userId, weekStart, status, paidDate: status === 'paid' ? now : undefined, createdAt: now };
+        set(s => ({
+          paymentRuns: existing
+            ? s.paymentRuns.map(r => r.userId === userId && r.weekStart === weekStart ? run : r)
+            : [...s.paymentRuns, run],
+        }));
+        supabase.from('payment_runs').upsert(paymentRunToDb(run), { onConflict: 'user_id,week_start' });
+      },
+
+      addWorkerPayment: (userId, amount, date, notes) => {
+        const now = new Date().toISOString().split('T')[0];
+        const payment: WorkerPayment = { id: generateId(), userId, amount, date, notes, createdAt: now };
+        set(s => ({ workerPayments: [payment, ...s.workerPayments] }));
+        supabase.from('worker_payments').insert(workerPaymentToDb(payment)).then(({ error }) => {
+          if (error) {
+            console.error('addWorkerPayment error:', error);
+            get().showToast('Payment save failed — check your connection', 'error');
+          }
+        });
+      },
+
+      deleteWorkerPayment: (id) => {
+        set(s => ({ workerPayments: s.workerPayments.filter(p => p.id !== id) }));
+        supabase.from('worker_payments').delete().eq('id', id).then(({ error }) => {
+          if (error) console.error('deleteWorkerPayment error:', error);
+        });
+      },
+
+      enablePushNotifications: async () => {
+        const subscription = await subscribeToPush();
+        if (!subscription) {
+          if ('Notification' in window && Notification.permission === 'denied') {
+            get().showToast('Notifications blocked — allow in device Settings', 'error');
+          }
+          return;
+        }
+        const now = new Date().toISOString().split('T')[0];
+        const { error } = await supabase.from('push_subscriptions').upsert(
+          {
+            id: generateId(),
+            user_id: get().currentUserId ?? '',
+            endpoint: subscription.endpoint,
+            subscription: subscription.toJSON(),
+            created_at: now,
+          },
+          { onConflict: 'endpoint' }
+        );
+        if (error) {
+          console.error('push subscription save error:', error);
+          get().showToast('Failed to save notification subscription', 'error');
+          return;
+        }
+        set({ pushEnabled: true });
+        get().showToast('Push notifications enabled');
+      },
+
+      disablePushNotifications: () => {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then(reg =>
+            reg.pushManager.getSubscription().then(sub => {
+              if (sub) {
+                supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+                sub.unsubscribe();
+              }
+            })
+          );
+        }
+        set({ pushEnabled: false });
+        get().showToast('Push notifications disabled', 'info');
+      },
+
+      setPushPreference: (key, value) =>
+        set(s => ({ pushPreferences: { ...s.pushPreferences, [key]: value } })),
 
       // ── UI ──────────────────────────────────────────────────────────────────
       setCurrentPage: (page) => set({ currentPage: page, selectedId: null }),
@@ -351,6 +530,8 @@ export const useStore = create<Store>()(
         });
         get().upsertContact({ name: data.name, phone: data.phone, email: data.email, address: data.address });
         get().showToast(`New lead added: ${data.name}`);
+        // Push notification for new leads is handled by the Supabase DB trigger
+        // so it fires regardless of whether the lead came from the CRM or another source.
       },
 
       updateLead: (id, updates) => {
@@ -362,8 +543,15 @@ export const useStore = create<Store>()(
       },
 
       deleteLead: (id) => {
+        const snapshot = get().leads.find(l => l.id === id);
         set(s => ({ leads: s.leads.filter(l => l.id !== id), selectedId: s.selectedId === id ? null : s.selectedId }));
-        supabase.from('leads').delete().eq('id', id);
+        supabase.from('leads').delete().eq('id', id).then(({ error }) => {
+          if (error) {
+            console.error('deleteLead sync error:', error);
+            if (snapshot) set(s => ({ leads: [snapshot, ...s.leads] }));
+            get().showToast('Delete failed — check your connection', 'error');
+          }
+        });
         get().showToast('Lead deleted', 'info');
       },
 
@@ -384,6 +572,19 @@ export const useStore = create<Store>()(
         set(s => ({ leads: s.leads.map(l => l.id === id ? { ...l, ...updates } : l) }));
         syncLead(id);
         get().showToast(`Moved to ${stage}`);
+        const pushTitles: Partial<Record<Stage, { title: string; pref: keyof Store['pushPreferences'] }>> = {
+          'Survey Booked': { title: 'Survey Booked',   pref: 'surveyBooked' },
+          Won:             { title: 'Job Won',          pref: 'jobWon' },
+          'In Progress':   { title: 'Job Started',      pref: 'jobStarted' },
+          Completed:       { title: 'Job Completed',    pref: 'jobCompleted' },
+          Paid:            { title: 'Payment Received', pref: 'paymentReceived' },
+        };
+        const pushEntry = pushTitles[stage];
+        if (pushEntry && get().pushEnabled && get().pushPreferences[pushEntry.pref]) {
+          supabase.functions.invoke('send-push', {
+            body: { title: pushEntry.title, body: `${lead.name} — ${lead.jobRef}` },
+          });
+        }
       },
 
       markAsWon: (id) => {
@@ -557,6 +758,8 @@ export const useStore = create<Store>()(
         currentUserId: state.currentUserId,
         apiKey: state.apiKey,
         currentPage: state.currentPage,
+        pushEnabled: state.pushEnabled,
+        pushPreferences: state.pushPreferences,
       }),
     }
   )

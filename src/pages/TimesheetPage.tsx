@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Pencil, Check, X, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Pencil, Check, X, Trash2, UserPlus, Banknote, CalendarCheck, CheckCircle2, PoundSterling, Wallet } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import type { AppUser } from '../types';
+import type { AppUser, TimesheetEntry, PaymentRun, WorkerPayment } from '../types';
 
 // ── Date helpers ────────────────────────────────────────────────────────────────
 
@@ -286,16 +286,414 @@ function DayRow({ date, label, entry, dayRate, cisRate, leads, onSave, onDelete,
   );
 }
 
+// ── Payments tab ─────────────────────────────────────────────────────────────
+
+type PayFilter = 'all' | 'due' | 'scheduled' | 'paid';
+type PayTab = 'runs' | 'balances';
+
+const STATUS_META: Record<string, { label: string; pill: string; icon: React.ReactNode }> = {
+  due:       { label: 'Due',       pill: 'bg-amber-100 text-amber-700 border-amber-200',   icon: <Clock size={11} /> },
+  scheduled: { label: 'Scheduled', pill: 'bg-blue-100 text-blue-700 border-blue-200',      icon: <CalendarCheck size={11} /> },
+  paid:      { label: 'Paid',      pill: 'bg-green-100 text-green-700 border-green-200',   icon: <CheckCircle2 size={11} /> },
+};
+
+interface LogPaymentModalProps {
+  user: AppUser;
+  onSave: (amount: number, date: string, notes: string) => void;
+  onClose: () => void;
+}
+
+function LogPaymentModal({ user, onSave, onClose }: LogPaymentModalProps) {
+  const today = toYMD(new Date());
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(today);
+  const [notes, setNotes] = useState('');
+
+  const save = () => {
+    const n = parseFloat(amount);
+    if (!n || n <= 0) return;
+    onSave(n, date, notes);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900">Log Payment — {user.name}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Amount paid (£)</label>
+            <input
+              type="number" min="0" step="0.01" value={amount}
+              onChange={e => setAmount(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              placeholder="e.g. 350"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
+            <input
+              type="date" value={date}
+              onChange={e => setDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Notes (optional)</label>
+            <input
+              type="text" value={notes}
+              onChange={e => setNotes(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              placeholder="e.g. Cash, bank transfer…"
+            />
+          </div>
+        </div>
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 text-sm font-medium py-2 rounded-xl hover:bg-gray-50 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={!amount || parseFloat(amount) <= 0}
+            className="flex-1 bg-orange-600 text-white text-sm font-medium py-2 rounded-xl hover:bg-orange-700 disabled:opacity-40 transition-colors"
+          >
+            Save Payment
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentsTab({ users, timesheetEntries, paymentRuns, updatePaymentStatus, workerPayments, addWorkerPayment, deleteWorkerPayment }: {
+  users: AppUser[];
+  timesheetEntries: TimesheetEntry[];
+  paymentRuns: PaymentRun[];
+  updatePaymentStatus: (userId: string, weekStart: string, status: PaymentRun['status']) => void;
+  workerPayments: WorkerPayment[];
+  addWorkerPayment: (userId: string, amount: number, date: string, notes?: string) => void;
+  deleteWorkerPayment: (id: string) => void;
+}) {
+  const [filter, setFilter] = useState<PayFilter>('all');
+  const [payTab, setPayTab] = useState<PayTab>('balances');
+  const [logPaymentUser, setLogPaymentUser] = useState<AppUser | null>(null);
+  const [expandedWorker, setExpandedWorker] = useState<string | null>(null);
+
+  const summaries = useMemo(() => {
+    const map = new Map<string, { userId: string; weekStart: string; entries: TimesheetEntry[] }>();
+    for (const entry of timesheetEntries) {
+      const d = new Date(entry.date + 'T00:00:00');
+      const ws = toYMD(getMonday(d));
+      const key = `${entry.userId}_${ws}`;
+      if (!map.has(key)) map.set(key, { userId: entry.userId, weekStart: ws, entries: [] });
+      map.get(key)!.entries.push(entry);
+    }
+    return Array.from(map.values()).map(({ userId, weekStart, entries }) => {
+      const user = users.find(u => u.id === userId);
+      const days = entries.reduce((s, e) => s + (e.type === 'full' ? 1 : 0.5), 0);
+      const gross = entries.reduce((s, e) => s + e.amount, 0);
+      const rate = user?.cisRate ?? 20;
+      const net = gross * (1 - rate / 100);
+      const run = paymentRuns.find(r => r.userId === userId && r.weekStart === weekStart);
+      const status = (run?.status ?? 'due') as 'due' | 'scheduled' | 'paid';
+      const mon = new Date(weekStart + 'T00:00:00');
+      const weekLabel = fmtRange(mon);
+      return { userId, weekStart, user, days, gross, net, rate, status, paidDate: run?.paidDate, weekLabel };
+    }).sort((a, b) => b.weekStart.localeCompare(a.weekStart) || (a.user?.name ?? '').localeCompare(b.user?.name ?? ''));
+  }, [users, timesheetEntries, paymentRuns]);
+
+  const workerBalances = useMemo(() => {
+    const workerIds = [...new Set(timesheetEntries.map(e => e.userId))];
+    return workerIds.map(userId => {
+      const user = users.find(u => u.id === userId);
+      const entries = timesheetEntries.filter(e => e.userId === userId);
+      const gross = entries.reduce((s, e) => s + e.amount, 0);
+      const rate = user?.cisRate ?? 20;
+      const earned = gross * (1 - rate / 100);
+      const paid = workerPayments.filter(p => p.userId === userId).reduce((s, p) => s + p.amount, 0);
+      const balance = earned - paid;
+      const payments = workerPayments.filter(p => p.userId === userId)
+        .sort((a, b) => b.date.localeCompare(a.date));
+      return { userId, user, earned, paid, balance, rate, gross, payments };
+    }).sort((a, b) => (a.user?.name ?? '').localeCompare(b.user?.name ?? ''));
+  }, [users, timesheetEntries, workerPayments]);
+
+  const filtered = filter === 'all' ? summaries : summaries.filter(s => s.status === filter);
+
+  const totals = useMemo(() => ({
+    due:       summaries.filter(s => s.status === 'due').reduce((t, s) => t + s.net, 0),
+    scheduled: summaries.filter(s => s.status === 'scheduled').reduce((t, s) => t + s.net, 0),
+    paid:      summaries.filter(s => s.status === 'paid').reduce((t, s) => t + s.net, 0),
+  }), [summaries]);
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tab toggle */}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+        <button
+          onClick={() => setPayTab('balances')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-lg transition-colors ${
+            payTab === 'balances' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Wallet size={14} /> Worker Balances
+        </button>
+        <button
+          onClick={() => setPayTab('runs')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-lg transition-colors ${
+            payTab === 'runs' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <CalendarCheck size={14} /> Weekly Runs
+        </button>
+      </div>
+
+      {/* ── Worker Balances view ── */}
+      {payTab === 'balances' && (
+        <>
+          {workerBalances.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+              <Wallet size={32} className="mx-auto text-gray-200 mb-2" />
+              <p className="text-sm text-gray-400">No worker balances yet</p>
+              <p className="text-xs text-gray-300 mt-1">Balances appear once timesheet entries are logged</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {workerBalances.map(w => {
+                const initials = (w.user?.name ?? '?').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+                const isExpanded = expandedWorker === w.userId;
+                return (
+                  <div key={w.userId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    {/* Main row */}
+                    <div className="flex items-center gap-3 px-4 py-3.5">
+                      <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center text-orange-700 font-bold text-sm shrink-0">
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-gray-800">{w.user?.name ?? 'Unknown'}</div>
+                        <div className="text-[11px] text-gray-400">
+                          £{w.gross.toFixed(0)} gross · CIS {w.rate}% · £{w.earned.toFixed(0)} net earned
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 mr-2">
+                        <div className="text-xs text-gray-400">Paid: £{w.paid.toFixed(0)}</div>
+                        <div className={`text-base font-bold ${w.balance > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                          {w.balance > 0 ? `Owes £${w.balance.toFixed(0)}` : 'All paid'}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5 shrink-0">
+                        <button
+                          onClick={() => w.user && setLogPaymentUser(w.user)}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-white bg-orange-600 hover:bg-orange-700 px-2.5 py-1 rounded-lg transition-colors"
+                        >
+                          <PoundSterling size={11} /> Pay
+                        </button>
+                        {w.payments.length > 0 && (
+                          <button
+                            onClick={() => setExpandedWorker(isExpanded ? null : w.userId)}
+                            className="text-[11px] font-semibold text-gray-400 hover:text-gray-600 text-center"
+                          >
+                            {isExpanded ? 'Hide' : `${w.payments.length} payment${w.payments.length !== 1 ? 's' : ''}`}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Balance bar */}
+                    {w.earned > 0 && (
+                      <div className="px-4 pb-3">
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-green-500 rounded-full transition-all"
+                            style={{ width: `${Math.min(100, (w.paid / w.earned) * 100).toFixed(1)}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                          <span>£{w.paid.toFixed(0)} paid</span>
+                          <span>£{w.earned.toFixed(0)} total</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Payment history */}
+                    {isExpanded && w.payments.length > 0 && (
+                      <div className="border-t border-gray-50">
+                        {w.payments.map(p => (
+                          <div key={p.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-0">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-semibold text-green-700">£{p.amount.toFixed(0)}</div>
+                              <div className="text-[11px] text-gray-400">
+                                {new Date(p.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                {p.notes ? ` · ${p.notes}` : ''}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => { if (window.confirm('Delete this payment record?')) deleteWorkerPayment(p.id); }}
+                              className="text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Weekly Runs view ── */}
+      {payTab === 'runs' && (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-3">
+            {(['due', 'scheduled', 'paid'] as const).map(s => {
+              const m = STATUS_META[s];
+              const amt = totals[s];
+              return (
+                <button key={s} onClick={() => setFilter(f => f === s ? 'all' : s)}
+                  className={`rounded-2xl p-3 text-center border transition-all ${
+                    filter === s ? 'ring-2 ring-orange-500' : ''
+                  } ${
+                    s === 'due' ? 'bg-amber-50 border-amber-100' :
+                    s === 'scheduled' ? 'bg-blue-50 border-blue-100' :
+                    'bg-green-50 border-green-100'
+                  }`}
+                >
+                  <div className={`text-xs font-semibold uppercase tracking-wide mb-1 ${
+                    s === 'due' ? 'text-amber-600' : s === 'scheduled' ? 'text-blue-600' : 'text-green-700'
+                  }`}>{m.label}</div>
+                  <div className={`text-lg font-bold ${
+                    s === 'due' ? 'text-amber-700' : s === 'scheduled' ? 'text-blue-700' : 'text-green-700'
+                  }`}>£{amt.toFixed(0)}</div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">
+                    {summaries.filter(x => x.status === s).length} payment{summaries.filter(x => x.status === s).length !== 1 ? 's' : ''}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Filter pills */}
+          <div className="flex gap-1.5">
+            {(['all', 'due', 'scheduled', 'paid'] as PayFilter[]).map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors capitalize ${
+                  filter === f ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}>
+                {f === 'all' ? 'All' : STATUS_META[f].label}
+                {f !== 'all' && <span className="ml-1 opacity-70">({summaries.filter(s => s.status === f).length})</span>}
+              </button>
+            ))}
+          </div>
+
+          {/* Payment rows */}
+          {filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+              <Banknote size={32} className="mx-auto text-gray-200 mb-2" />
+              <p className="text-sm text-gray-400">No payments here yet</p>
+              <p className="text-xs text-gray-300 mt-1">Payments appear once timesheet entries are logged</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              {filtered.map((s, i) => {
+                const meta = STATUS_META[s.status];
+                const initials = (s.user?.name ?? '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                return (
+                  <div key={`${s.userId}_${s.weekStart}`}
+                    className={`flex items-center gap-3 px-4 py-3.5 ${i < filtered.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                    <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center text-orange-700 font-bold text-sm shrink-0">
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-gray-800 truncate">{s.user?.name ?? 'Unknown'}</div>
+                      <div className="text-[11px] text-gray-400">{s.weekLabel}</div>
+                      <div className="text-[11px] text-gray-400">{s.days} {s.days === 1 ? 'day' : 'days'}</div>
+                    </div>
+                    <div className="text-right shrink-0 mr-1 hidden sm:block">
+                      <div className="text-xs text-gray-400">£{s.gross.toFixed(0)} gross</div>
+                      <div className="text-xs text-red-400">−£{(s.gross - s.net).toFixed(0)} CIS {s.rate}%</div>
+                      <div className="text-sm font-bold text-gray-800">£{s.net.toFixed(0)} net</div>
+                    </div>
+                    <div className="shrink-0 flex flex-col items-end gap-1.5 min-w-[90px]">
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${meta.pill}`}>
+                        {meta.icon} {meta.label}
+                      </span>
+                      {s.status === 'due' && (
+                        <button
+                          onClick={() => updatePaymentStatus(s.userId, s.weekStart, 'scheduled')}
+                          className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition-colors"
+                        >
+                          Schedule
+                        </button>
+                      )}
+                      {s.status === 'scheduled' && (
+                        <button
+                          onClick={() => updatePaymentStatus(s.userId, s.weekStart, 'paid')}
+                          className="text-[11px] font-semibold text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-md transition-colors"
+                        >
+                          Mark Paid
+                        </button>
+                      )}
+                      {s.status === 'paid' && s.paidDate && (
+                        <span className="text-[10px] text-gray-400">
+                          {new Date(s.paidDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {logPaymentUser && (
+        <LogPaymentModal
+          user={logPaymentUser}
+          onSave={(amount, date, notes) => addWorkerPayment(logPaymentUser.id, amount, date, notes || undefined)}
+          onClose={() => setLogPaymentUser(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── Main page ───────────────────────────────────────────────────────────────────
 
 export default function TimesheetPage() {
-  const { users, currentUserId, leads, timesheetEntries, upsertTimesheetEntry, deleteTimesheetEntry } = useStore();
+  const { users, currentUserId, leads, timesheetEntries, paymentRuns, upsertTimesheetEntry, deleteTimesheetEntry, updatePaymentStatus, addCasualWorker, removeCasualWorker, workerPayments, addWorkerPayment, deleteWorkerPayment } = useStore();
   const currentUser = users.find(u => u.id === currentUserId)!;
   const isAdmin = currentUser?.role === 'admin';
+
+  const [tab, setTab] = useState<'timesheet' | 'payments'>('timesheet');
 
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [viewUserId, setViewUserId] = useState(currentUserId ?? '');
   const [showProfile, setShowProfile] = useState(false);
+  const [showAddCasual, setShowAddCasual] = useState(false);
+  const [casualName, setCasualName] = useState('');
+  const [casualDayRate, setCasualDayRate] = useState('');
+  const [casualCisRate, setCasualCisRate] = useState<20 | 30>(20);
+
+  const casualWorkers = useMemo(() => users.filter(u => u.role === 'casual'), [users]);
+
+  const saveCasualWorker = () => {
+    if (!casualName.trim() || !casualDayRate) return;
+    addCasualWorker(casualName.trim(), parseFloat(casualDayRate), casualCisRate);
+    setCasualName('');
+    setCasualDayRate('');
+    setCasualCisRate(20);
+    setShowAddCasual(false);
+  };
 
   const viewUser = users.find(u => u.id === viewUserId) ?? currentUser;
   const dayRate = viewUser?.dayRate ?? 0;
@@ -321,7 +719,7 @@ export default function TimesheetPage() {
 
   const adminSummary = useMemo(() => {
     if (!isAdmin) return [];
-    return users.map(u => {
+    return users.filter(u => u.role !== 'casual').map(u => {
       const entries = timesheetEntries.filter(e => e.userId === u.id && weekDays.some(d => d.date === e.date));
       const days = entries.reduce((s, e) => s + (e.type === 'full' ? 1 : 0.5), 0);
       const gross = entries.reduce((s, e) => s + e.amount, 0);
@@ -346,16 +744,60 @@ export default function TimesheetPage() {
               <p className="text-xs text-gray-500">Track your daily hours</p>
             </div>
           </div>
-          {isAdmin && (
+          {isAdmin && tab === 'timesheet' && (
             <select
               value={viewUserId}
               onChange={e => setViewUserId(e.target.value)}
               className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
-              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              <optgroup label="Team">
+                {users.filter(u => u.role !== 'casual').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </optgroup>
+              {casualWorkers.length > 0 && (
+                <optgroup label="Casual Workers">
+                  {casualWorkers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </optgroup>
+              )}
             </select>
           )}
         </div>
+
+        {/* Tab switcher — admin only */}
+        {isAdmin && (
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+            <button
+              onClick={() => setTab('timesheet')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-lg transition-colors ${
+                tab === 'timesheet' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Clock size={14} /> Timesheet
+            </button>
+            <button
+              onClick={() => setTab('payments')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-lg transition-colors ${
+                tab === 'payments' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Banknote size={14} /> Payments
+            </button>
+          </div>
+        )}
+
+        {tab === 'payments' && isAdmin && (
+          <PaymentsTab
+            users={users}
+            timesheetEntries={timesheetEntries}
+            paymentRuns={paymentRuns}
+            updatePaymentStatus={updatePaymentStatus}
+            workerPayments={workerPayments}
+            addWorkerPayment={addWorkerPayment}
+            deleteWorkerPayment={deleteWorkerPayment}
+          />
+        )}
+
+        {/* Timesheet content */}
+        {tab === 'timesheet' && <>
 
         {/* Profile card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
@@ -491,10 +933,134 @@ export default function TimesheetPage() {
             </div>
           </div>
         )}
+
+        {/* Casual day workers — admin only */}
+        {isAdmin && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div className="text-sm font-semibold text-gray-700">Casual Day Workers</div>
+              <button
+                onClick={() => setShowAddCasual(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors"
+              >
+                <UserPlus size={13} /> Add worker
+              </button>
+            </div>
+            {casualWorkers.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-gray-400 italic">
+                No casual workers yet — add someone who does a day here and there
+              </div>
+            ) : (
+              casualWorkers.map(worker => {
+                const wEntries = timesheetEntries.filter(e => e.userId === worker.id && weekDays.some(d => d.date === e.date));
+                const wDays = wEntries.reduce((s, e) => s + (e.type === 'full' ? 1 : 0.5), 0);
+                const wGross = wEntries.reduce((s, e) => s + e.amount, 0);
+                const wRate = worker.cisRate ?? 20;
+                const wNet = wGross * (1 - wRate / 100);
+                return (
+                  <div key={worker.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0">
+                    <div className="flex-1 min-w-0">
+                      <button
+                        onClick={() => setViewUserId(worker.id)}
+                        className="text-sm font-medium text-gray-800 hover:text-orange-600 transition-colors text-left"
+                      >
+                        {worker.name}
+                      </button>
+                      <div className="text-[11px] text-gray-400">
+                        {worker.dayRate ? `£${worker.dayRate}/day` : 'No rate set'}
+                        {wDays > 0 && ` · ${wDays} ${wDays === 1 ? 'day' : 'days'} this week`}
+                      </div>
+                    </div>
+                    {wDays > 0 && (
+                      <div className="text-right shrink-0 mr-1">
+                        <div className="text-xs text-gray-500">£{wGross.toFixed(0)} gross</div>
+                        <div className="text-sm font-bold text-green-700">£{wNet.toFixed(0)} net</div>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => { if (window.confirm(`Remove ${worker.name} and their timesheet entries?`)) removeCasualWorker(worker.id); }}
+                      className="text-gray-300 hover:text-red-500 shrink-0 transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        </> /* end tab === 'timesheet' */}
       </div>
 
       {showProfile && viewUser && (
         <ProfileModal user={viewUser} onClose={() => setShowProfile(false)} />
+      )}
+
+      {showAddCasual && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-gray-900">Add Casual Worker</h2>
+              <button onClick={() => setShowAddCasual(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+                <input
+                  type="text" value={casualName}
+                  onChange={e => setCasualName(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="e.g. Dave Smith"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Day Rate (£ gross)</label>
+                  <input
+                    type="number" min="0" step="1" value={casualDayRate}
+                    onChange={e => setCasualDayRate(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    placeholder="e.g. 150"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">CIS Deduction Rate</label>
+                  <div className="flex rounded-lg overflow-hidden border border-gray-200 h-[38px]">
+                    <button type="button" onClick={() => setCasualCisRate(20)} className={`flex-1 text-sm font-medium transition-colors ${casualCisRate === 20 ? 'bg-orange-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>20%</button>
+                    <button type="button" onClick={() => setCasualCisRate(30)} className={`flex-1 text-sm font-medium transition-colors ${casualCisRate === 30 ? 'bg-orange-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>30%</button>
+                  </div>
+                </div>
+              </div>
+              {casualName && casualDayRate && (
+                <div className="bg-gray-50 rounded-xl px-4 py-3 flex justify-between text-sm">
+                  <div className="space-y-0.5">
+                    <div className="text-gray-500">Gross (full day)</div>
+                    <div className="text-gray-500">CIS ({casualCisRate}%)</div>
+                    <div className="font-semibold text-gray-800">Net take-home</div>
+                  </div>
+                  <div className="space-y-0.5 text-right">
+                    <div className="text-gray-700">£{parseFloat(casualDayRate || '0').toFixed(0)}</div>
+                    <div className="text-red-500">−£{(parseFloat(casualDayRate || '0') * casualCisRate / 100).toFixed(0)}</div>
+                    <div className="font-semibold text-green-700">£{(parseFloat(casualDayRate || '0') * (1 - casualCisRate / 100)).toFixed(0)}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+              <button onClick={() => setShowAddCasual(false)} className="flex-1 border border-gray-200 text-gray-600 text-sm font-medium py-2 rounded-xl hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={saveCasualWorker}
+                disabled={!casualName.trim() || !casualDayRate}
+                className="flex-1 bg-orange-600 text-white text-sm font-medium py-2 rounded-xl hover:bg-orange-700 disabled:opacity-40 transition-colors"
+              >
+                Add Worker
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

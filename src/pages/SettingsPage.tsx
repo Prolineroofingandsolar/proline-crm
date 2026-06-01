@@ -1,4 +1,5 @@
 ﻿import { useState } from 'react';
+import { useEffect } from 'react';
 import { Save, User, Building2, Bell, Shield, Palette, Trash2, Plus, Key, LogOut, X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
@@ -6,7 +7,7 @@ type AddUserForm = { name: string; username: string; password: string; confirm: 
 type ChangePwForm = { id: string; newPw: string; confirm: string };
 
 export default function SettingsPage() {
-  const { leads, users, currentUserId, addUser, deleteUser, changePassword, logout } = useStore();
+  const { leads, users, currentUserId, addUser, deleteUser, changePassword, logout, enablePushNotifications, disablePushNotifications, pushEnabled, pushPreferences, setPushPreference } = useStore();
 
   const [business, setBusiness] = useState({ name: 'Proline Roofing & Solar Ltd', phone: '01234 567890', email: 'info@proline.co.uk', address: 'Birmingham, West Midlands', vat: 'GB123456789' });
   const [saved, setSaved] = useState(false);
@@ -21,6 +22,27 @@ export default function SettingsPage() {
   const [changePwLoading, setChangePwLoading] = useState(false);
 
   const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+
+  const [notifPermission, setNotifPermission] = useState<string>(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+    return Notification.permission;
+  });
+  const [notifLoading, setNotifLoading] = useState(false);
+
+  useEffect(() => {
+    if ('Notification' in window) setNotifPermission(Notification.permission);
+  }, []);
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+
+  const handleEnableNotifications = async () => {
+    setNotifLoading(true);
+    await enablePushNotifications();
+    if ('Notification' in window) setNotifPermission(Notification.permission);
+    setNotifLoading(false);
+  };
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +122,7 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="p-5 space-y-3">
-          {users.map(u => (
+          {users.filter(u => u.role !== 'casual').map(u => (
             <div key={u.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${u.id === currentUserId ? 'border-orange-200 bg-orange-50' : 'border-gray-100 hover:border-gray-200'}`}>
               <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-700 font-bold flex items-center justify-center shrink-0 text-sm">
                 {u.name[0].toUpperCase()}
@@ -229,21 +251,79 @@ export default function SettingsPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100">
           <Bell size={18} className="text-orange-500" />
-          <h2 className="font-bold text-gray-800">Notifications</h2>
+          <h2 className="font-bold text-gray-800">Push Notifications</h2>
         </div>
-        <div className="p-5 space-y-3">
-          {[
-            'New lead added',
-            'Survey reminder (24h before)',
-            'Job status changed',
-            'Payment received',
-            'Task overdue',
-          ].map(item => (
-            <label key={item} className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm text-gray-700">{item}</span>
-              <input type="checkbox" defaultChecked className="w-4 h-4 accent-orange-600" />
-            </label>
-          ))}
+        <div className="p-5 space-y-4">
+          {isIOS && !isStandalone ? (
+            <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 space-y-1">
+              <p className="text-sm font-semibold text-orange-800">Install the app first</p>
+              <p className="text-sm text-orange-700">
+                Open this page in Safari, tap the <strong>Share</strong> button, then <strong>Add to Home Screen</strong>. Reopen from your home screen and come back here to enable notifications.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-gray-500">
+                Get notified on this device for key events. Each team member enables notifications on their own phone.
+              </p>
+              <div className="space-y-1">
+                {([
+                  { key: 'newLead',        label: 'New lead added' },
+                  { key: 'surveyBooked',   label: 'Survey booked' },
+                  { key: 'jobWon',         label: 'Job won' },
+                  { key: 'jobStarted',     label: 'Job started' },
+                  { key: 'jobCompleted',   label: 'Job completed' },
+                  { key: 'paymentReceived', label: 'Payment received' },
+                ] as const).map(({ key, label }) => (
+                  <div key={key} className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-gray-50">
+                    <span className={`text-sm ${pushEnabled ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
+                    <button
+                      role="switch"
+                      aria-checked={pushPreferences[key]}
+                      disabled={!pushEnabled}
+                      onClick={() => setPushPreference(key, !pushPreferences[key])}
+                      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none ${
+                        !pushEnabled ? 'cursor-not-allowed opacity-40' :
+                        pushPreferences[key] ? 'bg-orange-500' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${pushPreferences[key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <Bell size={15} className={pushEnabled ? 'text-orange-500' : 'text-gray-400'} />
+                  <span className="text-sm font-medium text-gray-700">
+                    {notifPermission === 'denied' ? 'Blocked in device Settings'
+                      : notifPermission === 'unsupported' ? 'Not supported on this browser'
+                      : pushEnabled ? 'Notifications on'
+                      : notifLoading ? 'Enabling…'
+                      : 'Notifications off'}
+                  </span>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={pushEnabled}
+                  disabled={notifPermission === 'denied' || notifPermission === 'unsupported' || notifLoading}
+                  onClick={pushEnabled ? disablePushNotifications : handleEnableNotifications}
+                  className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none ${
+                    notifPermission === 'denied' || notifPermission === 'unsupported' ? 'cursor-not-allowed opacity-40 bg-gray-200'
+                    : pushEnabled ? 'bg-orange-500'
+                    : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${pushEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+              {notifPermission === 'denied' && (
+                <p className="text-xs text-red-400">
+                  Go to Settings → {isIOS ? 'Safari → ProLine' : 'your browser'} → Notifications → Allow.
+                </p>
+              )}
+            </>
+          )}
         </div>
       </div>
 
