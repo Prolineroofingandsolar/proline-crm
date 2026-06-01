@@ -115,6 +115,17 @@ create table if not exists payment_runs (
 
 alter table payment_runs disable row level security;
 
+create table if not exists worker_payments (
+  id text primary key,
+  user_id text not null,
+  amount numeric not null default 0,
+  date text not null default '',
+  notes text,
+  created_at text not null default ''
+);
+
+alter table worker_payments disable row level security;
+
 -- Task assignment migration
 alter table general_tasks add column if not exists assigned_to jsonb not null default '[]';
 

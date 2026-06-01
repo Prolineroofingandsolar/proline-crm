@@ -95,6 +95,15 @@ export interface PaymentRun {
   createdAt: string;
 }
 
+export interface WorkerPayment {
+  id: string;
+  userId: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Contact {
   id: string;
   name: string;

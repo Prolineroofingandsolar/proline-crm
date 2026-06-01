@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Lead, Contact, AppUser, GeneralTask, TimesheetEntry, PaymentRun } from '../types';
+import type { Lead, Contact, AppUser, GeneralTask, TimesheetEntry, PaymentRun, WorkerPayment } from '../types';
 
 export const supabase = createClient(
   'https://qzvdzzvkocmulcfujyea.supabase.co',
@@ -193,6 +193,30 @@ export function paymentRunToDb(p: PaymentRun): Record<string, unknown> {
     week_start: p.weekStart,
     status: p.status,
     paid_date: p.paidDate ?? null,
+    notes: p.notes ?? null,
+    created_at: p.createdAt,
+  };
+}
+
+// ── WorkerPayment ─────────────────────────────────────────────────────────────
+
+export function dbToWorkerPayment(r: Record<string, unknown>): WorkerPayment {
+  return {
+    id: r.id as string,
+    userId: r.user_id as string,
+    amount: r.amount as number,
+    date: r.date as string,
+    notes: (r.notes as string) ?? undefined,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function workerPaymentToDb(p: WorkerPayment): Record<string, unknown> {
+  return {
+    id: p.id,
+    user_id: p.userId,
+    amount: p.amount,
+    date: p.date,
     notes: p.notes ?? null,
     created_at: p.createdAt,
   };

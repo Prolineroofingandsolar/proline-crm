@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry, PaymentRun } from '../types';
+import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry, PaymentRun, WorkerPayment } from '../types';
 import { generateId } from '../utils/helpers';
 import { hashPassword } from '../utils/crypto';
 import { subscribeToPush } from '../utils/push';
@@ -12,6 +12,7 @@ import {
   generalTaskToDb, dbToGeneralTask,
   timesheetEntryToDb, dbToTimesheetEntry,
   paymentRunToDb, dbToPaymentRun,
+  workerPaymentToDb, dbToWorkerPayment,
 } from '../lib/supabase';
 
 const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
@@ -104,6 +105,10 @@ interface Store {
   paymentRuns: PaymentRun[];
   updatePaymentStatus: (userId: string, weekStart: string, status: PaymentRun['status']) => void;
 
+  workerPayments: WorkerPayment[];
+  addWorkerPayment: (userId: string, amount: number, date: string, notes?: string) => void;
+  deleteWorkerPayment: (id: string) => void;
+
   setCurrentPage: (page: string) => void;
   setSelectedId: (id: string | null) => void;
   setSearchQuery: (q: string) => void;
@@ -172,6 +177,7 @@ export const useStore = create<Store>()(
       generalTasks: [],
       timesheetEntries: [],
       paymentRuns: [],
+      workerPayments: [],
       apiKey: '',
       pushEnabled: false,
       pushPreferences: {
@@ -189,13 +195,14 @@ export const useStore = create<Store>()(
 
       // ── Load all data from Supabase ─────────────────────────────────────────
       loadData: async () => {
-        const [leadsRes, usersRes, contactsRes, tasksRes, timesheetRes, paymentRunsRes] = await Promise.all([
+        const [leadsRes, usersRes, contactsRes, tasksRes, timesheetRes, paymentRunsRes, workerPaymentsRes] = await Promise.all([
           supabase.from('leads').select('*').order('updated_at', { ascending: false }),
           supabase.from('app_users').select('*'),
           supabase.from('contacts').select('*').order('created_at', { ascending: false }),
           supabase.from('general_tasks').select('*').order('created_at', { ascending: false }),
           supabase.from('timesheet_entries').select('*').order('date', { ascending: false }),
           supabase.from('payment_runs').select('*'),
+          supabase.from('worker_payments').select('*').order('date', { ascending: false }),
         ]);
 
         if (leadsRes.error || usersRes.error) {
@@ -211,6 +218,7 @@ export const useStore = create<Store>()(
         const generalTasks = (tasksRes.data ?? []).map(r => dbToGeneralTask(r as Record<string, unknown>));
         const timesheetEntries = (timesheetRes.data ?? []).map(r => dbToTimesheetEntry(r as Record<string, unknown>));
         const paymentRuns = (paymentRunsRes.data ?? []).map(r => dbToPaymentRun(r as Record<string, unknown>));
+        const workerPayments = (workerPaymentsRes.data ?? []).map(r => dbToWorkerPayment(r as Record<string, unknown>));
 
         // Set job counter to 1 above the highest existing job number
         const maxNum = leads.reduce((max, l) => {
@@ -235,7 +243,7 @@ export const useStore = create<Store>()(
         }
         const allContacts = [...contacts, ...missingContacts];
 
-        set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, paymentRuns, isLoaded: true });
+        set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, paymentRuns, workerPayments, isLoaded: true });
 
         // Real-time: keep leads in sync across devices/tabs without refresh
         supabase
@@ -326,7 +334,12 @@ export const useStore = create<Store>()(
         if (updates.bankName !== undefined) dbUpdates.bank_name = updates.bankName;
         if (updates.bankAccountNumber !== undefined) dbUpdates.bank_account_number = updates.bankAccountNumber;
         if (updates.bankSortCode !== undefined) dbUpdates.bank_sort_code = updates.bankSortCode;
-        supabase.from('app_users').update(dbUpdates).eq('id', id);
+        supabase.from('app_users').update(dbUpdates).eq('id', id).then(({ error }) => {
+          if (error) {
+            console.error('updateUserProfile error:', error);
+            get().showToast('Profile save failed — check your connection', 'error');
+          }
+        });
       },
 
       upsertTimesheetEntry: (data) => {
@@ -380,6 +393,25 @@ export const useStore = create<Store>()(
             : [...s.paymentRuns, run],
         }));
         supabase.from('payment_runs').upsert(paymentRunToDb(run), { onConflict: 'user_id,week_start' });
+      },
+
+      addWorkerPayment: (userId, amount, date, notes) => {
+        const now = new Date().toISOString().split('T')[0];
+        const payment: WorkerPayment = { id: generateId(), userId, amount, date, notes, createdAt: now };
+        set(s => ({ workerPayments: [payment, ...s.workerPayments] }));
+        supabase.from('worker_payments').insert(workerPaymentToDb(payment)).then(({ error }) => {
+          if (error) {
+            console.error('addWorkerPayment error:', error);
+            get().showToast('Payment save failed — check your connection', 'error');
+          }
+        });
+      },
+
+      deleteWorkerPayment: (id) => {
+        set(s => ({ workerPayments: s.workerPayments.filter(p => p.id !== id) }));
+        supabase.from('worker_payments').delete().eq('id', id).then(({ error }) => {
+          if (error) console.error('deleteWorkerPayment error:', error);
+        });
       },
 
       enablePushNotifications: async () => {
