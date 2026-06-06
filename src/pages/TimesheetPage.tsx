@@ -45,7 +45,7 @@ interface ProfileModalProps {
 }
 
 function ProfileModal({ user, onClose }: ProfileModalProps) {
-  const { updateUserProfile, showToast } = useStore();
+  const { updateUserProfile } = useStore();
   const [dayRate, setDayRate] = useState(String(user.dayRate ?? ''));
   const [cisRate, setCisRate] = useState<20 | 30>(user.cisRate ?? 20);
   const [utr, setUtr] = useState(user.utrNumber ?? '');
@@ -62,7 +62,6 @@ function ProfileModal({ user, onClose }: ProfileModalProps) {
       bankAccountNumber: account || undefined,
       bankSortCode: sortCode || undefined,
     });
-    showToast('Profile updated');
     onClose();
   };
 

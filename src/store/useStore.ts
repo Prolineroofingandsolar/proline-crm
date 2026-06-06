@@ -326,6 +326,7 @@ export const useStore = create<Store>()(
       },
 
       updateUserProfile: (id, updates) => {
+        const originalUsers = get().users;
         set(s => ({ users: s.users.map(u => u.id === id ? { ...u, ...updates } : u) }));
         const dbUpdates: Record<string, unknown> = {};
         if (updates.dayRate !== undefined) dbUpdates.day_rate = updates.dayRate;
@@ -337,7 +338,10 @@ export const useStore = create<Store>()(
         supabase.from('app_users').update(dbUpdates).eq('id', id).then(({ error }) => {
           if (error) {
             console.error('updateUserProfile error:', error);
+            set({ users: originalUsers });
             get().showToast('Profile save failed — check your connection', 'error');
+          } else {
+            get().showToast('Profile updated');
           }
         });
       },
