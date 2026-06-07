@@ -547,29 +547,40 @@ export default function BankingPage() {
       const tok = await getValidToken();
       if (!tok) { setConnected(false); setLoading(false); return; }
       const headers = { Authorization: `Bearer ${tok}` };
-      const [balRes, txnRes] = await Promise.all([
+
+      // Fetch in two passes: this month + last month, merge and deduplicate
+      const now = new Date();
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+
+      const [balRes, txnRes1, txnRes2] = await Promise.all([
         fetch(`https://api.monzo.com/balance?account_id=${MONZO_ACCOUNT_ID}`, { headers }),
-        fetch(`https://api.monzo.com/transactions?account_id=${MONZO_ACCOUNT_ID}&expand[]=merchant&limit=100`, { headers }),
+        fetch(`https://api.monzo.com/transactions?account_id=${MONZO_ACCOUNT_ID}&expand[]=merchant&since=${thisMonthStart}&limit=100`, { headers }),
+        fetch(`https://api.monzo.com/transactions?account_id=${MONZO_ACCOUNT_ID}&expand[]=merchant&since=${lastMonthStart}&limit=100`, { headers }),
       ]);
 
-      if (balRes.status === 401 || txnRes.status === 401) {
+      if (balRes.status === 401 || txnRes1.status === 401) {
         setConnected(false);
         setError('Session expired — please reconnect your Monzo account.');
         setLoading(false);
         return;
       }
-      if (!balRes.ok || !txnRes.ok) {
-        const errBody = await (balRes.ok ? txnRes : balRes).json().catch(() => ({}));
+      if (!balRes.ok) {
+        const errBody = await balRes.json().catch(() => ({}));
         setError(errBody.message ?? 'Failed to load Monzo data.');
         setLoading(false);
         return;
       }
 
       const balData = await balRes.json();
-      const txnData = await txnRes.json();
+      const [txnData1, txnData2] = await Promise.all([txnRes1.json(), txnRes2.json()]);
       setBalance(balData);
-      const sorted = (txnData.transactions as MonzoTransaction[])
-        .filter(t => !t.decline_reason)
+
+      // Merge both months, deduplicate by id, sort newest first
+      const allTxns = [...(txnData1.transactions ?? []), ...(txnData2.transactions ?? [])] as MonzoTransaction[];
+      const seen = new Set<string>();
+      const sorted = allTxns
+        .filter(t => { if (t.decline_reason || seen.has(t.id)) return false; seen.add(t.id); return true; })
         .sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime());
       setTransactions(sorted);
       setLastFetched(new Date());
