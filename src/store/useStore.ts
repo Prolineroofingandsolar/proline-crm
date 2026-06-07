@@ -108,6 +108,7 @@ interface Store {
   workerPayments: WorkerPayment[];
   addWorkerPayment: (userId: string, amount: number, date: string, notes?: string) => void;
   deleteWorkerPayment: (id: string) => void;
+  linkMonzoTransaction: (paymentId: string, monzoTransactionId: string | null) => void;
 
   setCurrentPage: (page: string) => void;
   setSelectedId: (id: string | null) => void;
@@ -413,6 +414,18 @@ export const useStore = create<Store>()(
         supabase.from('worker_payments').delete().eq('id', id).then(({ error }) => {
           if (error) console.error('deleteWorkerPayment error:', error);
         });
+      },
+
+      linkMonzoTransaction: (paymentId, monzoTransactionId) => {
+        set(s => ({
+          workerPayments: s.workerPayments.map(p =>
+            p.id === paymentId ? { ...p, monzoTransactionId: monzoTransactionId ?? undefined } : p
+          ),
+        }));
+        supabase.from('worker_payments')
+          .update({ monzo_transaction_id: monzoTransactionId })
+          .eq('id', paymentId)
+          .then(({ error }) => { if (error) console.error('linkMonzoTransaction error:', error); });
       },
 
       enablePushNotifications: async () => {

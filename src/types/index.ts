@@ -102,6 +102,7 @@ export interface WorkerPayment {
   date: string; // YYYY-MM-DD
   notes?: string;
   createdAt: string;
+  monzoTransactionId?: string;
 }
 
 export interface Contact {

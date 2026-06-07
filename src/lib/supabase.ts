@@ -208,6 +208,7 @@ export function dbToWorkerPayment(r: Record<string, unknown>): WorkerPayment {
     date: r.date as string,
     notes: (r.notes as string) ?? undefined,
     createdAt: r.created_at as string,
+    monzoTransactionId: (r.monzo_transaction_id as string) ?? undefined,
   };
 }
 
@@ -219,6 +220,7 @@ export function workerPaymentToDb(p: WorkerPayment): Record<string, unknown> {
     date: p.date,
     notes: p.notes ?? null,
     created_at: p.createdAt,
+    monzo_transaction_id: p.monzoTransactionId ?? null,
   };
 }
 

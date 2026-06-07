@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, Settings, X, TrendingUp, TrendingDown, Banknote, ArrowDownLeft, ArrowUpRight, AlertCircle, Receipt, Camera, Upload, Check, Loader2, Eye, Trash2 } from 'lucide-react';
+import { RefreshCw, Settings, X, TrendingUp, TrendingDown, Banknote, ArrowDownLeft, ArrowUpRight, AlertCircle, Receipt, Camera, Upload, Check, Loader2, Eye, Trash2, Link2, Link2Off, CheckCircle2, CircleDashed, ChevronDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useStore } from '../store/useStore';
 
 const MONZO_ACCOUNT_ID = 'acc_0000AxBsrpiHPlsAMA5IId';
 const TOKEN_KEY = 'monzo_access_token';
@@ -22,6 +23,7 @@ interface MonzoTransaction {
   amount: number;
   currency: string;
   merchant: { name: string; logo: string | null; category: string } | null;
+  counterparty?: { name?: string; account_number?: string; sort_code?: string; user_id?: string };
   category: string;
   notes: string;
   decline_reason?: string;
@@ -336,6 +338,202 @@ function ReceiptModal({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+// ── Reconcile tab ─────────────────────────────────────────────────────────────
+
+function normaliseSort(s?: string) {
+  return (s ?? '').replace(/[^0-9]/g, '');
+}
+
+function daysApart(a: string, b: string) {
+  return Math.abs((new Date(a).getTime() - new Date(b).getTime()) / 86400000);
+}
+
+type MatchStrength = 'exact' | 'fuzzy' | null;
+
+function matchStrength(
+  txn: MonzoTransaction,
+  payment: { amount: number; date: string; userId: string },
+  worker: { bankAccountNumber?: string; bankSortCode?: string } | undefined,
+): MatchStrength {
+  const txnPounds = Math.abs(txn.amount) / 100;
+  const amountMatch = Math.abs(txnPounds - payment.amount) < 0.01;
+  const dateMatch = daysApart(txn.created, payment.date) <= 3;
+
+  if (worker?.bankAccountNumber && txn.counterparty?.account_number) {
+    const accMatch = txn.counterparty.account_number === worker.bankAccountNumber;
+    const sortMatch = normaliseSort(txn.counterparty.sort_code) === normaliseSort(worker.bankSortCode);
+    if (accMatch && sortMatch && amountMatch) return 'exact';
+  }
+  if (amountMatch && dateMatch) return 'fuzzy';
+  return null;
+}
+
+interface ReconcileRowProps {
+  txn: MonzoTransaction;
+  linkedPayment: { id: string; amount: number; date: string; userId: string; workerName: string } | null;
+  suggestions: { id: string; amount: number; date: string; userId: string; workerName: string; strength: MatchStrength }[];
+  onLink: (paymentId: string) => void;
+  onUnlink: () => void;
+}
+
+function ReconcileRow({ txn, linkedPayment, suggestions, onLink, onUnlink }: ReconcileRowProps) {
+  const [open, setOpen] = useState(false);
+  const name = txn.counterparty?.name ?? txn.merchant?.name ?? txn.description;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3">
+        {/* Status icon */}
+        <div className="shrink-0">
+          {linkedPayment
+            ? <CheckCircle2 size={18} className="text-emerald-500" />
+            : <CircleDashed size={18} className="text-gray-300" />
+          }
+        </div>
+
+        {/* Details */}
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium text-gray-900 truncate">{name}</div>
+          <div className="text-xs text-gray-400">
+            {new Date(txn.created).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+            {txn.counterparty?.account_number && (
+              <span className="ml-2 font-mono">{txn.counterparty.account_number}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Amount */}
+        <div className="text-sm font-semibold text-gray-900 shrink-0">
+          −£{(Math.abs(txn.amount) / 100).toFixed(2)}
+        </div>
+
+        {/* Expand */}
+        <button
+          onClick={() => setOpen(s => !s)}
+          className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0"
+        >
+          <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+
+      {/* Linked payment */}
+      {linkedPayment && (
+        <div className="mx-4 mb-3 flex items-center gap-2 bg-emerald-50 rounded-xl px-3 py-2">
+          <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+          <div className="flex-1 min-w-0 text-xs text-emerald-700">
+            Matched to <span className="font-semibold">{linkedPayment.workerName}</span> — £{linkedPayment.amount.toFixed(2)} on {new Date(linkedPayment.date).toLocaleDateString('en-GB')}
+          </div>
+          <button
+            onClick={onUnlink}
+            className="shrink-0 text-xs text-emerald-600 hover:text-red-500 transition-colors flex items-center gap-1"
+          >
+            <Link2Off size={12} /> Unlink
+          </button>
+        </div>
+      )}
+
+      {/* Suggestions panel */}
+      {open && (
+        <div className="border-t border-gray-50 px-4 pb-3 pt-2 space-y-2">
+          {suggestions.length === 0 && !linkedPayment && (
+            <p className="text-xs text-gray-400 text-center py-2">No matching payments found in CRM</p>
+          )}
+          {suggestions.map(s => (
+            <div key={s.id} className="flex items-center gap-2 py-1.5">
+              <div className="flex-1 min-w-0">
+                <span className="text-sm text-gray-800 font-medium">{s.workerName}</span>
+                <span className="text-xs text-gray-400 ml-2">£{s.amount.toFixed(2)} · {new Date(s.date).toLocaleDateString('en-GB')}</span>
+                <span className={`ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${s.strength === 'exact' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {s.strength === 'exact' ? 'Exact match' : 'Possible match'}
+                </span>
+              </div>
+              {linkedPayment?.id === s.id ? (
+                <span className="text-xs text-emerald-600 font-medium">Linked</span>
+              ) : (
+                <button
+                  onClick={() => onLink(s.id)}
+                  className="text-xs bg-orange-600 text-white px-2.5 py-1 rounded-lg hover:bg-orange-700 transition-colors flex items-center gap-1"
+                >
+                  <Link2 size={11} /> Link
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReconcileTab({ transactions }: { transactions: MonzoTransaction[] }) {
+  const { workerPayments, users, linkMonzoTransaction } = useStore();
+
+  // Only outgoing bank transfers (negative, category = transfers or no merchant)
+  const outgoing = transactions.filter(t => t.amount < 0 && (t.category === 'transfers' || !t.merchant));
+
+  // Build lookup: monzoTransactionId → paymentId
+  const linkedMap = new Map(
+    workerPayments.filter(p => p.monzoTransactionId).map(p => [p.monzoTransactionId!, p])
+  );
+
+  const summary = { total: outgoing.length, matched: 0 };
+  outgoing.forEach(t => { if (linkedMap.has(t.id)) summary.matched++; });
+
+  return (
+    <div className="space-y-4">
+      {/* Summary bar */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+          <div className="text-xl font-bold text-gray-900">{summary.total}</div>
+          <div className="text-xs text-gray-400 mt-0.5">Transfers out</div>
+        </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+          <div className="text-xl font-bold text-emerald-600">{summary.matched}</div>
+          <div className="text-xs text-gray-400 mt-0.5">Matched</div>
+        </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+          <div className="text-xl font-bold text-amber-500">{summary.total - summary.matched}</div>
+          <div className="text-xs text-gray-400 mt-0.5">Unmatched</div>
+        </div>
+      </div>
+
+      {outgoing.length === 0 && (
+        <div className="text-center py-12 text-gray-400 text-sm">No outgoing transfers found</div>
+      )}
+
+      {outgoing.map(txn => {
+        const linked = linkedMap.get(txn.id);
+        const linkedSummary = linked
+          ? { id: linked.id, amount: linked.amount, date: linked.date, userId: linked.userId, workerName: users.find(u => u.id === linked.userId)?.name ?? 'Unknown' }
+          : null;
+
+        // Find suggestions from unlinked worker payments
+        const suggestions = workerPayments
+          .filter(p => !p.monzoTransactionId || p.monzoTransactionId === txn.id)
+          .map(p => {
+            const worker = users.find(u => u.id === p.userId);
+            const strength = matchStrength(txn, p, worker);
+            return { id: p.id, amount: p.amount, date: p.date, userId: p.userId, workerName: worker?.name ?? 'Unknown', strength };
+          })
+          .filter(s => s.strength !== null)
+          .sort((a, b) => (a.strength === 'exact' ? -1 : 1) - (b.strength === 'exact' ? -1 : 1));
+
+        // Auto-expand if there are exact matches and no link yet
+        return (
+          <ReconcileRow
+            key={txn.id}
+            txn={txn}
+            linkedPayment={linkedSummary}
+            suggestions={suggestions}
+            onLink={paymentId => linkMonzoTransaction(paymentId, txn.id)}
+            onUnlink={() => linked && linkMonzoTransaction(linked.id, null)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 export default function BankingPage() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? '');
   const [balance, setBalance] = useState<MonzoBalance | null>(null);
@@ -344,6 +542,7 @@ export default function BankingPage() {
   const [error, setError] = useState<string | null>(null);
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState<'transactions' | 'reconcile'>('transactions');
 
   // receipts keyed by transaction_id
   const [receipts, setReceipts] = useState<Record<string, StoredReceipt[]>>({});
@@ -483,10 +682,24 @@ export default function BankingPage() {
           <div className="rounded-2xl bg-gray-200 animate-pulse h-40" />
         )}
 
-        {/* Transactions */}
+        {/* Tabs */}
         {transactions.length > 0 && (
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+            {(['transactions', 'reconcile'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-colors capitalize ${activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                {tab === 'reconcile' ? 'Reconcile Payments' : 'Transactions'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Transactions tab */}
+        {activeTab === 'transactions' && transactions.length > 0 && (
           <div className="space-y-4">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Transactions</h2>
             {Object.entries(groups).map(([date, txns]) => (
               <div key={date}>
                 <div className="text-xs font-semibold text-gray-400 mb-2 px-1">{date}</div>
@@ -551,6 +764,11 @@ export default function BankingPage() {
               </div>
             ))}
           </div>
+        )}
+
+        {/* Reconcile tab */}
+        {activeTab === 'reconcile' && transactions.length > 0 && (
+          <ReconcileTab transactions={transactions} />
         )}
 
         {!loading && !error && transactions.length === 0 && balance && (
