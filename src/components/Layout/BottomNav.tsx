@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X, Clock } from 'lucide-react';
+import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X, Clock, Landmark } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 const ADMIN_MAIN = [
@@ -22,6 +22,7 @@ const ADMIN_MORE = [
   { id: 'contacts',  label: 'Contacts',  icon: Contact },
   { id: 'files',     label: 'Files',     icon: FolderOpen },
   { id: 'reports',   label: 'Reports',   icon: BarChart2 },
+  { id: 'banking',   label: 'Banking',   icon: Landmark },
   { id: 'settings',  label: 'Settings',  icon: Settings },
 ];
 const USER_MORE = [
