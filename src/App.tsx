@@ -3,6 +3,7 @@ import Sidebar from './components/Layout/Sidebar';
 import BottomNav from './components/Layout/BottomNav';
 import TopBar from './components/Layout/TopBar';
 import { useStore } from './store/useStore';
+import { handleOAuthCallback } from './lib/monzo';
 import LoginPage from './pages/LoginPage';
 import PipelinePage from './pages/PipelinePage';
 import DashboardPage from './pages/DashboardPage';
@@ -44,12 +45,15 @@ function LoadingScreen() {
 }
 
 export default function App() {
-  const { currentPage, currentUserId, users, isLoaded, loadData } = useStore();
+  const { currentPage, setCurrentPage, currentUserId, users, isLoaded, loadData } = useStore();
   const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
   const ADMIN_ONLY_PAGES = new Set(['dashboard', 'leads', 'contacts', 'files', 'reports', 'settings', 'cis', 'banking']);
   const [showNewLead, setShowNewLead] = useState(false);
 
   useEffect(() => {
+    handleOAuthCallback().then(wasCallback => {
+      if (wasCallback) setCurrentPage('banking');
+    });
     loadData();
   }, []);
 

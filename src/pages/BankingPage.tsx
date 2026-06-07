@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, Settings, X, TrendingUp, TrendingDown, Banknote, ArrowDownLeft, ArrowUpRight, AlertCircle, Receipt, Camera, Upload, Check, Loader2, Eye, Trash2, Link2, Link2Off, CheckCircle2, CircleDashed, ChevronDown } from 'lucide-react';
+import { RefreshCw, X, TrendingUp, TrendingDown, Banknote, ArrowDownLeft, ArrowUpRight, AlertCircle, Receipt, Camera, Upload, Check, Loader2, Eye, Trash2, Link2, Link2Off, CheckCircle2, CircleDashed, ChevronDown, Plug, PlugZap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useStore } from '../store/useStore';
+import { getValidToken, isConnected, startOAuthFlow, disconnect, getTokenExpiry } from '../lib/monzo';
 
 const MONZO_ACCOUNT_ID = 'acc_0000AxBsrpiHPlsAMA5IId';
-const TOKEN_KEY = 'monzo_access_token';
 const BUCKET = 'receipts';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -123,29 +123,21 @@ async function deleteReceipt(receipt: StoredReceipt): Promise<boolean> {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function TokenModal({ onSave, onClose, current }: { onSave: (t: string) => void; onClose: () => void; current: string }) {
-  const [val, setVal] = useState(current);
+function ConnectScreen() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Update Monzo Token</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+    <div className="h-full flex items-center justify-center p-8">
+      <div className="text-center max-w-xs space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto">
+          <PlugZap size={28} className="text-orange-500" />
         </div>
-        <div className="p-5 space-y-3">
-          <p className="text-sm text-gray-500">Paste your access token from the <a href="https://developers.monzo.com" target="_blank" rel="noreferrer" className="text-orange-600 underline">Monzo Developer Playground</a>. Tokens expire after a few hours.</p>
-          <textarea
-            value={val}
-            onChange={e => setVal(e.target.value)}
-            rows={4}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
-            placeholder="eyJ..."
-          />
-        </div>
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
-          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 text-sm font-medium py-2 rounded-xl hover:bg-gray-50">Cancel</button>
-          <button onClick={() => { onSave(val.trim()); onClose(); }} className="flex-1 bg-orange-600 text-white text-sm font-medium py-2 rounded-xl hover:bg-orange-700">Save Token</button>
-        </div>
+        <h2 className="text-lg font-bold text-gray-900">Connect Monzo</h2>
+        <p className="text-sm text-gray-500">Link your Proline Roofing &amp; Solar Monzo account to view your balance, transactions, and reconcile worker payments.</p>
+        <button
+          onClick={startOAuthFlow}
+          className="w-full bg-orange-600 text-white font-semibold py-3 rounded-xl hover:bg-orange-700 transition-colors flex items-center justify-center gap-2"
+        >
+          <Plug size={16} /> Connect to Monzo
+        </button>
       </div>
     </div>
   );
@@ -535,12 +527,11 @@ function ReconcileTab({ transactions }: { transactions: MonzoTransaction[] }) {
 }
 
 export default function BankingPage() {
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? '');
+  const [connected, setConnected] = useState(isConnected);
   const [balance, setBalance] = useState<MonzoBalance | null>(null);
   const [transactions, setTransactions] = useState<MonzoTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showTokenModal, setShowTokenModal] = useState(false);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<'transactions' | 'reconcile'>('transactions');
   const [receiptsOnly, setReceiptsOnly] = useState(false);
@@ -549,11 +540,12 @@ export default function BankingPage() {
   const [receipts, setReceipts] = useState<Record<string, StoredReceipt[]>>({});
   const [activeTransaction, setActiveTransaction] = useState<MonzoTransaction | null>(null);
 
-  const fetchData = useCallback(async (tok: string) => {
-    if (!tok) { setError('No token set. Click the settings icon to add your Monzo access token.'); return; }
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      const tok = await getValidToken();
+      if (!tok) { setConnected(false); setLoading(false); return; }
       const headers = { Authorization: `Bearer ${tok}` };
       const [balRes, txnRes] = await Promise.all([
         fetch(`https://api.monzo.com/balance?account_id=${MONZO_ACCOUNT_ID}`, { headers }),
@@ -561,7 +553,8 @@ export default function BankingPage() {
       ]);
 
       if (balRes.status === 401 || txnRes.status === 401) {
-        setError('Token expired or invalid. Click the settings icon to update your token.');
+        setConnected(false);
+        setError('Session expired — please reconnect your Monzo account.');
         setLoading(false);
         return;
       }
@@ -581,7 +574,6 @@ export default function BankingPage() {
       setTransactions(sorted);
       setLastFetched(new Date());
 
-      // Load receipts for these transactions
       const ids = sorted.map(t => t.id);
       const stored = await fetchReceipts(ids);
       const grouped: Record<string, StoredReceipt[]> = {};
@@ -597,13 +589,10 @@ export default function BankingPage() {
   }, []);
 
   useEffect(() => {
-    if (token) fetchData(token);
-  }, [token, fetchData]);
+    if (connected) fetchData();
+  }, [connected, fetchData]);
 
-  const saveToken = (t: string) => {
-    localStorage.setItem(TOKEN_KEY, t);
-    setToken(t);
-  };
+  const handleDisconnect = () => { disconnect(); setConnected(false); setBalance(null); setTransactions([]); };
 
   const handleReceiptAdded = (txnId: string, receipt: StoredReceipt) => {
     setReceipts(prev => ({ ...prev, [txnId]: [...(prev[txnId] ?? []), receipt] }));
@@ -619,6 +608,8 @@ export default function BankingPage() {
   const totalIn = transactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const totalOut = transactions.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0);
 
+  if (!connected) return <ConnectScreen />;
+
   return (
     <div className="h-full overflow-y-auto bg-gray-50">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
@@ -627,7 +618,12 @@ export default function BankingPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Banking</h1>
-            <p className="text-sm text-gray-400">Proline Roofing &amp; Solar Ltd</p>
+            <p className="text-sm text-gray-400">
+              Proline Roofing &amp; Solar Ltd
+              {getTokenExpiry() && (
+                <span className="ml-2 text-xs text-gray-300">· expires {getTokenExpiry()!.toLocaleDateString('en-GB')}</span>
+              )}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             {lastFetched && (
@@ -635,11 +631,11 @@ export default function BankingPage() {
                 Updated {lastFetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
-            <button onClick={() => fetchData(token)} disabled={loading} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors disabled:opacity-40" title="Refresh">
+            <button onClick={fetchData} disabled={loading} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors disabled:opacity-40" title="Refresh">
               <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             </button>
-            <button onClick={() => setShowTokenModal(true)} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors" title="Update token">
-              <Settings size={16} />
+            <button onClick={handleDisconnect} className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors" title="Disconnect Monzo">
+              <Plug size={16} />
             </button>
           </div>
         </div>
@@ -796,10 +792,6 @@ export default function BankingPage() {
           <div className="text-center py-12 text-gray-400 text-sm">No transactions with receipts yet</div>
         )}
       </div>
-
-      {showTokenModal && (
-        <TokenModal current={token} onSave={saveToken} onClose={() => setShowTokenModal(false)} />
-      )}
 
       {activeTransaction && (
         <ReceiptModal
