@@ -547,9 +547,10 @@ export default function BankingPage() {
       const tok = await getValidToken();
       if (!tok) { setConnected(false); setLoading(false); return; }
       const headers = { Authorization: `Bearer ${tok}` };
+      const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const [balRes, txnRes] = await Promise.all([
         fetch(`https://api.monzo.com/balance?account_id=${MONZO_ACCOUNT_ID}`, { headers }),
-        fetch(`https://api.monzo.com/transactions?account_id=${MONZO_ACCOUNT_ID}&expand[]=merchant`, { headers }),
+        fetch(`https://api.monzo.com/transactions?account_id=${MONZO_ACCOUNT_ID}&expand[]=merchant&since=${since}&limit=100`, { headers }),
       ]);
 
       if (balRes.status === 401 || txnRes.status === 401) {
