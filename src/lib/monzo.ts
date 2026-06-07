@@ -39,11 +39,12 @@ export function disconnect() {
   localStorage.removeItem(KEYS.accessToken);
   localStorage.removeItem(KEYS.refreshToken);
   localStorage.removeItem(KEYS.expiry);
+  localStorage.removeItem(KEYS.state);
 }
 
 export function startOAuthFlow() {
   const state = crypto.randomUUID();
-  sessionStorage.setItem(KEYS.state, state);
+  localStorage.setItem(KEYS.state, state);
   const url = new URL('https://auth.monzo.com/');
   url.searchParams.set('client_id', CLIENT_ID);
   url.searchParams.set('redirect_uri', REDIRECT_URI);
@@ -59,16 +60,15 @@ export async function handleOAuthCallback(): Promise<boolean> {
   const state = params.get('state');
   if (!code) return false;
 
-  // Validate state
-  const storedState = sessionStorage.getItem(KEYS.state);
-  sessionStorage.removeItem(KEYS.state);
-  if (state !== storedState) {
+  // Validate state — use localStorage so it survives the magic-link cross-tab redirect
+  const storedState = localStorage.getItem(KEYS.state);
+  localStorage.removeItem(KEYS.state);
+  if (state && storedState && state !== storedState) {
     console.error('Monzo OAuth state mismatch');
     return false;
   }
 
   const ok = await exchangeCode(code);
-  // Clean URL
   window.history.replaceState({}, '', window.location.pathname);
   return ok;
 }
