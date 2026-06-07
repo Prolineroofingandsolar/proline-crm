@@ -1,6 +1,6 @@
 const CLIENT_ID = 'oauth2client_0000B76HfwlJAyl5AuaLeW';
 const CLIENT_SECRET = 'mnzpub.TgOFP7KKTWqF92m0xhEEKge0tEwDp2eTYAQE9Durar/mb8ZRDGtYKjhpIU1Nd8WHlALN+yQ4XDJsR/A/Hj5tJw==';
-const REDIRECT_URI = 'https://proline-crm.vercel.app';
+const REDIRECT_URI = 'https://proline-crm.pages.dev';
 
 const KEYS = {
   accessToken: 'monzo_access_token',
