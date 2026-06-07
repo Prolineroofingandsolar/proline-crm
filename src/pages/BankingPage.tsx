@@ -681,35 +681,33 @@ export default function BankingPage() {
           <div className="rounded-2xl bg-gray-200 animate-pulse h-40" />
         )}
 
-        {/* Tabs */}
-        {transactions.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-              {(['transactions', 'reconcile'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-colors capitalize ${activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  {tab === 'reconcile' ? 'Reconcile Payments' : 'Transactions'}
-                </button>
-              ))}
-            </div>
-            {activeTab === 'transactions' && (
+        {/* Tabs — always visible when connected */}
+        <div className="space-y-2">
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+            {(['transactions', 'reconcile'] as const).map(tab => (
               <button
-                onClick={() => setReceiptsOnly(s => !s)}
-                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
-                  receiptsOnly
-                    ? 'bg-orange-50 border-orange-200 text-orange-600'
-                    : 'bg-white border-gray-200 text-gray-500 hover:border-orange-200 hover:text-orange-500'
-                }`}
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-colors ${activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
               >
-                <Receipt size={12} />
-                {receiptsOnly ? `Showing ${receiptCount} with receipts` : `Show receipts only${receiptCount > 0 ? ` (${receiptCount})` : ''}`}
+                {tab === 'reconcile' ? 'Reconcile Payments' : 'Transactions'}
               </button>
-            )}
+            ))}
           </div>
-        )}
+          {activeTab === 'transactions' && transactions.length > 0 && (
+            <button
+              onClick={() => setReceiptsOnly(s => !s)}
+              className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                receiptsOnly
+                  ? 'bg-orange-50 border-orange-200 text-orange-600'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-orange-200 hover:text-orange-500'
+              }`}
+            >
+              <Receipt size={12} />
+              {receiptsOnly ? `Showing ${receiptCount} with receipts` : `Show receipts only${receiptCount > 0 ? ` (${receiptCount})` : ''}`}
+            </button>
+          )}
+        </div>
 
         {/* Transactions tab */}
         {activeTab === 'transactions' && transactions.length > 0 && (
@@ -785,8 +783,10 @@ export default function BankingPage() {
           <ReconcileTab transactions={transactions} />
         )}
 
-        {!loading && !error && transactions.length === 0 && balance && (
-          <div className="text-center py-12 text-gray-400 text-sm">No transactions found</div>
+        {!loading && activeTab === 'transactions' && transactions.length === 0 && (
+          <div className="text-center py-12 text-gray-400 text-sm">
+            {error ? '' : 'No transactions found'}
+          </div>
         )}
         {!loading && activeTab === 'transactions' && transactions.length > 0 && visibleTransactions.length === 0 && (
           <div className="text-center py-12 text-gray-400 text-sm">No transactions with receipts yet</div>
