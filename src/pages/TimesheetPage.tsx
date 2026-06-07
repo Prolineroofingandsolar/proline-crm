@@ -53,8 +53,11 @@ function ProfileModal({ user, onClose }: ProfileModalProps) {
   const [account, setAccount] = useState(user.bankAccountNumber ?? '');
   const [sortCode, setSortCode] = useState(user.bankSortCode ?? '');
 
-  const save = () => {
-    updateUserProfile(user.id, {
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const ok = await updateUserProfile(user.id, {
       dayRate: dayRate ? parseFloat(dayRate) : undefined,
       cisRate,
       utrNumber: utr || undefined,
@@ -62,8 +65,11 @@ function ProfileModal({ user, onClose }: ProfileModalProps) {
       bankAccountNumber: account || undefined,
       bankSortCode: sortCode || undefined,
     });
-    showToast('Profile updated');
-    onClose();
+    setSaving(false);
+    if (ok) {
+      showToast('Profile updated');
+      onClose();
+    }
   };
 
   return (
@@ -163,8 +169,8 @@ function ProfileModal({ user, onClose }: ProfileModalProps) {
           <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 text-sm font-medium py-2 rounded-xl hover:bg-gray-50 transition-colors">
             Cancel
           </button>
-          <button onClick={save} className="flex-1 bg-orange-600 text-white text-sm font-medium py-2 rounded-xl hover:bg-orange-700 transition-colors">
-            Save
+          <button onClick={save} disabled={saving} className="flex-1 bg-orange-600 text-white text-sm font-medium py-2 rounded-xl hover:bg-orange-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>

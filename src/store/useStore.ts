@@ -83,7 +83,7 @@ interface Store {
   removeCasualWorker: (id: string) => void;
   changePassword: (id: string, newPassword: string) => Promise<void>;
   updateUserName: (id: string, name: string) => void;
-  updateUserProfile: (id: string, updates: Partial<Pick<AppUser, 'dayRate' | 'cisRate' | 'utrNumber' | 'bankName' | 'bankAccountNumber' | 'bankSortCode'>>) => void;
+  updateUserProfile: (id: string, updates: Partial<Pick<AppUser, 'dayRate' | 'cisRate' | 'utrNumber' | 'bankName' | 'bankAccountNumber' | 'bankSortCode'>>) => Promise<boolean>;
 
   pushEnabled: boolean;
   pushPreferences: {
@@ -325,7 +325,7 @@ export const useStore = create<Store>()(
         supabase.from('app_users').update({ name }).eq('id', id);
       },
 
-      updateUserProfile: (id, updates) => {
+      updateUserProfile: async (id, updates) => {
         set(s => ({ users: s.users.map(u => u.id === id ? { ...u, ...updates } : u) }));
         const dbUpdates: Record<string, unknown> = {};
         if (updates.dayRate !== undefined) dbUpdates.day_rate = updates.dayRate;
@@ -334,12 +334,13 @@ export const useStore = create<Store>()(
         if (updates.bankName !== undefined) dbUpdates.bank_name = updates.bankName;
         if (updates.bankAccountNumber !== undefined) dbUpdates.bank_account_number = updates.bankAccountNumber;
         if (updates.bankSortCode !== undefined) dbUpdates.bank_sort_code = updates.bankSortCode;
-        supabase.from('app_users').update(dbUpdates).eq('id', id).then(({ error }) => {
-          if (error) {
-            console.error('updateUserProfile error:', error);
-            get().showToast('Profile save failed — check your connection', 'error');
-          }
-        });
+        const { error } = await supabase.from('app_users').update(dbUpdates).eq('id', id);
+        if (error) {
+          console.error('updateUserProfile error:', error);
+          get().showToast('Profile save failed — check your connection', 'error');
+          return false;
+        }
+        return true;
       },
 
       upsertTimesheetEntry: (data) => {
