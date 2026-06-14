@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Paper Planes</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  background: #0d0804;
+  display: flex; justify-content: center; align-items: center;
+  overflow: hidden; touch-action: none; user-select: none;
+}
+canvas { display: block; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+
+// ── Canvas sizing ────────────────────────────────────────────────────────────
+const W = 360, H = 640;
+canvas.width = W; canvas.height = H;
+
+function resize() {
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  canvas.style.width  = W * s + 'px';
+  canvas.style.height = H * s + 'px';
+}
+resize();
+addEventListener('resize', resize);
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const GRAVITY   = 0.40;
+const FLAP      = -9.0;
+const SPEED     = 2.8;
+const GAP       = 165;   // vertical gap between pipe pair
+const PW        = 54;    // pipe width
+const INTERVAL  = 108;   // frames between pipe spawns
+const PLANE_X   = 108;
+const PLW       = 40;
+const PLH       = 16;
+const WIN_LOOP  = 1080;  // world px before windows repeat
+
+// ── State ────────────────────────────────────────────────────────────────────
+let S, plane, pipes, score, best, tick, bgX;
+best = +(localStorage.getItem('pp_best') || 0);
+
+function reset() {
+  S = 'idle';
+  tick = 0; bgX = 0; score = 0;
+  plane = { y: H / 2, vy: 0, angle: 0 };
+  pipes = [];
+}
+
+function flap() {
+  if (S === 'idle') { S = 'play'; plane.vy = FLAP; return; }
+  if (S === 'play') { plane.vy = FLAP; return; }
+  if (S === 'dead') { reset(); }
+}
+
+canvas.addEventListener('pointerdown', e => { e.preventDefault(); flap(); });
+addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); flap(); } });
+
+// ── Brick wall tile ──────────────────────────────────────────────────────────
+const BW = 64, BH = 32;
+const brickEl = document.createElement('canvas');
+brickEl.width = BW; brickEl.height = BH;
+(function buildBrickTile() {
+  const g = brickEl.getContext('2d');
+  g.fillStyle = '#271208';
+  g.fillRect(0, 0, BW, BH);
+  [[0, false], [16, true]].forEach(([ry, stagger]) => {
+    for (let c = -1; c <= 3; c++) {
+      const rx = c * 32 + (stagger ? 16 : 0);
+      g.fillStyle = c % 2 === 0 ? '#6a3820' : '#59301a';
+      g.fillRect(rx + 1, ry + 1, 30, 14);
+      // subtle highlight on top edge of each brick
+      g.fillStyle = 'rgba(255,200,140,0.06)';
+      g.fillRect(rx + 1, ry + 1, 30, 4);
+      // shadow on bottom edge
+      g.fillStyle = 'rgba(0,0,0,0.18)';
+      g.fillRect(rx + 1, ry + 13, 30, 2);
+    }
+  });
+})();
+let brickPat; // created lazily after first draw call
+
+// ── Window definitions (world-X based, looping every WIN_LOOP px) ────────────
+const WIN_DEFS = [
+  { wx:   8, wy:  75 }, { wx:   8, wy: 295 }, { wx:   8, wy: 510 },
+  { wx: 278, wy: 175 }, { wx: 278, wy: 430 },
+  { wx: 540, wy: 100 }, { wx: 540, wy: 370 },
+  { wx: 818, wy: 220 }, { wx: 818, wy: 490 },
+];
+
+function drawWindow(x, y) {
+  if (x > W + 5 || x < -82) return;
+  const ww = 72, wh = 52;
+  // frame
+  ctx.fillStyle = '#7a6050';
+  ctx.fillRect(x - 3, y - 3, ww + 6, wh + 6);
+  // sky
+  ctx.fillStyle = '#1b4e7a';
+  ctx.fillRect(x, y, ww, wh);
+  // lighter upper sky
+  ctx.fillStyle = '#2470b5';
+  ctx.fillRect(x + 1, y + 1, ww - 2, wh / 2 - 1);
+  // cloud
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.beginPath();
+  ctx.arc(x + 18, y + wh * 0.68, 7,  0, Math.PI * 2);
+  ctx.arc(x + 28, y + wh * 0.62, 9,  0, Math.PI * 2);
+  ctx.arc(x + 39, y + wh * 0.68, 6,  0, Math.PI * 2);
+  ctx.fill();
+  // window cross
+  ctx.fillStyle = '#7a6050';
+  ctx.fillRect(x + ww / 2 - 2, y, 4, wh);
+  ctx.fillRect(x, y + wh / 2 - 2, ww, 4);
+}
+
+// ── Pipe drawing ─────────────────────────────────────────────────────────────
+function drawPipeBody(x, y, h) {
+  if (h <= 0) return;
+  // Concrete gradient (left-lit)
+  const g = ctx.createLinearGradient(x, 0, x + PW, 0);
+  g.addColorStop(0,    '#aaa098');
+  g.addColorStop(0.12, '#cfc8c0');
+  g.addColorStop(0.88, '#bdb5ae');
+  g.addColorStop(1,    '#8e8880');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, PW, h);
+  // Horizontal seam lines (concrete look)
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  for (let sy = y + 24; sy < y + h - 4; sy += 24) {
+    ctx.fillRect(x + 4, sy, PW - 8, 2);
+  }
+  // Left highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillRect(x, y, 5, h);
+  // Right shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(x + PW - 5, y, 5, h);
+}
+
+function drawPipeCap(x, y, capBelow) {
+  // Cap protrudes 5px each side
+  const cx = x - 5, cw = PW + 10, ch = 14;
+  const cy = capBelow ? y : y - ch;
+  ctx.fillStyle = '#b8b0a8';
+  ctx.fillRect(cx, cy, cw, ch);
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  ctx.fillRect(cx, cy, cw, 4);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(cx, cy + ch - 3, cw, 3);
+}
+
+function drawPipe(p) {
+  const { x, topH } = p;
+  // Top pipe (hangs from ceiling)
+  drawPipeBody(x, 0, topH);
+  if (topH > 0) drawPipeCap(x, topH, true);
+  // Bottom pipe (rises from floor)
+  const botY = topH + GAP;
+  if (botY < H) {
+    drawPipeCap(x, botY, false);
+    drawPipeBody(x, botY, H - botY);
+  }
+}
+
+// ── Plane drawing ─────────────────────────────────────────────────────────────
+function drawPlane(y, angle) {
+  ctx.save();
+  ctx.translate(PLANE_X, y);
+  ctx.rotate(angle);
+  // Bottom (lower) wing
+  ctx.fillStyle = '#e4e4e4';
+  ctx.beginPath();
+  ctx.moveTo( 18,  0);
+  ctx.lineTo(-14,  9);
+  ctx.lineTo( -8,  0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#bbb'; ctx.lineWidth = 0.8; ctx.stroke();
+  // Top (upper) wing — slightly lighter
+  ctx.fillStyle = '#f5f5f5';
+  ctx.beginPath();
+  ctx.moveTo( 18,  0);
+  ctx.lineTo(-14, -9);
+  ctx.lineTo( -8,  0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#ccc'; ctx.lineWidth = 0.8; ctx.stroke();
+  // Fuselage spine
+  ctx.strokeStyle = '#b0b0b0'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(18, 0); ctx.lineTo(-14, 0);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ── HUD ───────────────────────────────────────────────────────────────────────
+function drawHUD() {
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 26px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(String(score).padStart(3, '0'), W / 2, 14);
+  ctx.font = '13px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fillText('HI ' + String(best).padStart(3, '0'), W - 10, 18);
+}
+
+// ── Overlay screens ──────────────────────────────────────────────────────────
+function overlay(alpha) {
+  ctx.fillStyle = `rgba(8,4,1,${alpha})`;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawIdleScreen() {
+  overlay(0.52);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 52px monospace';
+  ctx.fillText('PAPER',  W / 2, H / 2 - 54);
+  ctx.fillText('PLANES', W / 2, H / 2 +  2);
+  ctx.font = '18px monospace';
+  ctx.fillStyle = '#ffd988';
+  ctx.fillText('tap to fly!', W / 2, H / 2 + 68);
+}
+
+function drawDeadScreen() {
+  overlay(0.60);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 38px monospace';
+  ctx.fillText('CRASHED!', W / 2, H / 2 - 60);
+  ctx.font = '22px monospace';
+  ctx.fillText('SCORE  ' + score, W / 2, H / 2 - 6);
+  ctx.fillText('BEST   ' + best,  W / 2, H / 2 + 28);
+  ctx.font = '15px monospace';
+  ctx.fillStyle = '#ffd988';
+  ctx.fillText('tap to retry', W / 2, H / 2 + 78);
+}
+
+// ── Update ───────────────────────────────────────────────────────────────────
+function update() {
+  if (S !== 'play') return;
+  tick++;
+  bgX += SPEED;
+
+  // Physics
+  plane.vy = Math.min(plane.vy + GRAVITY, 14);
+  plane.y += plane.vy;
+
+  // Smooth tilt: pitch up when rising, nose-dive when falling
+  const targetAngle = Math.max(-0.45, Math.min(1.2, plane.vy * 0.068));
+  plane.angle += (targetAngle - plane.angle) * 0.10;
+
+  // Spawn pipe
+  if (tick % INTERVAL === 0) {
+    const minTop = 55, maxTop = H - 55 - GAP;
+    pipes.push({ x: W + 5, topH: minTop + Math.random() * (maxTop - minTop), scored: false });
+  }
+
+  // Move pipes and score
+  for (const p of pipes) {
+    p.x -= SPEED;
+    if (!p.scored && p.x + PW < PLANE_X) {
+      p.scored = true;
+      score++;
+      if (score > best) { best = score; localStorage.setItem('pp_best', best); }
+    }
+  }
+  pipes = pipes.filter(p => p.x + PW > -5);
+
+  // Collision detection (with a few px of forgiveness)
+  const plTop = plane.y - PLH / 2 + 3;
+  const plBot = plane.y + PLH / 2 - 3;
+  const plL   = PLANE_X - PLW / 2 + 6;
+  const plR   = PLANE_X + PLW / 2 - 6;
+
+  if (plTop < 0 || plBot > H) { die(); return; }
+
+  for (const p of pipes) {
+    if (plR < p.x || plL > p.x + PW) continue;
+    if (plTop < p.topH || plBot > p.topH + GAP) { die(); return; }
+  }
+}
+
+function die() {
+  if (score > best) { best = score; localStorage.setItem('pp_best', best); }
+  S = 'dead';
+}
+
+// ── Draw ─────────────────────────────────────────────────────────────────────
+function draw() {
+  if (!brickPat) brickPat = ctx.createPattern(brickEl, 'repeat');
+
+  // Scrolling brick background
+  ctx.save();
+  ctx.translate(-(bgX % BW), 0);
+  ctx.fillStyle = brickPat;
+  ctx.fillRect(0, 0, W + BW, H);
+  ctx.restore();
+
+  // Windows (loop every WIN_LOOP world-px)
+  WIN_DEFS.forEach(({ wx, wy }) => {
+    const rawX = wx - bgX;
+    const sx = ((rawX % WIN_LOOP) + WIN_LOOP) % WIN_LOOP;
+    drawWindow(sx, wy);
+    // second copy handles the seam when sx is near the right edge
+    if (sx + 82 > W) drawWindow(sx - WIN_LOOP, wy);
+  });
+
+  // Pipes
+  pipes.forEach(drawPipe);
+
+  // Plane
+  drawPlane(plane.y, plane.angle);
+
+  // HUD
+  drawHUD();
+
+  // Screens
+  if (S === 'idle') drawIdleScreen();
+  if (S === 'dead') drawDeadScreen();
+}
+
+// ── Game loop ─────────────────────────────────────────────────────────────────
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+reset();
+loop();
+</script>
+</body>
+</html>
