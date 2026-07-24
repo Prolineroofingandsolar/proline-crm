@@ -62,7 +62,8 @@ create table if not exists general_tasks (
   priority text not null default 'medium',
   category text not null default '',
   notes text,
-  created_at text not null default ''
+  created_at text not null default '',
+  assigned_to jsonb not null default '[]'
 );
 
 -- No RLS — app has its own login gate

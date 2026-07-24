@@ -135,6 +135,7 @@ interface Store {
   toggleGeneralTask: (id: string) => void;
   deleteGeneralTask: (id: string) => void;
   updateGeneralTask: (id: string, updates: Partial<GeneralTask>) => void;
+  syncGeneralTask: (id: string) => void;
 
   addNote: (leadId: string, content: string) => void;
   deleteNote: (leadId: string, noteId: string) => void;
@@ -216,6 +217,10 @@ export const useStore = create<Store>()(
         const leads = (leadsRes.data ?? []).map(r => dbToLead(r as Record<string, unknown>));
         const users = (usersRes.data ?? []).map(r => dbToUser(r as Record<string, unknown>));
         const contacts = (contactsRes.data ?? []).map(r => dbToContact(r as Record<string, unknown>));
+        if (tasksRes.error) {
+          console.error('loadData tasks error:', tasksRes.error);
+          get().showToast('Tasks failed to load — check your connection', 'error');
+        }
         const generalTasks = (tasksRes.data ?? []).map(r => dbToGeneralTask(r as Record<string, unknown>));
         const timesheetEntries = (timesheetRes.data ?? []).map(r => dbToTimesheetEntry(r as Record<string, unknown>));
         const paymentRuns = (paymentRunsRes.data ?? []).map(r => dbToPaymentRun(r as Record<string, unknown>));
@@ -642,11 +647,23 @@ export const useStore = create<Store>()(
       },
 
       // ── General tasks ────────────────────────────────────────────────────────
+      syncGeneralTask: (id) => {
+        const task = get().generalTasks.find(t => t.id === id);
+        if (!task) return;
+        supabase.from('general_tasks').upsert(generalTaskToDb(task))
+          .then(({ error }) => {
+            if (error) {
+              console.error('General task sync error:', error);
+              get().showToast('Task not saved — check your connection', 'error');
+            }
+          });
+      },
+
       addGeneralTask: (data) => {
         const now = new Date().toISOString().split('T')[0];
         const task: GeneralTask = { ...data, id: generateId(), completed: false, createdAt: now };
         set(s => ({ generalTasks: [task, ...s.generalTasks] }));
-        supabase.from('general_tasks').insert(generalTaskToDb(task));
+        get().syncGeneralTask(task.id);
       },
 
       toggleGeneralTask: (id) => {
@@ -657,19 +674,23 @@ export const useStore = create<Store>()(
             return { ...t, completed: !t.completed, completedDate: !t.completed ? now : undefined };
           }),
         }));
-        const task = get().generalTasks.find(t => t.id === id);
-        if (task) supabase.from('general_tasks').upsert(generalTaskToDb(task));
+        get().syncGeneralTask(id);
       },
 
       deleteGeneralTask: (id) => {
         set(s => ({ generalTasks: s.generalTasks.filter(t => t.id !== id) }));
-        supabase.from('general_tasks').delete().eq('id', id);
+        supabase.from('general_tasks').delete().eq('id', id)
+          .then(({ error }) => {
+            if (error) {
+              console.error('General task delete error:', error);
+              get().showToast('Delete failed — check your connection', 'error');
+            }
+          });
       },
 
       updateGeneralTask: (id, updates) => {
         set(s => ({ generalTasks: s.generalTasks.map(t => t.id === id ? { ...t, ...updates } : t) }));
-        const task = get().generalTasks.find(t => t.id === id);
-        if (task) supabase.from('general_tasks').upsert(generalTaskToDb(task));
+        get().syncGeneralTask(id);
       },
 
       // ── Notes ────────────────────────────────────────────────────────────────
