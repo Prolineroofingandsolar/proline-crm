@@ -6,6 +6,22 @@ export const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6dmR6enZrb2NtdWxjZnVqeWVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NzIxNjUsImV4cCI6MjA5NDQ0ODE2NX0.g42AvuElukfbpgbg9Y6XImnuHQ2Po5GEaVVGMz3Siu0'
 );
 
+// Coerce a JSONB column into an array. Supabase normally returns parsed JSON,
+// but a column that was written as a JSON *string* (or is null) would otherwise
+// arrive as a string and blow up the first `.map()` — white-screening the tab.
+function asArray<T>(v: unknown): T[] {
+  if (Array.isArray(v)) return v as T[];
+  if (typeof v === 'string' && v.trim()) {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? (parsed as T[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 // ── Lead ──────────────────────────────────────────────────────────────────────
 
 export function dbToLead(r: Record<string, unknown>): Lead {
@@ -36,11 +52,11 @@ export function dbToLead(r: Record<string, unknown>): Lead {
     lng: (r.lng as number) ?? undefined,
     myBuilderUrl: (r.mybuilder_url as string) ?? undefined,
     reviewRequestSent: (r.review_request_sent as boolean) ?? false,
-    tasks: (r.tasks as Lead['tasks']) ?? [],
-    photos: (r.photos as Lead['photos']) ?? [],
-    notes: (r.notes as Lead['notes']) ?? [],
-    files: (r.files as Lead['files']) ?? [],
-    materials: (r.materials as Lead['materials']) ?? [],
+    tasks: asArray<Lead['tasks'][number]>(r.tasks),
+    photos: asArray<Lead['photos'][number]>(r.photos),
+    notes: asArray<Lead['notes'][number]>(r.notes),
+    files: asArray<Lead['files'][number]>(r.files),
+    materials: asArray<Lead['materials'][number]>(r.materials),
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
   };
@@ -237,7 +253,7 @@ export function dbToGeneralTask(r: Record<string, unknown>): GeneralTask {
     category: r.category as string,
     notes: (r.notes as string) ?? undefined,
     createdAt: r.created_at as string,
-    assignedTo: (r.assigned_to as string[]) ?? [],
+    assignedTo: asArray<string>(r.assigned_to),
   };
 }
 

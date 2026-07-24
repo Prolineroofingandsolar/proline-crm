@@ -8,6 +8,7 @@ import MaterialsTab from './MaterialsTab';
 import NotesTab from './NotesTab';
 import FilesTab from './FilesTab';
 import InfoTab from './InfoTab';
+import ErrorBoundary from '../ErrorBoundary';
 import ReviewRequestModal from '../Reviews/ReviewRequestModal';
 
 const TABS = ['Tasks', 'Photos', 'Materials', 'Notes', 'Files', 'Info'] as const;
@@ -224,12 +225,14 @@ export default function LeadDetailPanel() {
               ))}
             </div>
             <div className="flex-1 overflow-y-auto pb-safe">
-              {activeTab === 'Tasks'     && <TasksTab lead={lead} />}
-              {activeTab === 'Photos'    && <PhotosTab lead={lead} />}
-              {activeTab === 'Materials' && <MaterialsTab lead={lead} />}
-              {activeTab === 'Notes'     && <NotesTab lead={lead} />}
-              {activeTab === 'Files'     && <FilesTab lead={lead} />}
-              {activeTab === 'Info'      && <InfoTab lead={lead} />}
+              <ErrorBoundary label={activeTab} resetKey={`${lead.id}:${activeTab}`}>
+                {activeTab === 'Tasks'     && <TasksTab lead={lead} />}
+                {activeTab === 'Photos'    && <PhotosTab lead={lead} />}
+                {activeTab === 'Materials' && <MaterialsTab lead={lead} />}
+                {activeTab === 'Notes'     && <NotesTab lead={lead} />}
+                {activeTab === 'Files'     && <FilesTab lead={lead} />}
+                {activeTab === 'Info'      && <InfoTab lead={lead} />}
+              </ErrorBoundary>
             </div>
           </div>
         </div>
