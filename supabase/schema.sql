@@ -72,6 +72,15 @@ alter table app_users disable row level security;
 alter table contacts disable row level security;
 alter table general_tasks disable row level security;
 
+-- Native (iOS/Android) push device tokens, tied to an app user
+create table if not exists push_tokens (
+  token text primary key,
+  user_id text not null,
+  platform text not null default 'ios',
+  updated_at text not null default ''
+);
+alter table push_tokens disable row level security;
+
 -- Timesheet migration
 -- Run this if upgrading an existing database (safe to run multiple times)
 alter table app_users add column if not exists day_rate numeric;

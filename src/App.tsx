@@ -4,6 +4,7 @@ import BottomNav from './components/Layout/BottomNav';
 import TopBar from './components/Layout/TopBar';
 import { useStore } from './store/useStore';
 import { handleOAuthCallback } from './lib/monzo';
+import { initNativeNotifications, syncTaskReminders } from './lib/nativeNotifications';
 import LoginPage from './pages/LoginPage';
 import PipelinePage from './pages/PipelinePage';
 import DashboardPage from './pages/DashboardPage';
@@ -45,7 +46,7 @@ function LoadingScreen() {
 }
 
 export default function App() {
-  const { currentPage, setCurrentPage, currentUserId, users, isLoaded, loadData } = useStore();
+  const { currentPage, setCurrentPage, currentUserId, users, isLoaded, loadData, generalTasks } = useStore();
   const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
   const ADMIN_ONLY_PAGES = new Set(['dashboard', 'leads', 'contacts', 'files', 'reports', 'settings', 'cis', 'banking']);
   const [showNewLead, setShowNewLead] = useState(false);
@@ -56,6 +57,16 @@ export default function App() {
     });
     loadData();
   }, []);
+
+  // Native app: request notification permission + register for push once logged in.
+  useEffect(() => {
+    if (currentUserId) initNativeNotifications(currentUserId);
+  }, [currentUserId]);
+
+  // Native app: keep on-device task reminders in sync with the task list.
+  useEffect(() => {
+    syncTaskReminders(generalTasks);
+  }, [generalTasks]);
 
   if (!isLoaded) return <LoadingScreen />;
   if (users.length === 0) return <LoginPage mode="setup" />;
