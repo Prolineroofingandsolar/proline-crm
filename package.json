@@ -8,6 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "mac:dev": "tauri dev",
+    "mac:build": "tauri build --bundles app",
+    "mac:dmg": "npm run mac:build && hdiutil create -volname 'ProLine CRM' -srcfolder 'src-tauri/target/release/bundle/macos/ProLine CRM.app' -ov -format UDZO 'src-tauri/target/release/bundle/dmg/ProLine CRM_0.1.0_aarch64.dmg'",
     "ios:sync": "npm run build && npx cap sync ios",
     "ios:open": "npm run build && npx cap sync ios && npx cap open ios"
   },
@@ -21,6 +24,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.105.4",
     "@tailwindcss/vite": "^4.3.0",
+    "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tauri-apps/plugin-window-state": "^2.4.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.16.0",
     "react": "^19.2.6",
@@ -32,6 +37,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.4.2",
     "@eslint/js": "^10.0.1",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",

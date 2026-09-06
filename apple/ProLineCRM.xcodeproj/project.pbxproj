@@ -1,0 +1,887 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0648E9BFA9989E418007BA36 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1124751956B1D90B6489ADE7 /* RootView.swift */; };
+		0976A6092012819742D1BED8 /* PayrollViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF16B57CF42196DA023354A /* PayrollViews.swift */; };
+		0D13D5E64E76A4F13FED4C1A /* CRMModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76954FC1891FA8555C44D6B2 /* CRMModels.swift */; };
+		119F0A37D21BD96434CAC2C9 /* ProLineCRMApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116016C603551F55867ECD6B /* ProLineCRMApp.swift */; };
+		177E94A61A6D6C3C5A256A85 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56A442B5FB64919428E1379 /* LoginView.swift */; };
+		1CDBD9F5BC4E6A5F87B652D2 /* MacOperationsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60A63AB803245371E52A5C07 /* MacOperationsViews.swift */; };
+		1EAA657E602A23D2B0AE0C40 /* OperationsAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1195AE03B365A24B80347981 /* OperationsAssistantView.swift */; };
+		2D99D844088B05809C09221B /* OperationsAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1195AE03B365A24B80347981 /* OperationsAssistantView.swift */; };
+		377244E13B306A9DE7B93E0C /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C15F2C475C0F8AF3B86C93E5 /* KeychainStore.swift */; };
+		3A49BD1CE065E01259FAB6BC /* ProLineWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480FAB9E772AC8316A736F73 /* ProLineWidget.swift */; };
+		3A5F45198041116658DA8371 /* ProLineWidget-iOS.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B4AE5494759EF138A297B919 /* ProLineWidget-iOS.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3A64C54CD4FE040AD1FE8AAD /* MacSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE99943851F7F87DBEA8B03 /* MacSettingsView.swift */; };
+		3C41E40C18A799EC012B79C8 /* MacOperationsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60A63AB803245371E52A5C07 /* MacOperationsViews.swift */; };
+		4260F902DC8C720D5BB47467 /* LeadDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B83D1E0FE1DD7E70F67049C /* LeadDetailView.swift */; };
+		4B4BC089F94669B54CEA3376 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56A442B5FB64919428E1379 /* LoginView.swift */; };
+		4BC59ECB75329D0913AA2038 /* FeatureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B29D4442B3B6395C766BCF61 /* FeatureViews.swift */; };
+		500B0EF3DB74307E5CC2372A /* QuotePDFRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94705493636263CF0B142A9E /* QuotePDFRenderer.swift */; };
+		51D32E520162A88176161E99 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E4364C310749209AF649093E /* Assets.xcassets */; };
+		551D8C85104C46A1F0CFDB03 /* GlobalSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 146C22AF0DD6491B5D82CA46 /* GlobalSearchView.swift */; };
+		58DD6E038B1A37E73E67E971 /* QuotePDFRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94705493636263CF0B142A9E /* QuotePDFRenderer.swift */; };
+		59E0AA5A2583E858F201187E /* ProLineWidget-macOS.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C3FB3B42D30474665FC59B8F /* ProLineWidget-macOS.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		69038FD1EFFCD570151A3B87 /* JobsMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 151862119AB5E913E6CAD73C /* JobsMapView.swift */; };
+		6D00B30ECF349125383084B5 /* AddressSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D03082AC6A483D2BF0F07D0 /* AddressSearchService.swift */; };
+		6D2D9EF186AAD56B6B32C225 /* JobsMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 151862119AB5E913E6CAD73C /* JobsMapView.swift */; };
+		72137B00BA2F1B53A4129A02 /* CRMLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504C74BD92984F137A041D8F /* CRMLogicTests.swift */; };
+		81CD8DAEB60A6FFC07CABB6F /* AddressSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D03082AC6A483D2BF0F07D0 /* AddressSearchService.swift */; };
+		891E84EA3F6C980DC393C32F /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */; };
+		A2F48568746396A9B9426937 /* CRMModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76954FC1891FA8555C44D6B2 /* CRMModels.swift */; };
+		A3B03B60D88E1F19FA8975B9 /* FeatureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B29D4442B3B6395C766BCF61 /* FeatureViews.swift */; };
+		AE68E143B95143736AF23358 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C15F2C475C0F8AF3B86C93E5 /* KeychainStore.swift */; };
+		AEFF7B6D081E406E835478C7 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F403D225C733DBBFCE86C2C /* AppState.swift */; };
+		B14337EA047143C00AA3A142 /* LeadDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B83D1E0FE1DD7E70F67049C /* LeadDetailView.swift */; };
+		B18AB031FD44CF655676BBC0 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */; };
+		BE5C73C16879D05CC472BD14 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5D7E6FD3FE69D518EC10AD /* SupabaseService.swift */; };
+		CB3A772106F70AC4371DEF4C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1124751956B1D90B6489ADE7 /* RootView.swift */; };
+		CBF41FA5E440DA815A84219B /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5D7E6FD3FE69D518EC10AD /* SupabaseService.swift */; };
+		CDEFB06430F243CCC3A3EE05 /* ProLineWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480FAB9E772AC8316A736F73 /* ProLineWidget.swift */; };
+		D3786082013A46C5D0E275B1 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */; };
+		D72119B750E1D71690875D27 /* PayrollViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF16B57CF42196DA023354A /* PayrollViews.swift */; };
+		D8FB94A333137FB76CDC8C90 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F403D225C733DBBFCE86C2C /* AppState.swift */; };
+		DE79BEDEBDF6C212DB3461E0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E4364C310749209AF649093E /* Assets.xcassets */; };
+		E025C26AB1A232634B465C26 /* GlobalSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 146C22AF0DD6491B5D82CA46 /* GlobalSearchView.swift */; };
+		E26EE3F79AC816DEFD102D8F /* ProLineCRMApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116016C603551F55867ECD6B /* ProLineCRMApp.swift */; };
+		E55977FCCF78EDD00E4B136B /* RoofingWorkflowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A4DBE4864E2D9DAF866B55 /* RoofingWorkflowViews.swift */; };
+		EB1710A6160831305C94ECAB /* PipelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A56B7310279EB386850363 /* PipelineView.swift */; };
+		F41E893A20657D659FF86C68 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */; };
+		F8E99625E3B453F8BACBB334 /* RoofingWorkflowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A4DBE4864E2D9DAF866B55 /* RoofingWorkflowViews.swift */; };
+		FB5DF5FCB8D054BA9AF39855 /* MacSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE99943851F7F87DBEA8B03 /* MacSettingsView.swift */; };
+		FCF56F424A154CB2B9A4ED45 /* PipelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A56B7310279EB386850363 /* PipelineView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0C9F84769683FFB45F2DE48B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11BEC330059D155D2FB18F98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1D331345C5C0B96CB380BDE4;
+			remoteInfo = "ProLineCRM-macOS";
+		};
+		0F7F0F7337590E811669E7A8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11BEC330059D155D2FB18F98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B5767258A4D1B59E693C5908;
+			remoteInfo = "ProLineWidget-macOS";
+		};
+		45A9294CE3DFFFA4383250C5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11BEC330059D155D2FB18F98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AE7F49B3C41C5D99880FEFB0;
+			remoteInfo = "ProLineWidget-iOS";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5AF2291E552B660CCFBB9837 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				59E0AA5A2583E858F201187E /* ProLineWidget-macOS.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		77D613A89A7222F598ABE18B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3A5F45198041116658DA8371 /* ProLineWidget-iOS.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0F403D225C733DBBFCE86C2C /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		1124751956B1D90B6489ADE7 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		116016C603551F55867ECD6B /* ProLineCRMApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProLineCRMApp.swift; sourceTree = "<group>"; };
+		1195AE03B365A24B80347981 /* OperationsAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationsAssistantView.swift; sourceTree = "<group>"; };
+		13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshot.swift; sourceTree = "<group>"; };
+		146C22AF0DD6491B5D82CA46 /* GlobalSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSearchView.swift; sourceTree = "<group>"; };
+		151862119AB5E913E6CAD73C /* JobsMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobsMapView.swift; sourceTree = "<group>"; };
+		1B83D1E0FE1DD7E70F67049C /* LeadDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadDetailView.swift; sourceTree = "<group>"; };
+		480FAB9E772AC8316A736F73 /* ProLineWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProLineWidget.swift; sourceTree = "<group>"; };
+		504C74BD92984F137A041D8F /* CRMLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRMLogicTests.swift; sourceTree = "<group>"; };
+		51A4DBE4864E2D9DAF866B55 /* RoofingWorkflowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoofingWorkflowViews.swift; sourceTree = "<group>"; };
+		5D03082AC6A483D2BF0F07D0 /* AddressSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressSearchService.swift; sourceTree = "<group>"; };
+		60A63AB803245371E52A5C07 /* MacOperationsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOperationsViews.swift; sourceTree = "<group>"; };
+		76954FC1891FA8555C44D6B2 /* CRMModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRMModels.swift; sourceTree = "<group>"; };
+		91A56B7310279EB386850363 /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineView.swift; sourceTree = "<group>"; };
+		94705493636263CF0B142A9E /* QuotePDFRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotePDFRenderer.swift; sourceTree = "<group>"; };
+		97CB30822368769F57E75640 /* ProLineCRM-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ProLineCRM-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A56A442B5FB64919428E1379 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		ABE99943851F7F87DBEA8B03 /* MacSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSettingsView.swift; sourceTree = "<group>"; };
+		B29D4442B3B6395C766BCF61 /* FeatureViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureViews.swift; sourceTree = "<group>"; };
+		B4AE5494759EF138A297B919 /* ProLineWidget-iOS.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = "ProLineWidget-iOS.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C15F2C475C0F8AF3B86C93E5 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		C3FB3B42D30474665FC59B8F /* ProLineWidget-macOS.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "ProLineWidget-macOS.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CEF16B57CF42196DA023354A /* PayrollViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayrollViews.swift; sourceTree = "<group>"; };
+		D33C1BB554952237F588BD4A /* ProLineCRM-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "ProLineCRM-macOS.app"; path = "ProLine CRM.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D445CB8B99C93CF174EADDF9 /* ProLineCRMTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProLineCRMTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DE5D7E6FD3FE69D518EC10AD /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
+		E4364C310749209AF649093E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0BD1E86DBD8E821A1C879A1A /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				5D03082AC6A483D2BF0F07D0 /* AddressSearchService.swift */,
+				C15F2C475C0F8AF3B86C93E5 /* KeychainStore.swift */,
+				94705493636263CF0B142A9E /* QuotePDFRenderer.swift */,
+				DE5D7E6FD3FE69D518EC10AD /* SupabaseService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		249D0AC7336DCF6078A5B7B8 /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				480FAB9E772AC8316A736F73 /* ProLineWidget.swift */,
+			);
+			path = Widgets;
+			sourceTree = "<group>";
+		};
+		4E7580F36E7CDD000AF66D38 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				504C74BD92984F137A041D8F /* CRMLogicTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		9D6AD313CB90DF61B7DE5682 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				0F403D225C733DBBFCE86C2C /* AppState.swift */,
+				C5C0A9BDD3F01D68944D935F /* Models */,
+				0BD1E86DBD8E821A1C879A1A /* Services */,
+				ECEF454A1348B3DF3B3BCD47 /* Views */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		B59C485A75838A1CF0F30C04 = {
+			isa = PBXGroup;
+			children = (
+				D9D1A6CBCFEF2BBB4080C19A /* App */,
+				9D6AD313CB90DF61B7DE5682 /* Shared */,
+				4E7580F36E7CDD000AF66D38 /* Tests */,
+				249D0AC7336DCF6078A5B7B8 /* Widgets */,
+				BA66F8596FB244F2FCD10A6C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		BA66F8596FB244F2FCD10A6C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				97CB30822368769F57E75640 /* ProLineCRM-iOS.app */,
+				D33C1BB554952237F588BD4A /* ProLineCRM-macOS.app */,
+				D445CB8B99C93CF174EADDF9 /* ProLineCRMTests.xctest */,
+				B4AE5494759EF138A297B919 /* ProLineWidget-iOS.appex */,
+				C3FB3B42D30474665FC59B8F /* ProLineWidget-macOS.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C5C0A9BDD3F01D68944D935F /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				76954FC1891FA8555C44D6B2 /* CRMModels.swift */,
+				13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		D9D1A6CBCFEF2BBB4080C19A /* App */ = {
+			isa = PBXGroup;
+			children = (
+				E4364C310749209AF649093E /* Assets.xcassets */,
+				116016C603551F55867ECD6B /* ProLineCRMApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		ECEF454A1348B3DF3B3BCD47 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				B29D4442B3B6395C766BCF61 /* FeatureViews.swift */,
+				146C22AF0DD6491B5D82CA46 /* GlobalSearchView.swift */,
+				151862119AB5E913E6CAD73C /* JobsMapView.swift */,
+				1B83D1E0FE1DD7E70F67049C /* LeadDetailView.swift */,
+				A56A442B5FB64919428E1379 /* LoginView.swift */,
+				60A63AB803245371E52A5C07 /* MacOperationsViews.swift */,
+				ABE99943851F7F87DBEA8B03 /* MacSettingsView.swift */,
+				1195AE03B365A24B80347981 /* OperationsAssistantView.swift */,
+				CEF16B57CF42196DA023354A /* PayrollViews.swift */,
+				91A56B7310279EB386850363 /* PipelineView.swift */,
+				51A4DBE4864E2D9DAF866B55 /* RoofingWorkflowViews.swift */,
+				1124751956B1D90B6489ADE7 /* RootView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1CB2316C72B3240769368BBB /* ProLineCRM-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 511B24CE80526E29719A913A /* Build configuration list for PBXNativeTarget "ProLineCRM-iOS" */;
+			buildPhases = (
+				11E88604D1D55093823985D9 /* Sources */,
+				6A3097371014498AA6A2A90D /* Resources */,
+				77D613A89A7222F598ABE18B /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				405E7C546273C9AA59BED0CA /* PBXTargetDependency */,
+			);
+			name = "ProLineCRM-iOS";
+			packageProductDependencies = (
+			);
+			productName = "ProLineCRM-iOS";
+			productReference = 97CB30822368769F57E75640 /* ProLineCRM-iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1D331345C5C0B96CB380BDE4 /* ProLineCRM-macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 44F4EDD26DD739316F25F258 /* Build configuration list for PBXNativeTarget "ProLineCRM-macOS" */;
+			buildPhases = (
+				29FFF2F00B9BE778424D1CCA /* Sources */,
+				400D522FB77B84125268C92F /* Resources */,
+				5AF2291E552B660CCFBB9837 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				49A654EA7F302C81A2D408F3 /* PBXTargetDependency */,
+			);
+			name = "ProLineCRM-macOS";
+			packageProductDependencies = (
+			);
+			productName = "ProLineCRM-macOS";
+			productReference = D33C1BB554952237F588BD4A /* ProLineCRM-macOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		6D6684BB350D61232B8D9A46 /* ProLineCRMTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 511DF3E4AC698D75B956C628 /* Build configuration list for PBXNativeTarget "ProLineCRMTests" */;
+			buildPhases = (
+				2C27BF9B277F2168F5CC4D9B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E68A7AC7FC662823FA0787B9 /* PBXTargetDependency */,
+			);
+			name = ProLineCRMTests;
+			packageProductDependencies = (
+			);
+			productName = ProLineCRMTests;
+			productReference = D445CB8B99C93CF174EADDF9 /* ProLineCRMTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		AE7F49B3C41C5D99880FEFB0 /* ProLineWidget-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6BD8118387CA0055853547ED /* Build configuration list for PBXNativeTarget "ProLineWidget-iOS" */;
+			buildPhases = (
+				F3A0311712624D674C4AB75F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "ProLineWidget-iOS";
+			packageProductDependencies = (
+			);
+			productName = "ProLineWidget-iOS";
+			productReference = B4AE5494759EF138A297B919 /* ProLineWidget-iOS.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		B5767258A4D1B59E693C5908 /* ProLineWidget-macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 36999028ED42F27D52849BC4 /* Build configuration list for PBXNativeTarget "ProLineWidget-macOS" */;
+			buildPhases = (
+				3ADFE87BF72E577FDD094DCA /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "ProLineWidget-macOS";
+			packageProductDependencies = (
+			);
+			productName = "ProLineWidget-macOS";
+			productReference = C3FB3B42D30474665FC59B8F /* ProLineWidget-macOS.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		11BEC330059D155D2FB18F98 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					1CB2316C72B3240769368BBB = {
+						ProvisioningStyle = Automatic;
+					};
+					1D331345C5C0B96CB380BDE4 = {
+						DevelopmentTeam = J87GB8M4RD;
+						ProvisioningStyle = Automatic;
+					};
+					6D6684BB350D61232B8D9A46 = {
+						DevelopmentTeam = J87GB8M4RD;
+						ProvisioningStyle = Automatic;
+					};
+					AE7F49B3C41C5D99880FEFB0 = {
+						DevelopmentTeam = J87GB8M4RD;
+						ProvisioningStyle = Automatic;
+					};
+					B5767258A4D1B59E693C5908 = {
+						DevelopmentTeam = J87GB8M4RD;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 9DA982ED9DA4333B57B9E8AE /* Build configuration list for PBXProject "ProLineCRM" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B59C485A75838A1CF0F30C04;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = BA66F8596FB244F2FCD10A6C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1CB2316C72B3240769368BBB /* ProLineCRM-iOS */,
+				1D331345C5C0B96CB380BDE4 /* ProLineCRM-macOS */,
+				AE7F49B3C41C5D99880FEFB0 /* ProLineWidget-iOS */,
+				B5767258A4D1B59E693C5908 /* ProLineWidget-macOS */,
+				6D6684BB350D61232B8D9A46 /* ProLineCRMTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		400D522FB77B84125268C92F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DE79BEDEBDF6C212DB3461E0 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6A3097371014498AA6A2A90D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				51D32E520162A88176161E99 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		11E88604D1D55093823985D9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				81CD8DAEB60A6FFC07CABB6F /* AddressSearchService.swift in Sources */,
+				AEFF7B6D081E406E835478C7 /* AppState.swift in Sources */,
+				A2F48568746396A9B9426937 /* CRMModels.swift in Sources */,
+				A3B03B60D88E1F19FA8975B9 /* FeatureViews.swift in Sources */,
+				551D8C85104C46A1F0CFDB03 /* GlobalSearchView.swift in Sources */,
+				69038FD1EFFCD570151A3B87 /* JobsMapView.swift in Sources */,
+				377244E13B306A9DE7B93E0C /* KeychainStore.swift in Sources */,
+				B14337EA047143C00AA3A142 /* LeadDetailView.swift in Sources */,
+				177E94A61A6D6C3C5A256A85 /* LoginView.swift in Sources */,
+				1CDBD9F5BC4E6A5F87B652D2 /* MacOperationsViews.swift in Sources */,
+				3A64C54CD4FE040AD1FE8AAD /* MacSettingsView.swift in Sources */,
+				2D99D844088B05809C09221B /* OperationsAssistantView.swift in Sources */,
+				0976A6092012819742D1BED8 /* PayrollViews.swift in Sources */,
+				FCF56F424A154CB2B9A4ED45 /* PipelineView.swift in Sources */,
+				119F0A37D21BD96434CAC2C9 /* ProLineCRMApp.swift in Sources */,
+				500B0EF3DB74307E5CC2372A /* QuotePDFRenderer.swift in Sources */,
+				E55977FCCF78EDD00E4B136B /* RoofingWorkflowViews.swift in Sources */,
+				0648E9BFA9989E418007BA36 /* RootView.swift in Sources */,
+				CBF41FA5E440DA815A84219B /* SupabaseService.swift in Sources */,
+				B18AB031FD44CF655676BBC0 /* WidgetSnapshot.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		29FFF2F00B9BE778424D1CCA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6D00B30ECF349125383084B5 /* AddressSearchService.swift in Sources */,
+				D8FB94A333137FB76CDC8C90 /* AppState.swift in Sources */,
+				0D13D5E64E76A4F13FED4C1A /* CRMModels.swift in Sources */,
+				4BC59ECB75329D0913AA2038 /* FeatureViews.swift in Sources */,
+				E025C26AB1A232634B465C26 /* GlobalSearchView.swift in Sources */,
+				6D2D9EF186AAD56B6B32C225 /* JobsMapView.swift in Sources */,
+				AE68E143B95143736AF23358 /* KeychainStore.swift in Sources */,
+				4260F902DC8C720D5BB47467 /* LeadDetailView.swift in Sources */,
+				4B4BC089F94669B54CEA3376 /* LoginView.swift in Sources */,
+				3C41E40C18A799EC012B79C8 /* MacOperationsViews.swift in Sources */,
+				FB5DF5FCB8D054BA9AF39855 /* MacSettingsView.swift in Sources */,
+				1EAA657E602A23D2B0AE0C40 /* OperationsAssistantView.swift in Sources */,
+				D72119B750E1D71690875D27 /* PayrollViews.swift in Sources */,
+				EB1710A6160831305C94ECAB /* PipelineView.swift in Sources */,
+				E26EE3F79AC816DEFD102D8F /* ProLineCRMApp.swift in Sources */,
+				58DD6E038B1A37E73E67E971 /* QuotePDFRenderer.swift in Sources */,
+				F8E99625E3B453F8BACBB334 /* RoofingWorkflowViews.swift in Sources */,
+				CB3A772106F70AC4371DEF4C /* RootView.swift in Sources */,
+				BE5C73C16879D05CC472BD14 /* SupabaseService.swift in Sources */,
+				D3786082013A46C5D0E275B1 /* WidgetSnapshot.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2C27BF9B277F2168F5CC4D9B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				72137B00BA2F1B53A4129A02 /* CRMLogicTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3ADFE87BF72E577FDD094DCA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CDEFB06430F243CCC3A3EE05 /* ProLineWidget.swift in Sources */,
+				F41E893A20657D659FF86C68 /* WidgetSnapshot.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F3A0311712624D674C4AB75F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3A49BD1CE065E01259FAB6BC /* ProLineWidget.swift in Sources */,
+				891E84EA3F6C980DC393C32F /* WidgetSnapshot.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		405E7C546273C9AA59BED0CA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AE7F49B3C41C5D99880FEFB0 /* ProLineWidget-iOS */;
+			targetProxy = 45A9294CE3DFFFA4383250C5 /* PBXContainerItemProxy */;
+		};
+		49A654EA7F302C81A2D408F3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B5767258A4D1B59E693C5908 /* ProLineWidget-macOS */;
+			targetProxy = 0F7F0F7337590E811669E7A8 /* PBXContainerItemProxy */;
+		};
+		E68A7AC7FC662823FA0787B9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1D331345C5C0B96CB380BDE4 /* ProLineCRM-macOS */;
+			targetProxy = 0C9F84769683FFB45F2DE48B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		1C87B0BBE1DC3742C1A532AE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APS_ENVIRONMENT = production;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "Configuration/ProLineCRM-App.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = J87GB8M4RD;
+				DEVELOPMENT_TEAM = J87GB8M4RD;
+				INFOPLIST_FILE = "Configuration/iOS-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		2457448F1793BA2E8AE54C9B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = J87GB8M4RD;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		27E386056C88A07182907493 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Configuration/ProLineCRM.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = "Configuration/Widget-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.mac.widget;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		50B11D97E5227538F6CA4ABD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = "Configuration/ProLineCRM-iOS-Widget.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = J87GB8M4RD;
+				INFOPLIST_FILE = "Configuration/Widget-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.widget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5659F01E6BE3DC4D2305CD85 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = "Configuration/ProLineCRM-iOS-Widget.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = J87GB8M4RD;
+				INFOPLIST_FILE = "Configuration/Widget-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.widget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5CDFEBB1765EC5448E2AAFB6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APS_ENVIRONMENT = development;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "Configuration/ProLineCRM-macOS-App.entitlements";
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = "Configuration/macOS-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.mac;
+				PRODUCT_NAME = "ProLine CRM";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		5FC9C4BDAAA0B802832D870C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APS_ENVIRONMENT = production;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "Configuration/ProLineCRM-macOS-App.entitlements";
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = "Configuration/macOS-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.mac;
+				PRODUCT_NAME = "ProLine CRM";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		7DF07616B0B76F27FCFC73E1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = J87GB8M4RD;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		89258C686A054A1FA0400C1B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.mac.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ProLine CRM.app/Contents/MacOS/ProLine CRM";
+			};
+			name = Release;
+		};
+		B3DFA25C1023FA49850B7110 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.mac.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ProLine CRM.app/Contents/MacOS/ProLine CRM";
+			};
+			name = Debug;
+		};
+		D09D3D04C32D740A47399346 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Configuration/ProLineCRM.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = "Configuration/Widget-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.mac.widget;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		DC5147C0DAA2D563BBE59254 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APS_ENVIRONMENT = development;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "Configuration/ProLineCRM-App.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = J87GB8M4RD;
+				INFOPLIST_FILE = "Configuration/iOS-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		36999028ED42F27D52849BC4 /* Build configuration list for PBXNativeTarget "ProLineWidget-macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D09D3D04C32D740A47399346 /* Debug */,
+				27E386056C88A07182907493 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		44F4EDD26DD739316F25F258 /* Build configuration list for PBXNativeTarget "ProLineCRM-macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5CDFEBB1765EC5448E2AAFB6 /* Debug */,
+				5FC9C4BDAAA0B802832D870C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		511B24CE80526E29719A913A /* Build configuration list for PBXNativeTarget "ProLineCRM-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DC5147C0DAA2D563BBE59254 /* Debug */,
+				1C87B0BBE1DC3742C1A532AE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		511DF3E4AC698D75B956C628 /* Build configuration list for PBXNativeTarget "ProLineCRMTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B3DFA25C1023FA49850B7110 /* Debug */,
+				89258C686A054A1FA0400C1B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6BD8118387CA0055853547ED /* Build configuration list for PBXNativeTarget "ProLineWidget-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				50B11D97E5227538F6CA4ABD /* Debug */,
+				5659F01E6BE3DC4D2305CD85 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9DA982ED9DA4333B57B9E8AE /* Build configuration list for PBXProject "ProLineCRM" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2457448F1793BA2E8AE54C9B /* Debug */,
+				7DF07616B0B76F27FCFC73E1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 11BEC330059D155D2FB18F98 /* Project object */;
+}

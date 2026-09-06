@@ -92,12 +92,12 @@ export default function LoginPage({ mode }: Props) {
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Username</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Email or username</label>
               <input
                 required
                 value={form.username}
                 onChange={e => set('username', e.target.value)}
-                placeholder={isSetup ? 'Choose a username' : 'Your username'}
+                placeholder={isSetup ? 'Choose a username' : 'you@company.co.uk'}
                 autoCapitalize="none"
                 autoCorrect="off"
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"

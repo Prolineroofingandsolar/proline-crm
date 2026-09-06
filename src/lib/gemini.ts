@@ -1,4 +1,4 @@
-const API_KEY = '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';
+const API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
 const MODEL = 'nvidia/nemotron-nano-12b-v2-vl:free';
 
 export interface ExtractedLead {
@@ -23,6 +23,10 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 export async function extractLeadFromImage(file: File): Promise<ExtractedLead> {
+  if (!API_KEY) {
+    throw new Error('Image reading is not configured. Add VITE_OPENROUTER_API_KEY to the app environment.');
+  }
+
   const base64 = await fileToBase64(file);
 
   const prompt = `Look at this image and extract any customer or job enquiry information you can see.

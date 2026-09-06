@@ -47,6 +47,7 @@ export interface FileItem {
   type: 'pdf' | 'image' | 'document' | 'spreadsheet' | 'archive';
   size?: string;
   date: string;
+  url?: string;
 }
 
 export interface Material {
@@ -73,6 +74,7 @@ export interface AppUser {
   bankName?: string;
   bankAccountNumber?: string;
   bankSortCode?: string;
+  organisationId?: string;
 }
 
 export interface TimesheetEntry {

@@ -1,5 +1,24 @@
 # React + TypeScript + Vite
 
+## macOS app
+
+The Mac app uses Tauri and shares the same React, TypeScript, and Supabase code as the web and iOS builds.
+
+It uses native macOS Notification Centre alerts, a Dock badge for due work, persistent window size and position, and Mac keyboard shortcuts (`⌘N` for a new lead and `⌘1`–`⌘4` for primary sections).
+
+```bash
+# Run the native Mac app in development
+npm run mac:dev
+
+# Build ProLine CRM.app
+npm run mac:build
+
+# Build the app and a compressed Apple Silicon installer DMG
+npm run mac:dmg
+```
+
+Build outputs are written to `src-tauri/target/release/bundle/`. Public distribution still requires an Apple Developer ID signature and notarization.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

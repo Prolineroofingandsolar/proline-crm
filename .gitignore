@@ -12,6 +12,31 @@ dist
 dist-ssr
 *.local
 
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+
+# Supabase CLI machine state
+supabase/.temp/
+
+# Apple/Xcode generated state and build products
+DerivedData/
+**/DerivedData/
+**/xcuserdata/
+*.xcuserstate
+*.xcarchive
+*.ipa
+*.dSYM
+*.dSYM.zip
+apple/build/
+ios/App/build/
+ios/App/Pods/
+ios/App/output/
+
+# Rust/Tauri build products
+src-tauri/target/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

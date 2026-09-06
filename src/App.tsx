@@ -21,6 +21,7 @@ import CISPage from './pages/CISPage';
 import BankingPage from './pages/BankingPage';
 import AddLeadModal from './components/Pipeline/AddLeadModal';
 import AIAssistant from './components/AI/AIAssistant';
+import { isMacApp, sendDeviceNotification } from './utils/push';
 
 function Toast() {
   const { toast } = useStore();
@@ -46,7 +47,7 @@ function LoadingScreen() {
 }
 
 export default function App() {
-  const { currentPage, setCurrentPage, currentUserId, users, isLoaded, loadData, generalTasks } = useStore();
+  const { currentPage, setCurrentPage, currentUserId, users, leads, generalTasks, pushEnabled, isLoaded, loadData } = useStore();
   const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
   const ADMIN_ONLY_PAGES = new Set(['dashboard', 'leads', 'contacts', 'files', 'reports', 'settings', 'cis', 'banking']);
   const [showNewLead, setShowNewLead] = useState(false);
@@ -67,6 +68,48 @@ export default function App() {
   useEffect(() => {
     syncTaskReminders(generalTasks);
   }, [generalTasks]);
+
+  useEffect(() => {
+    if (!isMacApp() || !isLoaded || !currentUserId) return;
+    const today = new Date().toISOString().split('T')[0];
+    const surveysToday = leads.filter(lead => lead.surveyDate === today).length;
+    const overdueJobs = leads.filter(lead => lead.endDate && lead.endDate < today && !['Completed', 'Paid'].includes(lead.stage)).length;
+    const dueTasks = generalTasks.filter(task => !task.completed && task.dueDate && task.dueDate <= today).length;
+    const badgeCount = surveysToday + overdueJobs + dueTasks;
+
+    void import('@tauri-apps/api/window')
+      .then(({ getCurrentWindow }) => getCurrentWindow().setBadgeCount(badgeCount || undefined))
+      .catch(() => {});
+
+    if (!pushEnabled || badgeCount === 0) return;
+    const reminderKey = `proline-mac-reminder-${today}`;
+    if (localStorage.getItem(reminderKey)) return;
+    const parts = [
+      surveysToday ? `${surveysToday} survey${surveysToday === 1 ? '' : 's'} today` : '',
+      overdueJobs ? `${overdueJobs} overdue job${overdueJobs === 1 ? '' : 's'}` : '',
+      dueTasks ? `${dueTasks} task${dueTasks === 1 ? '' : 's'} due` : '',
+    ].filter(Boolean);
+    void sendDeviceNotification('Your ProLine day', parts.join(' · '));
+    localStorage.setItem(reminderKey, 'sent');
+  }, [currentUserId, generalTasks, isLoaded, leads, pushEnabled]);
+
+  useEffect(() => {
+    if (!isMacApp()) return;
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!event.metaKey) return;
+      if (event.key.toLowerCase() === 'n') {
+        event.preventDefault();
+        setShowNewLead(true);
+      }
+      const pageByKey: Record<string, string> = { '1': 'pipeline', '2': 'jobs', '3': 'tasks', '4': 'calendar' };
+      if (pageByKey[event.key]) {
+        event.preventDefault();
+        setCurrentPage(pageByKey[event.key]);
+      }
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [setCurrentPage]);
 
   if (!isLoaded) return <LoadingScreen />;
   if (users.length === 0) return <LoginPage mode="setup" />;

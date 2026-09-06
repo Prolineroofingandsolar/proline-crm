@@ -1,0 +1,12 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+const cors={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, apikey, content-type"};
+const json=(v:unknown,s=200)=>new Response(JSON.stringify(v),{status:s,headers:{...cors,"Content-Type":"application/json"}});
+Deno.serve(async(req)=>{if(req.method==="OPTIONS")return new Response("ok",{headers:cors});
+ const base=Deno.env.get("SUPABASE_URL")!,auth=req.headers.get("authorization")??"";
+ const client=createClient(base,Deno.env.get("SUPABASE_ANON_KEY")!,{global:{headers:{Authorization:auth}}}); const{data:{user}}=await client.auth.getUser();
+ if(!user)return json({error:"Sign in first."},401); const service=createClient(base,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+ const{data:p}=await service.from("profiles").select("organisation_id,role").eq("id",user.id).single(); if(!p||p.role!=="admin")return json({error:"Administrator access is required."},403);
+ const state=crypto.randomUUID(); await service.from("gmail_oauth_states").insert({state,organisation_id:p.organisation_id,user_id:user.id});
+ const redirect=`${base}/functions/v1/gmail-oauth-callback`; const q=new URLSearchParams({client_id:Deno.env.get("GMAIL_CLIENT_ID")!,redirect_uri:redirect,response_type:"code",access_type:"offline",prompt:"consent",include_granted_scopes:"true",scope:"https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose",state});
+ return json({authorization_url:`https://accounts.google.com/o/oauth2/v2/auth?${q}`});});

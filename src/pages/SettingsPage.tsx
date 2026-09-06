@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { Save, User, Building2, Bell, Shield, Palette, Trash2, Plus, Key, LogOut, X } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { getDeviceNotificationPermission, isMacApp, sendDeviceNotification } from '../utils/push';
 
 type AddUserForm = { name: string; username: string; password: string; confirm: string; role: 'admin' | 'user' };
 type ChangePwForm = { id: string; newPw: string; confirm: string };
@@ -23,16 +24,14 @@ export default function SettingsPage() {
 
   const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
 
-  const [notifPermission, setNotifPermission] = useState<string>(() => {
-    if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
-    return Notification.permission;
-  });
+  const [notifPermission, setNotifPermission] = useState<string>('default');
   const [notifLoading, setNotifLoading] = useState(false);
 
   useEffect(() => {
-    if ('Notification' in window) setNotifPermission(Notification.permission);
+    void getDeviceNotificationPermission().then(setNotifPermission);
   }, []);
 
+  const isMac = isMacApp();
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
     (window.navigator as unknown as { standalone?: boolean }).standalone === true;
@@ -40,8 +39,12 @@ export default function SettingsPage() {
   const handleEnableNotifications = async () => {
     setNotifLoading(true);
     await enablePushNotifications();
-    if ('Notification' in window) setNotifPermission(Notification.permission);
+    setNotifPermission(await getDeviceNotificationPermission());
     setNotifLoading(false);
+  };
+
+  const handleTestNotification = () => {
+    void sendDeviceNotification('ProLine CRM', 'Native Mac notifications are working.');
   };
 
   const handleAddUser = async (e: React.FormEvent) => {
@@ -251,7 +254,7 @@ export default function SettingsPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100">
           <Bell size={18} className="text-orange-500" />
-          <h2 className="font-bold text-gray-800">Push Notifications</h2>
+          <h2 className="font-bold text-gray-800">{isMac ? 'Mac Notifications' : 'Push Notifications'}</h2>
         </div>
         <div className="p-5 space-y-4">
           {isIOS && !isStandalone ? (
@@ -264,7 +267,9 @@ export default function SettingsPage() {
           ) : (
             <>
               <p className="text-sm text-gray-500">
-                Get notified on this device for key events. Each team member enables notifications on their own phone.
+                {isMac
+                  ? 'Receive native Notification Centre alerts for CRM activity, even while this window is in the background.'
+                  : 'Get notified on this device for key events. Each team member enables notifications on their own phone.'}
               </p>
               <div className="space-y-1">
                 {([
@@ -319,8 +324,17 @@ export default function SettingsPage() {
               </div>
               {notifPermission === 'denied' && (
                 <p className="text-xs text-red-400">
-                  Go to Settings → {isIOS ? 'Safari → ProLine' : 'your browser'} → Notifications → Allow.
+                  Go to System Settings → Notifications → ProLine CRM → Allow Notifications.
                 </p>
+              )}
+              {isMac && pushEnabled && (
+                <button
+                  type="button"
+                  onClick={handleTestNotification}
+                  className="text-sm font-semibold text-orange-600 hover:text-orange-700 px-3 py-2 rounded-lg hover:bg-orange-50"
+                >
+                  Send test notification
+                </button>
               )}
             </>
           )}

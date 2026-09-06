@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry, PaymentRun, WorkerPayment } from '../types';
 import { generateId } from '../utils/helpers';
 import { hashPassword } from '../utils/crypto';
-import { subscribeToPush } from '../utils/push';
+import { enableDeviceNotifications, getDeviceNotificationPermission, isMacApp, sendDeviceNotification } from '../utils/push';
 import {
   supabase,
   leadToDb, dbToLead,
@@ -55,6 +55,24 @@ const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
     'Update job records',
   ],
 };
+
+function profileToUser(row: Record<string, unknown>): AppUser {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    username: (row.email ?? row.username ?? '') as string,
+    passwordHash: '',
+    role: row.role as AppUser['role'],
+    createdAt: (row.created_at ?? '') as string,
+    dayRate: row.day_rate as number | undefined,
+    cisRate: row.cis_rate as 20 | 30 | undefined,
+    utrNumber: row.utr_number as string | undefined,
+    bankName: row.bank_name as string | undefined,
+    bankAccountNumber: row.bank_account_number as string | undefined,
+    bankSortCode: row.bank_sort_code as string | undefined,
+    organisationId: row.organisation_id as string | undefined,
+  };
+}
 
 // Re-export for components that imported GeneralTask from here
 export type { GeneralTask };
@@ -197,9 +215,14 @@ export const useStore = create<Store>()(
 
       // ── Load all data from Supabase ─────────────────────────────────────────
       loadData: async () => {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const authUserId = sessionData.session?.user.id ?? null;
+        const usersRequest = authUserId
+          ? supabase.from('profiles').select('*').eq('active', true)
+          : supabase.from('app_users').select('*');
         const [leadsRes, usersRes, contactsRes, tasksRes, timesheetRes, paymentRunsRes, workerPaymentsRes] = await Promise.all([
           supabase.from('leads').select('*').order('updated_at', { ascending: false }),
-          supabase.from('app_users').select('*'),
+          usersRequest,
           supabase.from('contacts').select('*').order('created_at', { ascending: false }),
           supabase.from('general_tasks').select('*').order('created_at', { ascending: false }),
           supabase.from('timesheet_entries').select('*').order('date', { ascending: false }),
@@ -215,7 +238,7 @@ export const useStore = create<Store>()(
         }
 
         const leads = (leadsRes.data ?? []).map(r => dbToLead(r as Record<string, unknown>));
-        const users = (usersRes.data ?? []).map(r => dbToUser(r as Record<string, unknown>));
+        const users = (usersRes.data ?? []).map(r => authUserId ? profileToUser(r as Record<string, unknown>) : dbToUser(r as Record<string, unknown>));
         const contacts = (contactsRes.data ?? []).map(r => dbToContact(r as Record<string, unknown>));
         if (tasksRes.error) {
           console.error('loadData tasks error:', tasksRes.error);
@@ -249,21 +272,39 @@ export const useStore = create<Store>()(
         }
         const allContacts = [...contacts, ...missingContacts];
 
-        set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, paymentRuns, workerPayments, isLoaded: true });
+        set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, paymentRuns, workerPayments, currentUserId: authUserId ?? get().currentUserId, isLoaded: true });
 
         // Real-time: keep leads in sync across devices/tabs without refresh
         supabase
           .channel('leads-realtime')
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, ({ new: row }) => {
             const lead = dbToLead(row as Record<string, unknown>);
+            const isNew = !get().leads.some(l => l.id === lead.id);
             set(s => {
               if (s.leads.find(l => l.id === lead.id)) return s;
               return { leads: [lead, ...s.leads] };
             });
+            if (isNew && get().pushEnabled && get().pushPreferences.newLead) {
+              void sendDeviceNotification('New Lead', `${lead.name} — ${lead.jobRef}`);
+            }
           })
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, ({ new: row }) => {
             const lead = dbToLead(row as Record<string, unknown>);
+            const previous = get().leads.find(l => l.id === lead.id);
             set(s => ({ leads: s.leads.map(l => l.id === lead.id ? lead : l) }));
+            if (previous && previous.stage !== lead.stage && get().pushEnabled) {
+              const stageNotification: Partial<Record<Stage, { title: string; pref: keyof Store['pushPreferences'] }>> = {
+                'Survey Booked': { title: 'Survey Booked', pref: 'surveyBooked' },
+                Won: { title: 'Job Won', pref: 'jobWon' },
+                'In Progress': { title: 'Job Started', pref: 'jobStarted' },
+                Completed: { title: 'Job Completed', pref: 'jobCompleted' },
+                Paid: { title: 'Payment Received', pref: 'paymentReceived' },
+              };
+              const notification = stageNotification[lead.stage];
+              if (notification && get().pushPreferences[notification.pref]) {
+                void sendDeviceNotification(notification.title, `${lead.name} — ${lead.jobRef}`);
+              }
+            }
           })
           .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'leads' }, ({ old: row }) => {
             set(s => ({ leads: s.leads.filter(l => l.id !== (row as Record<string, unknown>).id) }));
@@ -273,6 +314,18 @@ export const useStore = create<Store>()(
 
       // ── Auth ────────────────────────────────────────────────────────────────
       login: async (username, password) => {
+        if (username.includes('@')) {
+          const { data, error } = await supabase.auth.signInWithPassword({ email: username, password });
+          if (!error && data.user) {
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).eq('active', true).single();
+            if (profile) {
+              const user = profileToUser(profile as Record<string, unknown>);
+              set(s => ({ currentUserId: user.id, users: s.users.some(existing => existing.id === user.id) ? s.users : [...s.users, user] }));
+              return true;
+            }
+            await supabase.auth.signOut();
+          }
+        }
         const hash = await hashPassword(password);
         const user = get().users.find(
           u => u.username.toLowerCase() === username.toLowerCase() && u.passwordHash === hash
@@ -281,7 +334,7 @@ export const useStore = create<Store>()(
         return false;
       },
 
-      logout: () => set({ currentUserId: null }),
+      logout: () => { void supabase.auth.signOut(); set({ currentUserId: null }); },
 
       addUser: async (name, username, password, role) => {
         const existing = get().users.find(u => u.username.toLowerCase() === username.toLowerCase());
@@ -434,13 +487,21 @@ export const useStore = create<Store>()(
       },
 
       enablePushNotifications: async () => {
-        const subscription = await subscribeToPush();
-        if (!subscription) {
-          if ('Notification' in window && Notification.permission === 'denied') {
+        const result = await enableDeviceNotifications();
+        if (!result.enabled) {
+          if (result.denied || await getDeviceNotificationPermission() === 'denied') {
             get().showToast('Notifications blocked — allow in device Settings', 'error');
           }
           return;
         }
+        if (result.native) {
+          set({ pushEnabled: true });
+          get().showToast('Mac notifications enabled');
+          void sendDeviceNotification('ProLine CRM', 'Native Mac notifications are now enabled.');
+          return;
+        }
+        const subscription = result.subscription;
+        if (!subscription) return;
         const now = new Date().toISOString().split('T')[0];
         const { error } = await supabase.from('push_subscriptions').upsert(
           {
@@ -462,7 +523,7 @@ export const useStore = create<Store>()(
       },
 
       disablePushNotifications: () => {
-        if ('serviceWorker' in navigator) {
+        if (!isMacApp() && 'serviceWorker' in navigator) {
           navigator.serviceWorker.ready.then(reg =>
             reg.pushManager.getSubscription().then(sub => {
               if (sub) {
@@ -600,6 +661,7 @@ export const useStore = create<Store>()(
         };
         const pushEntry = pushTitles[stage];
         if (pushEntry && get().pushEnabled && get().pushPreferences[pushEntry.pref]) {
+          void sendDeviceNotification(pushEntry.title, `${lead.name} — ${lead.jobRef}`);
           supabase.functions.invoke('send-push', {
             body: { title: pushEntry.title, body: `${lead.name} — ${lead.jobRef}` },
           });

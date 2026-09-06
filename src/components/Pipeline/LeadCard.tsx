@@ -5,6 +5,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Lead } from '../../types';
 import { formatCurrency, formatDateShort, dayLabel, jobTypeColor } from '../../utils/helpers';
 import { useStore } from '../../store/useStore';
+import { StorageImage } from '../StorageAsset';
 
 interface Props {
   lead: Lead;
@@ -133,7 +134,7 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
           <div className="flex items-center justify-between">
             {isAdmin && <p className="text-sm font-bold text-gray-800">{formatCurrency(lead.value)}</p>}
             {lead.photos.length > 0 ? (
-              <img src={lead.photos[lead.photos.length - 1].url} className="w-10 h-10 rounded-lg object-cover" alt="job" />
+              <StorageImage locator={lead.photos[lead.photos.length - 1].url} className="w-10 h-10 rounded-lg object-cover" alt="job" />
             ) : (
               <span className="text-xs text-green-600 font-medium">Done {formatDateShort(lead.completedDate)}</span>
             )}
