@@ -146,6 +146,9 @@ struct ProLineCRMApp: App {
                     .disabled(appState.isWorkerPreview)
             }
         }
+        Settings {
+            SettingsView().environment(appState).frame(minWidth: 520, minHeight: 560)
+        }
         #endif
     }
 }

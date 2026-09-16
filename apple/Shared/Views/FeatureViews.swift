@@ -1291,141 +1291,8 @@ private struct MacAICommandCenter: View {
     }
     private func icon(_ kind: CompanyActionKind) -> String { switch kind { case .generalTask: "checklist"; case .jobTask: "hammer"; case .survey: "calendar"; case .jobStart: "hammer.fill"; case .overdueJob: "exclamationmark.triangle.fill"; case .quoteFollowUp: "doc.text"; case .deposit, .balance: "sterlingsign.circle"; case .timesheet: "clock.badge.exclamationmark" } }
 }
-private struct MacBotControlDeck: View {
-    @Environment(AppState.self) private var appState
-    private var actions: [CompanyAction] { appState.companyActions }
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack { VStack(alignment: .leading, spacing: 3) { Text("Your AI operators").font(.headline); Text("Each operator watches a part of Proline and prepares work for approval.").font(.caption).foregroundStyle(.secondary) }; Spacer(); Text("All working from one queue").font(.caption2.bold()).foregroundStyle(.secondary) }
-            HStack(spacing: 12) {
-                bot("Daily operations", count: actions.filter { $0.priority >= .urgent }.count, detail: "Urgent work and blockers", icon: "sun.max.fill", tint: .orange, prompt: "Create my daily company plan. Identify the work that must happen today, risks, and the best next action for each.")
-                bot("Sales & quotes", count: actions.filter { $0.kind == .quoteFollowUp }.count, detail: "Quotes waiting to be won", icon: "chart.line.uptrend.xyaxis", tint: .purple, prompt: "Act as my Sales and Quotes Bot. Review all open quotes, rank the best opportunities, and prepare follow-up actions.")
-                bot("Live jobs", count: actions.filter { [.jobTask, .jobStart, .overdueJob, .survey].contains($0.kind) }.count, detail: "Site work needing attention", icon: "hammer.fill", tint: .blue, prompt: "Act as my Live Jobs Bot. Find delivery risks, overdue work, missing job steps and the most useful next actions for each live job.")
-                bot("Growth advisor", count: appState.leads.filter { [.newLead, .surveyBooked, .quotePreparing, .quoteSent].contains($0.stage) }.count, detail: "Live opportunities to improve", icon: "arrow.up.right.circle.fill", tint: .green, prompt: "Act as my Growth Advisor. Use current CRM data to identify practical ways to win more profitable work, improve conversion, and remove recurring business bottlenecks.")
-            }
-            if !appState.aiAuditEntries.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack { Label("Recent AI activity", systemImage: "clock.arrow.circlepath").font(.subheadline.bold()); Spacer() }.padding(.bottom, 8)
-                    ForEach(appState.aiAuditEntries.sorted { $0.createdAt > $1.createdAt }.prefix(3)) { entry in
-                        HStack(spacing: 9) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green); VStack(alignment: .leading, spacing: 1) { Text(entry.actionTitle).font(.caption.weight(.medium)); Text("\(entry.userName) · \(String(entry.createdAt.prefix(10)))").font(.caption2).foregroundStyle(.secondary) }; Spacer(); Text(entry.outcome.capitalized).font(.caption2.bold()).foregroundStyle(.green) }.padding(.vertical, 7).overlay(alignment: .bottom) { Divider() }
-                    }
-                }.padding(14).background(.background, in: RoundedRectangle(cornerRadius: 11)).overlay(RoundedRectangle(cornerRadius: 11).stroke(.quaternary))
-            }
-        }
-    }
-    private func bot(_ title: String, count: Int, detail: String, icon: String, tint: Color, prompt: String) -> some View {
-        Button { appState.openAssistant(with: prompt) } label: {
-            VStack(alignment: .leading, spacing: 9) { HStack { Image(systemName: icon).foregroundStyle(tint); Spacer(); Text("\(count)").font(.headline.bold()).foregroundStyle(.primary) }; Text(title).font(.subheadline.bold()).foregroundStyle(.primary); Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2); Label("Review", systemImage: "arrow.right").font(.caption.bold()).foregroundStyle(tint) }
-                .frame(maxWidth: .infinity, minHeight: 122, alignment: .leading).padding(14).background(.background, in: RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(tint.opacity(0.18)))
-        }.buttonStyle(.plain)
-    }
-}
 private struct PanelHeader:View{let title,count,icon:String;let tint:Color;init(_ title:String,_ count:String,_ icon:String,_ tint:Color){self.title=title;self.count=count;self.icon=icon;self.tint=tint};var body:some View{HStack{Label(title,systemImage:icon).font(.headline).foregroundStyle(tint);Spacer();if !count.isEmpty{Text(count).font(.caption.bold()).padding(.horizontal,7).padding(.vertical,3).background(.quaternary,in:Capsule())}}.padding(15).overlay(alignment:.bottom){Divider()}}}
 struct DashboardEmpty:View{let title,detail,icon:String;init(_ title:String,_ detail:String,_ icon:String){self.title=title;self.detail=detail;self.icon=icon};var body:some View{VStack(spacing:6){Image(systemName:icon).font(.title).foregroundStyle(.secondary);Text(title).fontWeight(.semibold);Text(detail).font(.caption).foregroundStyle(.secondary)}.frame(maxWidth:.infinity).padding(28)}}
-#endif
-
-private struct MetricCard: View {
-    let title: String; let value: String; let icon: String
-    var body: some View { VStack(alignment: .leading, spacing: 8) { Image(systemName: icon).foregroundStyle(.orange); Text(value).font(.title2.bold()); Text(title).foregroundStyle(.secondary) }.frame(maxWidth: .infinity, alignment: .leading).padding().background(.quaternary, in: RoundedRectangle(cornerRadius: 14)) }
-}
-
-struct LeadListView: View {
-    @Environment(AppState.self) private var appState
-    let stages: Set<LeadStage>; let title: String
-    @State private var search = ""
-    var matches: [Lead] { appState.leads.filter { stages.contains($0.stage) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.phone.contains(search) || $0.jobRef.localizedCaseInsensitiveContains(search)) } }
-    var body: some View {
-        #if os(macOS)
-        MacLeadsView()
-        #else
-        List(matches) { lead in NavigationLink { LeadDetailView(leadID: lead.id) } label: { LeadRow(lead: lead) } }
-            .searchable(text: $search, prompt: "Search \(title.lowercased())")
-            .navigationTitle(title)
-        #endif
-    }
-}
-
-#if os(macOS)
-private struct MacLeadsView: View {
-    @Environment(AppState.self) private var appState
-    @State private var selectedID: String?
-    @State private var search = ""
-    @State private var segment = "All leads"
-    @State private var stageFilter: LeadStage?
-    @State private var ownerFilter = "All owners"
-    @State private var sourceFilter = "All sources"
-    @State private var showingAdd = false
-    @State private var sortNewest = true
-
-    private var leadStages: Set<LeadStage> { [.newLead,.surveyBooked,.quotePreparing,.quoteSent] }
-    private var baseLeads: [Lead] { appState.leads.filter { leadStages.contains($0.stage) } }
-    private var rows: [Lead] {
-        let candidates = segment == "Archived" ? appState.leads.filter { [.lost,.paid].contains($0.stage) } : baseLeads
-        var result = candidates.filter { lead in
-            let text = search.isEmpty || [lead.name,lead.phone,lead.address,lead.jobRef,lead.jobType].contains { $0.localizedCaseInsensitiveContains(search) }
-            let segmentMatch: Bool = switch segment {
-            case "My leads": LeadOwnership.isAssigned(lead, to: appState.currentUser)
-            case "New enquiries": lead.stage == .newLead
-            case "Needs follow-up": lead.stage == .quoteSent
-            case "Hot leads": lead.value >= 10_000
-            case "Archived": [.lost,.paid].contains(lead.stage)
-            default: true
-            }
-            return text && segmentMatch && (stageFilter == nil || lead.stage == stageFilter) && (ownerFilter == "All owners" || lead.assignedTo == ownerFilter) && (sourceFilter == "All sources" || lead.source == sourceFilter)
-        }
-        result.sort { sortNewest ? $0.updatedAt > $1.updatedAt : $0.name < $1.name }
-        return result
-    }
-    private var selected: Lead? { let id = selectedID.flatMap { chosen in rows.contains(where:{$0.id == chosen}) ? chosen : nil } ?? rows.first?.id; return rows.first { $0.id == id } }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                header.padding(.horizontal,24).padding(.top,18)
-                metrics.padding(.horizontal,24).padding(.top,14)
-                segments.padding(.horizontal,24).padding(.top,12)
-                filters.padding(.horizontal,24).padding(.vertical,12)
-                leadTable
-            }
-            if let lead = selected { Divider(); LeadInspector(leadID: lead.id).frame(width: 320) }
-        }.background(Color(nsColor:.windowBackgroundColor)).navigationTitle("Leads").sheet(isPresented:$showingAdd){AddLeadView(defaultStage:.newLead)}
-    }
-
-    private var header: some View { HStack { VStack(alignment:.leading,spacing:3){Text("Leads").font(.system(size:29,weight:.bold));Text("Manage, qualify and convert every opportunity.").foregroundStyle(.secondary)};Spacer();HStack{Image(systemName:"magnifyingglass");TextField("Search…",text:$search);Text("⌘K").font(.caption).foregroundStyle(.secondary)}.padding(.horizontal,10).frame(width:245,height:36).background(.background,in:RoundedRectangle(cornerRadius:7)).overlay(RoundedRectangle(cornerRadius:7).stroke(.quaternary));Button{showingAdd=true}label:{Label("Add lead",systemImage:"plus").foregroundStyle(.white).padding(.horizontal,14).frame(height:36).background(Color(red:1,green:0.29,blue:0.04),in:RoundedRectangle(cornerRadius:7))}.buttonStyle(.plain)} }
-
-    private var metrics: some View {
-        let weekStart = Calendar.current.date(byAdding:.day,value:-7,to:.now)!
-        let weekly = baseLeads.filter { (SupabaseService.date(from:$0.createdAt) ?? .distantPast) >= weekStart }.count
-        let uncontacted = baseLeads.filter { $0.tasks.isEmpty && $0.notes.isEmpty }.count
-        let decided = appState.leads.filter { [.won,.scheduled,.inProgress,.completed,.waitingForPayment,.paid,.lost].contains($0.stage) }
-        let conversion = decided.isEmpty ? 0 : Int((Double(decided.filter{$0.stage != .lost}.count)/Double(decided.count)*100).rounded())
-        return HStack(spacing:0){LeadMetric(icon:"person.2",title:"All leads",value:"\(baseLeads.count)",accent:.blue);Divider().frame(height:50);LeadMetric(icon:"chart.line.uptrend.xyaxis",title:"New this week",value:"\(weekly)",accent:.blue);Divider().frame(height:50);LeadMetric(icon:"envelope",title:"Uncontacted",value:"\(uncontacted)",accent:.orange);Divider().frame(height:50);LeadMetric(icon:"arrow.up.right",title:"Conversion rate",value:"\(conversion)%",accent:.green)}.frame(height:82).background(.background,in:RoundedRectangle(cornerRadius:9)).overlay(RoundedRectangle(cornerRadius:9).stroke(.quaternary))
-    }
-
-    private var segments: some View { HStack(spacing:22){ForEach(["All leads","My leads","New enquiries","Needs follow-up","Hot leads","Archived"],id:\.self){item in Button{segment=item}label:{VStack(spacing:8){HStack(spacing:6){Text(item);Text("\(count(item))").font(.caption2).padding(.horizontal,6).padding(.vertical,2).background(.quaternary,in:Capsule())};Rectangle().fill(segment==item ? Color(red:1,green:0.29,blue:0.04):.clear).frame(height:2)}}.buttonStyle(.plain).foregroundStyle(segment==item ? .primary:.secondary)};Spacer()}.frame(height:48).padding(.horizontal,8).background(.background).overlay(alignment:.bottom){Divider()} }
-
-    private var filters: some View { HStack(spacing:9){HStack{Image(systemName:"magnifyingglass");TextField("Search name, postcode, phone or job…",text:$search)}.padding(.horizontal,10).frame(width:275,height:34).background(.background,in:RoundedRectangle(cornerRadius:7)).overlay(RoundedRectangle(cornerRadius:7).stroke(.quaternary));Menu(stageFilter?.displayName ?? "Stage"){Button("All stages"){stageFilter=nil};ForEach(LeadStage.allCases){s in Button(s.displayName){stageFilter=s}}};Menu(ownerFilter){Button("All owners"){ownerFilter="All owners"};ForEach(Array(Set(appState.leads.map(\.assignedTo))).filter{!$0.isEmpty}.sorted(),id:\.self){o in Button(o){ownerFilter=o}}};Menu(sourceFilter){Button("All sources"){sourceFilter="All sources"};ForEach(Array(Set(appState.leads.map(\.source))).filter{!$0.isEmpty}.sorted(),id:\.self){s in Button(s){sourceFilter=s}}};Spacer();Button{sortNewest.toggle()}label:{Label(sortNewest ? "Newest first":"Name A–Z",systemImage:"arrow.up.arrow.down")}}.controlSize(.large) }
-
-    private var leadTable: some View { let total = segment == "Archived" ? appState.leads.filter{[.lost,.paid].contains($0.stage)}.count : baseLeads.count; return VStack(spacing:0){LeadTableHeader();ScrollView{LazyVStack(spacing:0){ForEach(rows){lead in Button{selectedID=lead.id}label:{LeadTableRow(lead:lead,selected:(selectedID ?? rows.first?.id)==lead.id)}.buttonStyle(.plain)}}}.overlay{if rows.isEmpty{ContentUnavailableView("No matching leads",systemImage:"person.crop.circle.badge.questionmark")}};HStack{Text("Showing \(rows.count) of \(total)");Spacer();Text("Live from Supabase").foregroundStyle(.green)}.font(.caption).foregroundStyle(.secondary).padding(.horizontal,24).frame(height:42).background(.background).overlay(alignment:.top){Divider()}} }
-    private func count(_ item:String)->Int{switch item{case "My leads":baseLeads.filter{LeadOwnership.isAssigned($0,to:appState.currentUser)}.count;case "New enquiries":baseLeads.filter{$0.stage == .newLead}.count;case "Needs follow-up":baseLeads.filter{$0.stage == .quoteSent}.count;case "Hot leads":baseLeads.filter{$0.value >= 10_000}.count;case "Archived":appState.leads.filter{[.lost,.paid].contains($0.stage)}.count;default:baseLeads.count}}
-}
-
-private struct LeadMetric:View{let icon,title,value:String;let accent:Color;var body:some View{HStack(spacing:14){Image(systemName:icon).font(.title2).foregroundStyle(accent);VStack(alignment:.leading){Text(title).font(.caption).foregroundStyle(.secondary);Text(value).font(.title2.bold())}}.padding(.horizontal,28).frame(maxWidth:.infinity,alignment:.leading)}}
-private struct LeadTableHeader:View{var body:some View{HStack(spacing:10){Text("Lead").frame(maxWidth:.infinity,alignment:.leading);Text("Job").frame(width:115,alignment:.leading);Text("Stage").frame(width:105,alignment:.leading);Text("Value").frame(width:80,alignment:.leading);Text("Next action").frame(width:140,alignment:.leading);Text("Source").frame(width:80,alignment:.leading);Text("Owner").frame(width:95,alignment:.leading)}.font(.caption.bold()).foregroundStyle(.secondary).padding(.horizontal,24).frame(height:42).background(.background).overlay(alignment:.bottom){Divider()}}}
-private struct LeadTableRow:View{let lead:Lead;let selected:Bool;var body:some View{HStack(spacing:10){HStack(spacing:9){Circle().fill(stageTint.opacity(0.15)).frame(width:36,height:36).overlay(Text(initials).font(.caption.bold()).foregroundStyle(stageTint));VStack(alignment:.leading){Text(lead.name).fontWeight(.semibold);Text(lead.address.isEmpty ? lead.phone:lead.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)}}.frame(maxWidth:.infinity,alignment:.leading);Text(lead.jobType).frame(width:115,alignment:.leading).lineLimit(1);Text(lead.stage.displayName).font(.caption).padding(.horizontal,7).padding(.vertical,4).background(stageTint.opacity(0.12),in:Capsule()).foregroundStyle(stageTint).frame(width:105,alignment:.leading);Text(lead.value,format:.currency(code:"GBP").precision(.fractionLength(0))).frame(width:80,alignment:.leading);Label(nextAction,systemImage:nextIcon).foregroundStyle(stageTint).frame(width:140,alignment:.leading).lineLimit(1);Text(lead.source).frame(width:80,alignment:.leading).lineLimit(1);Text(lead.assignedTo.isEmpty ? "Unassigned":lead.assignedTo).frame(width:95,alignment:.leading).lineLimit(1)}.font(.subheadline).padding(.horizontal,24).frame(height:64).background(selected ? Color.orange.opacity(0.07):Color.clear).overlay(alignment:.bottom){Divider()}};private var initials:String{lead.name.split(separator:" ").prefix(2).compactMap{$0.first}.map(String.init).joined()};private var stageTint:Color{switch lead.stage{case .newLead:.blue;case .surveyBooked:.green;case .quotePreparing,.quoteSent:.purple;case .waitingForPayment:.indigo;case .won,.scheduled,.inProgress,.completed,.paid:.green;case .lost:.gray}};private var nextAction:String{if let survey=lead.surveyDate{return survey};return switch lead.stage{case .newLead:"Call customer";case .surveyBooked:"Complete survey";case .quotePreparing:"Finish estimate";case .quoteSent:"Follow up";case .waitingForPayment:"Collect balance";default:"Review lead"}};private var nextIcon:String{lead.surveyDate == nil ? "phone":"calendar"}}
-
-private struct LeadInspector:View{
-    @Environment(AppState.self) private var appState
-    let leadID:String
-    @State private var note=""
-    private var lead:Lead?{appState.leads.first{$0.id==leadID}}
-    var body:some View{if let lead{ScrollView{VStack(alignment:.leading,spacing:16){HStack(alignment:.top){Circle().fill(Color.orange.opacity(0.15)).frame(width:58,height:58).overlay(Text(lead.name.prefix(1)).font(.title2.bold()).foregroundStyle(.orange));VStack(alignment:.leading,spacing:3){Text(lead.name).font(.title2.bold());Text(lead.jobType+" · "+(lead.address.isEmpty ? "Address not set":lead.address)).font(.caption).foregroundStyle(.secondary).lineLimit(2);Text(lead.value,format:.currency(code:"GBP")).font(.title3.bold())};Spacer()}.padding(.top,4);HStack{if !lead.phone.isEmpty{Link(destination:URL(string:"tel:\(lead.phone)")!){Label("Call",systemImage:"phone.fill").frame(maxWidth:.infinity)}};if !lead.email.isEmpty{Link(destination:URL(string:"mailto:\(lead.email)")!){Label("Email",systemImage:"envelope").frame(maxWidth:.infinity)}}}.buttonStyle(.bordered).controlSize(.large);stageProgress(lead);InspectorPanel(title:"Next action"){VStack(alignment:.leading,spacing:12){Label(nextAction(lead),systemImage:lead.surveyDate == nil ? "phone.fill":"calendar").font(.headline);Button("Complete"){advance(lead)}.buttonStyle(.borderedProminent).frame(maxWidth:.infinity)}};InspectorPanel(title:"Timeline"){VStack(alignment:.leading,spacing:12){TimelineItem(icon:"globe",title:"Lead received",detail:lead.createdAt);TimelineItem(icon:"person.2",title:"Assigned to \(lead.assignedTo.isEmpty ? "Unassigned":lead.assignedTo)",detail:lead.updatedAt);ForEach(lead.notes.prefix(3)){n in TimelineItem(icon:"note.text",title:n.content,detail:"\(n.author) · \(n.date)")}}};InspectorPanel(title:"Add note"){VStack{TextField("Type your note…",text:$note,axis:.vertical).lineLimit(3...6);Button("Save note"){var changed=lead;changed.notes.insert(CRMNote(id:UUID().uuidString,content:note,date:SupabaseService.today,author:appState.currentUser?.name ?? ""),at:0);note="";Task{await appState.saveLead(changed)}}.disabled(note.trimmingCharacters(in:.whitespaces).isEmpty).frame(maxWidth:.infinity,alignment:.trailing)}};NavigationLink{LeadDetailView(leadID:lead.id)}label:{Label("Open full lead",systemImage:"arrow.up.right.square").frame(maxWidth:.infinity)}.buttonStyle(.bordered)}.padding(16)}}}
-    private func stageProgress(_ lead:Lead)->some View{let stages:[LeadStage]=[.newLead,.surveyBooked,.quoteSent,.won];let current=max(0,stages.firstIndex(of:lead.stage) ?? 0);return HStack{ForEach(Array(stages.enumerated()),id:\.offset){i,s in VStack{Circle().fill(i<=current ? Color.blue:Color.clear).frame(width:28,height:28).overlay(Circle().stroke(i<=current ? Color.blue:Color.secondary.opacity(0.4))).overlay(Text("\(i+1)").foregroundStyle(i<=current ? .white:.secondary));Text(s == .newLead ? "Enquiry":s.displayName.replacingOccurrences(of:" Booked",with:"")).font(.caption2)};if i<stages.count-1{Rectangle().fill(i<current ? Color.blue:Color.secondary.opacity(0.2)).frame(height:1)}}}.padding(.vertical,6)}
-    private func nextAction(_ lead:Lead)->String{if let task=lead.tasks.first(where:{!$0.completed}){return task.title};if let d=lead.surveyDate{return "Survey on \(d)"};return switch lead.stage{case .newLead:"Call customer";case .surveyBooked:"Complete survey";case .quotePreparing:"Finish estimate";case .quoteSent:"Follow up on quote";default:"Review lead"}}
-    private func advance(_ lead:Lead){let title=nextAction(lead);Task{await appState.completeNextLeadTask(leadID:lead.id,fallbackTitle:title)}}
-}
-private struct InspectorPanel<Content:View>:View{let title:String;@ViewBuilder let content:Content;var body:some View{VStack(alignment:.leading,spacing:12){Text(title).font(.headline);content}.padding(14).frame(maxWidth:.infinity,alignment:.leading).background(.background,in:RoundedRectangle(cornerRadius:9)).overlay(RoundedRectangle(cornerRadius:9).stroke(.quaternary))}}
-private struct TimelineItem:View{let icon,title,detail:String;var body:some View{HStack(alignment:.top,spacing:10){Image(systemName:icon).foregroundStyle(.blue).frame(width:24,height:24).background(Color.blue.opacity(0.08),in:Circle());VStack(alignment:.leading){Text(title).font(.subheadline);Text(detail).font(.caption).foregroundStyle(.secondary)}}}}
 #endif
 
 struct JobChecklistItem: Identifiable {
@@ -1545,45 +1412,6 @@ struct TasksView: View {
 private struct JobTaskGroup:Identifiable{let lead:Lead;let items:[JobChecklistItem];var id:String{lead.id}}
 
 #if os(iOS)
-private struct MobileTaskActionRequiredList: View {
-    @Environment(AppState.self) private var appState
-    private var actions: [CompanyAction] { Array(appState.taskActions.prefix(8)) }
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Label("Action required", systemImage: "exclamationmark.circle.fill").font(.headline).foregroundStyle(.orange)
-                    Text("Why it matters and where to deal with it.").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer(); Text("\(actions.count)").font(.caption.bold()).padding(.horizontal, 8).padding(.vertical, 4).background(.quaternary, in: Capsule())
-            }.padding(15)
-            if actions.isEmpty { Text("Nothing needs attention right now.").font(.subheadline).foregroundStyle(.secondary).padding(15) }
-            ForEach(actions) { action in
-                Divider()
-                HStack(spacing: 12) {
-                    Image(systemName: icon(action.kind)).foregroundStyle(action.priority.tint).frame(width: 36, height: 36).background(action.priority.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(action.title).fontWeight(.semibold)
-                        Text(action.detail).font(.caption).foregroundStyle(.secondary)
-                        Text(action.reason).font(.caption2.weight(.medium)).foregroundStyle(action.priority.tint)
-                    }
-                    Spacer(); control(action)
-                }.padding(.horizontal, 15).padding(.vertical, 11)
-            }
-        }.background(Color.orange.opacity(0.04), in: RoundedRectangle(cornerRadius: 18)).overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.orange.opacity(0.22)))
-    }
-    @ViewBuilder private func control(_ action: CompanyAction) -> some View {
-        if let taskID = action.generalTaskID, let task = appState.generalTasks.first(where: { $0.id == taskID }) {
-            Button("Done") { Task { await appState.toggleGeneralTask(task) } }.buttonStyle(.bordered).tint(.orange)
-        } else if let leadID = action.leadID {
-            NavigationLink { LeadDetailView(leadID: leadID) } label: { Image(systemName: "arrow.right.circle.fill").font(.title2) }.foregroundStyle(.orange).accessibilityLabel("Open related job")
-        } else if action.kind == .timesheet {
-            Button { appState.selectedSection = .timesheet } label: { Image(systemName: "arrow.right.circle.fill").font(.title2) }.buttonStyle(.plain).foregroundStyle(.orange).accessibilityLabel("Open timesheets")
-        }
-    }
-    private func icon(_ kind: CompanyActionKind) -> String { switch kind { case .generalTask: "checklist"; case .jobTask: "hammer"; case .survey: "calendar"; case .jobStart: "hammer.fill"; case .overdueJob: "exclamationmark.triangle.fill"; case .quoteFollowUp: "doc.text"; case .deposit, .balance: "sterlingsign.circle"; case .timesheet: "clock.badge.exclamationmark" } }
-}
-
 private struct MobileGeneralTaskRow:View{
     let task:GeneralTask;let owner:String;let toggle:()->Void;let edit:()->Void
     var body:some View{HStack(spacing:12){Button(action:toggle){Image(systemName:task.completed ? "checkmark.circle.fill":"circle").font(.title2).foregroundStyle(task.completed ? .green:.secondary)}.buttonStyle(.plain);Button(action:edit){VStack(alignment:.leading,spacing:3){Text(task.title).fontWeight(.medium).foregroundStyle(.primary).strikethrough(task.completed);Text([task.category,task.dueDate,owner].compactMap{$0}.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain)}.padding(.horizontal,15).padding(.vertical,12)}
@@ -1599,36 +1427,9 @@ private struct MobileJobTaskCard:View{
 #endif
 
 #if os(macOS)
-private struct MacTaskFocusList: View {
-    @Environment(AppState.self) private var appState
-    private var actions: [CompanyAction] { Array(appState.taskActions.prefix(8)) }
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack { VStack(alignment: .leading, spacing: 2) { Label("Action required", systemImage: "exclamationmark.circle.fill").font(.headline).foregroundStyle(.orange); Text("Why it matters and where to deal with it.").font(.caption).foregroundStyle(.secondary) }; Spacer(); Text("Priority order").font(.caption2.bold()).foregroundStyle(.orange).padding(.horizontal, 8).padding(.vertical, 4).background(Color.orange.opacity(0.1), in: Capsule()) }.padding(16)
-            if actions.isEmpty { Text("Nothing needs attention right now.").font(.subheadline).foregroundStyle(.secondary).padding(16) }
-            ForEach(actions) { action in
-                HStack(spacing: 12) {
-                    Image(systemName: icon(action.kind)).foregroundStyle(action.priority.tint).frame(width: 34, height: 34).background(action.priority.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
-                    VStack(alignment: .leading, spacing: 3) { Text(action.title).fontWeight(.semibold); Text(action.detail).font(.caption).foregroundStyle(.secondary); Text(action.reason).font(.caption2.weight(.medium)).foregroundStyle(action.priority.tint) }
-                    Spacer()
-                    if let taskID = action.generalTaskID, let task = appState.generalTasks.first(where: { $0.id == taskID }) {
-                        Button("Complete") { Task { await appState.toggleGeneralTask(task) } }.buttonStyle(.bordered)
-                    } else if let leadID = action.leadID {
-                        NavigationLink { LeadDetailView(leadID: leadID) } label: { Label("Open job", systemImage: "arrow.right") }.buttonStyle(.bordered)
-                    } else if action.kind == .timesheet {
-                        Button("Open timesheets") { appState.selectedSection = .timesheet }.buttonStyle(.bordered)
-                    }
-                }.padding(.horizontal, 16).padding(.vertical, 10).overlay(alignment: .bottom) { Divider().padding(.leading, 62) }
-            }
-        }.background(Color.orange.opacity(0.035), in: RoundedRectangle(cornerRadius: 14)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.orange.opacity(0.20)))
-    }
-    private func icon(_ kind: CompanyActionKind) -> String { switch kind { case .generalTask: "checklist"; case .jobTask: "hammer"; case .survey: "calendar"; case .jobStart: "hammer.fill"; case .overdueJob: "exclamationmark.triangle.fill"; case .quoteFollowUp: "doc.text"; case .deposit, .balance: "sterlingsign.circle"; case .timesheet: "clock.badge.exclamationmark" } }
-}
 private struct TaskMetric:View{let title:String;let value:Int;let icon:String;let tint:Color;var body:some View{HStack(spacing:13){Image(systemName:icon).font(.title2).foregroundStyle(tint).frame(width:42,height:42).background(tint.opacity(0.1),in:RoundedRectangle(cornerRadius:9));VStack(alignment:.leading){Text("\(value)").font(.title2.bold());Text(title).font(.caption).foregroundStyle(.secondary)}}.padding(14).frame(maxWidth:.infinity,alignment:.leading).background(.background,in:RoundedRectangle(cornerRadius:10)).overlay(RoundedRectangle(cornerRadius:10).stroke(.quaternary))}}
 private struct MacGeneralTaskCardRow:View{let task:GeneralTask;let userName:String;let action:()->Void;let onEdit:()->Void;let onDelete:()->Void;@State private var confirmingDelete=false;private var tint:Color{task.priority=="high" ? .red:task.priority=="low" ? .green:.orange};var body:some View{HStack(spacing:13){Button(action:action){Image(systemName:task.completed ? "checkmark.circle.fill":"circle").font(.title2).foregroundStyle(task.completed ? .green:.secondary)}.buttonStyle(.plain);Button(action:onEdit){VStack(alignment:.leading,spacing:3){Text(task.title).fontWeight(.medium).foregroundStyle(.primary).strikethrough(task.completed);Text([task.category,task.dueDate,userName].compactMap{$0}.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary)}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain);Text(task.priority.capitalized).font(.caption.bold()).foregroundStyle(tint).padding(.horizontal,8).padding(.vertical,4).background(tint.opacity(0.1),in:Capsule());Menu{Button("Edit",action:onEdit);Button(task.completed ? "Mark incomplete":"Mark complete",action:action);Divider();Button("Delete",role:.destructive){confirmingDelete=true}}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton)}.padding(.horizontal,16).frame(minHeight:62).confirmationDialog("Delete this task?",isPresented:$confirmingDelete){Button("Delete",role:.destructive,action:onDelete)}}}
 private struct MacJobTaskCard:View{@Environment(AppState.self) private var appState;let group:JobTaskGroup;let isExpanded:Bool;let toggleExpanded:()->Void;let toggleTask:(String)->Void;let editTask:(CRMTask)->Void;private var completed:Int{group.items.filter(\.task.completed).count};private var progress:Double{group.items.isEmpty ? 0:Double(completed)/Double(group.items.count)};var body:some View{VStack(spacing:0){Button(action:toggleExpanded){HStack(spacing:14){Text(group.lead.name.prefix(1)).font(.title3.bold()).foregroundStyle(.orange).frame(width:46,height:46).background(Color.orange.opacity(0.13),in:RoundedRectangle(cornerRadius:11));VStack(alignment:.leading,spacing:7){HStack{Text(group.lead.name).font(.headline).foregroundStyle(.primary);Text(group.lead.jobType).font(.caption).foregroundStyle(.secondary).padding(.horizontal,8).padding(.vertical,3).background(Color.secondary.opacity(0.09),in:Capsule());Text(group.lead.jobRef).font(.caption).foregroundStyle(.secondary)};HStack(spacing:10){ProgressView(value:progress).tint(.orange).frame(width:180);Text("\(completed)/\(group.items.count) done").font(.caption).foregroundStyle(.secondary)}};Spacer();Text(isExpanded ? "Close":"Open").font(.subheadline.bold()).foregroundStyle(.orange);Image(systemName:isExpanded ? "chevron.up":"chevron.down").font(.caption.bold()).foregroundStyle(.secondary)}.padding(16).contentShape(Rectangle())}.buttonStyle(.plain);if isExpanded{Divider();ForEach(group.items){item in VStack(spacing:0){HStack(spacing:13){Button{toggleTask(item.task.id)}label:{Image(systemName:item.task.completed ? "checkmark.circle.fill":"circle").font(.title2).foregroundStyle(item.task.completed ? .green:.secondary)}.buttonStyle(.plain);Button{editTask(item.task)}label:{VStack(alignment:.leading,spacing:3){Text(item.task.title).fontWeight(.medium).foregroundStyle(.primary).strikethrough(item.task.completed);HStack{if let due=item.task.dueDate{Label(due,systemImage:"calendar").foregroundStyle(!item.task.completed && due<SupabaseService.today ? .red:.secondary)};Text((item.task.priority ?? "medium").capitalized);if let steps=item.task.subtasks,!steps.isEmpty{Text("\(steps.filter(\.completed).count)/\(steps.count) steps").foregroundStyle(.orange)}}.font(.caption).foregroundStyle(.secondary);if let notes=item.task.notes,!notes.isEmpty{Text(notes).font(.caption).foregroundStyle(.secondary).lineLimit(1)}}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain);Button("Edit"){editTask(item.task)}.buttonStyle(.bordered)}.padding(.horizontal,18).frame(minHeight:68);if let steps=item.task.subtasks,!steps.isEmpty{ForEach(steps){step in Button{Task{await appState.toggleLeadSubtask(leadID:group.lead.id,taskID:item.task.id,subtaskID:step.id)}}label:{HStack{Image(systemName:step.completed ? "checkmark.circle.fill":"circle").foregroundStyle(step.completed ? .green:.orange);Text(step.title).foregroundStyle(.primary).strikethrough(step.completed);Spacer()}.padding(.leading,58).padding(.trailing,18).frame(height:38)}.buttonStyle(.plain)}};if item.id != group.items.last?.id{Divider().padding(.leading,56)}}};Divider();NavigationLink{if appState.isAdmin{LeadDetailView(leadID:group.lead.id)}else{WorkerJobDetailView(leadID:group.lead.id)}}label:{Label("Open job",systemImage:"arrow.right.circle").font(.subheadline.bold()).foregroundStyle(.orange).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,18).padding(.vertical,12)}}}.background(.background,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.quaternary)).shadow(color:.black.opacity(0.025),radius:6,y:2)}}
-private struct TaskTableRow:View{let task:GeneralTask;let userName:String;let action:()->Void;let onEdit:()->Void;let onDelete:()->Void;@State private var confirmingDelete=false;private var tint:Color{switch task.priority{case "high":.red;case "low":.green;default:.orange}};private var due:String{guard let d=task.dueDate else{return "No date"};if d==SupabaseService.today{return "Today"};return d};var body:some View{HStack(spacing:0){Button(action:action){Image(systemName:task.completed ? "checkmark.circle.fill":"circle").font(.title3).foregroundStyle(task.completed ? .green:.secondary)}.buttonStyle(.plain).frame(width:36);Button(action:onEdit){VStack(alignment:.leading,spacing:3){Text(task.title).fontWeight(.medium).strikethrough(task.completed);if let notes=task.notes,!notes.isEmpty{Text(notes).font(.caption).foregroundStyle(.secondary).lineLimit(1)}}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain);Text(task.category).frame(width:130,alignment:.leading);Label(due,systemImage:"calendar").foregroundStyle(!task.completed && (task.dueDate ?? "9999")<SupabaseService.today ? .red:.secondary).frame(width:120,alignment:.leading);Text(task.priority.capitalized).font(.caption.bold()).foregroundStyle(tint).padding(.horizontal,8).padding(.vertical,4).background(tint.opacity(0.1),in:Capsule()).frame(width:100,alignment:.leading);Text(userName).frame(width:130,alignment:.leading)}.font(.subheadline).padding(.horizontal,24).frame(height:64).background(task.completed ? Color.secondary.opacity(0.025):.clear).overlay(alignment:.bottom){Divider()}.contextMenu{Button("Edit",action:onEdit);Button(task.completed ? "Mark incomplete":"Mark complete",action:action);Divider();Button("Delete task",role:.destructive){confirmingDelete=true}}.confirmationDialog("Delete this task?",isPresented:$confirmingDelete,titleVisibility:.visible){Button("Delete",role:.destructive,action:onDelete)}}}
-private struct JobChecklistTableRow:View{@Environment(AppState.self) private var appState;let item:JobChecklistItem;let action:()->Void;private var due:String{guard let d=item.task.dueDate else{return "No date"};return d==SupabaseService.today ? "Today":d};var body:some View{HStack(spacing:0){Button(action:action){Image(systemName:item.task.completed ? "checkmark.circle.fill":"circle").font(.title3).foregroundStyle(item.task.completed ? .green:.purple)}.buttonStyle(.plain).frame(width:36).help(item.task.completed ? "Mark incomplete":"Mark complete");NavigationLink{if appState.isAdmin{LeadDetailView(leadID:item.lead.id)}else{WorkerJobDetailView(leadID:item.lead.id)}}label:{VStack(alignment:.leading,spacing:3){Text(item.task.title).fontWeight(.medium).strikethrough(item.task.completed);Text("\(item.lead.name) · \(item.lead.jobRef)").font(.caption).foregroundStyle(.secondary)}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain);Text("Job checklist").foregroundStyle(.purple).frame(width:130,alignment:.leading);Label(due,systemImage:"calendar").foregroundStyle(!item.task.completed && (item.task.dueDate ?? "9999")<SupabaseService.today ? .red:.secondary).frame(width:120,alignment:.leading);Text("Medium").font(.caption.bold()).foregroundStyle(.purple).padding(.horizontal,8).padding(.vertical,4).background(Color.purple.opacity(0.1),in:Capsule()).frame(width:100,alignment:.leading);Text(item.lead.assignedTo.isEmpty ? "Unassigned":item.lead.assignedTo).frame(width:130,alignment:.leading)}.font(.subheadline).padding(.horizontal,24).frame(height:64).background(item.task.completed ? Color.secondary.opacity(0.025):.clear).overlay(alignment:.bottom){Divider()}.contextMenu{Button(item.task.completed ? "Mark incomplete":"Mark complete",action:action)}}}
 #endif
 
 private struct EditJobTaskView: View {
@@ -1924,7 +1725,7 @@ struct ContactDetailView:View{
     @Environment(AppState.self) private var appState;@Environment(\.dismiss)private var dismiss;let contactID:String;@State private var editing=false;@State private var confirmingDelete=false
     private var contact:CRMContact?{appState.contacts.first{$0.id==contactID}}
     private var related:[Lead]{guard let c=contact else{return []};return appState.leads.filter{(!c.phone.isEmpty && $0.phone==c.phone)||(!c.email.isEmpty && $0.email.caseInsensitiveCompare(c.email) == .orderedSame)}}
-    var body:some View{if let contact{List{Section("Contact"){LabeledContent("Name",value:contact.name);if !contact.phone.isEmpty{PhoneActionMenu(number:contact.phone,label:contact.phone)};if !contact.email.isEmpty,let u=URL(string:"mailto:\(contact.email)"){Link(contact.email,destination:u)};LabeledContent("Address",value:contact.address.isEmpty ? "Not added":contact.address)};Section("Related leads and jobs"){if related.isEmpty{Text("No related leads").foregroundStyle(.secondary)};ForEach(related){lead in NavigationLink{LeadDetailView(leadID:lead.id)}label:{LeadRow(lead:lead)}}}}.navigationTitle(contact.name).toolbar{Button("Edit"){editing=true};Menu{Button("Delete contact",role:.destructive){confirmingDelete=true}}label:{Image(systemName:"ellipsis.circle")}}.sheet(isPresented:$editing){ContactEditor(contact:contact)}.confirmationDialog("Delete \(contact.name)?",isPresented:$confirmingDelete,titleVisibility:.visible){Button("Delete contact",role:.destructive){Task{if await appState.deleteContact(contact){dismiss()}}}}}else{ContentUnavailableView("Contact not found",systemImage:"person.crop.circle.badge.questionmark")}}
+    var body:some View{if let contact{List{Section("Contact"){LabeledContent("Name",value:contact.name);if !contact.phone.isEmpty{PhoneActionMenu(number:contact.phone,label:contact.phone)};if let u=ContactLinks.email(contact.email){Link(contact.email,destination:u)}else if !contact.email.isEmpty{LabeledContent("Email",value:contact.email)};LabeledContent("Address",value:contact.address.isEmpty ? "Not added":contact.address)};Section("Related leads and jobs"){if related.isEmpty{Text("No related leads").foregroundStyle(.secondary)};ForEach(related){lead in NavigationLink{LeadDetailView(leadID:lead.id)}label:{LeadRow(lead:lead)}}}}.navigationTitle(contact.name).toolbar{Button("Edit"){editing=true};Menu{Button("Delete contact",role:.destructive){confirmingDelete=true}}label:{Image(systemName:"ellipsis.circle")}}.sheet(isPresented:$editing){ContactEditor(contact:contact)}.confirmationDialog("Delete \(contact.name)?",isPresented:$confirmingDelete,titleVisibility:.visible){Button("Delete contact",role:.destructive){Task{if await appState.deleteContact(contact){dismiss()}}}}}else{ContentUnavailableView("Contact not found",systemImage:"person.crop.circle.badge.questionmark")}}
 }
 
 struct ContactEditor:View{

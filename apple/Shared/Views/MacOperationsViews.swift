@@ -130,14 +130,14 @@
             Spacer()
           }
           HStack {
-            if let url = URL(string: "tel:\(contact.phone.filter { !$0.isWhitespace })"),
+            if let url = ContactLinks.telephone(contact.phone),
               !contact.phone.isEmpty
             {
               Link(destination: url) {
                 Label("Call", systemImage: "phone.fill").frame(maxWidth: .infinity)
               }
             }
-            if let url = URL(string: "mailto:\(contact.email)"), !contact.email.isEmpty {
+            if let url = ContactLinks.email(contact.email) {
               Link(destination: url) {
                 Label("Email", systemImage: "envelope").frame(maxWidth: .infinity)
               }

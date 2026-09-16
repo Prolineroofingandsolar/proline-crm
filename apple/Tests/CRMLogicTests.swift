@@ -117,8 +117,8 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testNotificationsOnlyIncludeWorkAssignedToStaffMember() {
-        let will = CRMUser(id: "will", name: "Will Conway", username: "will", passwordHash: "", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
-        let admin = CRMUser(id: "admin", name: "Admin", username: "admin", passwordHash: "", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let will = CRMUser(id: "will", name: "Will Conway", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let admin = CRMUser(id: "admin", name: "Admin", username: "admin", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
         var assignedLead = lead(id: "assigned", stage: .scheduled, value: 1, balance: 1)
         assignedLead.assignedTo = "will conway"
         var otherLead = lead(id: "other", stage: .scheduled, value: 1, balance: 1)
@@ -135,7 +135,7 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testLeadOwnershipUsesExactCaseInsensitiveTeamName() {
-        let will = CRMUser(id: "will", name: "Will Conway", username: "will", passwordHash: "", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let will = CRMUser(id: "will", name: "Will Conway", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
         var lead = lead(id: "lead", stage: .newLead, value: 1, balance: 1)
         lead.assignedTo = "will conway"
         XCTAssertTrue(LeadOwnership.isAssigned(lead, to: will))
@@ -147,8 +147,8 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testStaffLeadScopeOnlyIncludesExactlyAssignedCustomers() {
-        let staff = CRMUser(id: "will", name: "Will Conway", username: "will", passwordHash: "", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
-        let admin = CRMUser(id: "admin", name: "Admin", username: "admin", passwordHash: "", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let staff = CRMUser(id: "will", name: "Will Conway", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let admin = CRMUser(id: "admin", name: "Admin", username: "admin", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
         var mine = lead(id: "mine", stage: .scheduled, value: 1, balance: 1)
         mine.assignedTo = "will conway"
         var another = lead(id: "another", stage: .scheduled, value: 1, balance: 1)
@@ -174,8 +174,8 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testStaffOnlyReceiveTheirOwnPayrollRecords() {
-        let staff = CRMUser(id: "will", name: "Will", username: "will", passwordHash: "secret", role: "user", dayRate: 200, cisRate: 20, utrNumber: "mine", bankName: "Mine", bankAccountNumber: "12345678", bankSortCode: "112233")
-        let other = CRMUser(id: "alex", name: "Alex", username: "alex", passwordHash: "other-secret", role: "user", dayRate: 300, cisRate: 20, utrNumber: "private", bankName: "Other", bankAccountNumber: "87654321", bankSortCode: "332211")
+        let staff = CRMUser(id: "will", name: "Will", username: "will", role: "user", dayRate: 200, cisRate: 20, utrNumber: "mine", bankName: "Mine", bankAccountNumber: "12345678", bankSortCode: "112233")
+        let other = CRMUser(id: "alex", name: "Alex", username: "alex", role: "user", dayRate: 300, cisRate: 20, utrNumber: "private", bankName: "Other", bankAccountNumber: "87654321", bankSortCode: "332211")
         let mine = TimesheetEntry(id: "mine", userID: "will", leadID: "job", date: "2026-08-17", type: "full", amount: 200, createdAt: "2026-08-17")
         let theirs = TimesheetEntry(id: "theirs", userID: "alex", leadID: "job", date: "2026-08-17", type: "full", amount: 300, createdAt: "2026-08-17")
         let visibleUsers = UserAccessScope.visible([staff, other], for: staff)
@@ -184,7 +184,7 @@ final class CRMLogicTests: XCTestCase {
         XCTAssertEqual(visibleUsers.first(where: { $0.id == "will" })?.bankAccountNumber, "12345678")
         XCTAssertNil(visibleUsers.first(where: { $0.id == "alex" })?.bankAccountNumber)
         XCTAssertNil(visibleUsers.first(where: { $0.id == "alex" })?.dayRate)
-        XCTAssertEqual(TimesheetAccessScope.visible([mine, theirs], for: CRMUser(id: "admin", name: "Admin", username: "admin", passwordHash: "", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)).count, 2)
+        XCTAssertEqual(TimesheetAccessScope.visible([mine, theirs], for: CRMUser(id: "admin", name: "Admin", username: "admin", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)).count, 2)
     }
 
     func testPayrollWeekStartsOnMondayAcrossWholeWeek() {
@@ -197,7 +197,7 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testStaffSharedDataScopesExcludeCoworkerRecords() {
-        let staff = CRMUser(id: "will", name: "Will", username: "will", passwordHash: "", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let staff = CRMUser(id: "will", name: "Will", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
         let mine = GeneralTask(id: "mine", title: "My task", completed: false, completedDate: nil, dueDate: nil, priority: "medium", category: "General", notes: nil, createdAt: "2026-08-24", assignedTo: ["will"])
         let theirs = GeneralTask(id: "theirs", title: "Their task", completed: false, completedDate: nil, dueDate: nil, priority: "medium", category: "General", notes: nil, createdAt: "2026-08-24", assignedTo: ["alex"])
         var assignedLead = lead(id: "lead", stage: .scheduled, value: 1, balance: 1)

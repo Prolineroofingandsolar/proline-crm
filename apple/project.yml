@@ -23,9 +23,14 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.prolineroofingandsolar.crm.native
         INFOPLIST_FILE: Configuration/iOS-Info.plist
-        CODE_SIGN_ENTITLEMENTS: Configuration/ProLineCRM.entitlements
+        CODE_SIGN_ENTITLEMENTS: Configuration/ProLineCRM-App.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
     dependencies:
       - target: ProLineWidget-iOS
         embed: true
@@ -39,9 +44,14 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.prolineroofingandsolar.crm.native.mac
         INFOPLIST_FILE: Configuration/macOS-Info.plist
-        CODE_SIGN_ENTITLEMENTS: Configuration/ProLineCRM.entitlements
+        CODE_SIGN_ENTITLEMENTS: Configuration/ProLineCRM-macOS-App.entitlements
         PRODUCT_NAME: ProLine CRM
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
     dependencies:
       - target: ProLineWidget-macOS
         embed: true
@@ -55,7 +65,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.prolineroofingandsolar.crm.native.widget
         INFOPLIST_FILE: Configuration/Widget-Info.plist
-        CODE_SIGN_ENTITLEMENTS: Configuration/ProLineCRM.entitlements
+        CODE_SIGN_ENTITLEMENTS: Configuration/ProLineCRM-iOS-Widget.entitlements
         SKIP_INSTALL: YES
         APPLICATION_EXTENSION_API_ONLY: YES
   ProLineWidget-macOS:

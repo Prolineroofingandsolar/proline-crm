@@ -57,7 +57,7 @@ private struct MobilePipelineOpportunity:View {
     @State private var confirmingJobCompletion=false
     @State private var showingSchedule=false
     private var next:CRMTask?{lead.tasks.first{!$0.completed}}
-    var body:some View{VStack(spacing:0){NavigationLink{LeadDetailView(leadID:lead.id)}label:{MobilePipelineCard(lead:lead,tint:tint)}.buttonStyle(.plain);HStack(spacing:4){if !lead.phone.isEmpty,let url=URL(string:"tel:\(lead.phone.filter{!$0.isWhitespace})"){Link(destination:url){Label("Call",systemImage:"phone.fill").frame(maxWidth:.infinity)}}else{Label("No phone",systemImage:"phone.slash").frame(maxWidth:.infinity).foregroundStyle(.secondary)};Divider().frame(height:20);Button{completeNext()}label:{if completing{ProgressView().frame(maxWidth:.infinity)}else{Label(next == nil ? "No task":"Complete",systemImage:next == nil ? "checklist.unchecked":"checkmark.circle").frame(maxWidth:.infinity)}}.disabled(next == nil || completing);Divider().frame(height:20);Menu{ForEach(stages){destination in Button{Task{await appState.move(lead,to:destination)}}label:{Label(destination.displayName,systemImage:stageIconMobile(destination))}};Divider();Button{showingSchedule=true}label:{Label(lead.startDate == nil ? "Schedule job":"Edit schedule",systemImage:"calendar.badge.clock")};Button{confirmingJobCompletion=true}label:{Label("Complete job",systemImage:"archivebox")}}label:{Label("Move",systemImage:"arrow.right.circle").frame(maxWidth:.infinity)}}.font(.caption.bold()).buttonStyle(.plain).foregroundStyle(tint).padding(.horizontal,8).frame(height:42).background(.background).overlay(alignment:.top){Divider()}}
+    var body:some View{VStack(spacing:0){NavigationLink{LeadDetailView(leadID:lead.id)}label:{MobilePipelineCard(lead:lead,tint:tint)}.buttonStyle(.plain);HStack(spacing:4){if let url=ContactLinks.telephone(lead.phone){Link(destination:url){Label("Call",systemImage:"phone.fill").frame(maxWidth:.infinity)}}else{Label("No phone",systemImage:"phone.slash").frame(maxWidth:.infinity).foregroundStyle(.secondary)};Divider().frame(height:20);Button{completeNext()}label:{if completing{ProgressView().frame(maxWidth:.infinity)}else{Label(next == nil ? "No task":"Complete",systemImage:next == nil ? "checklist.unchecked":"checkmark.circle").frame(maxWidth:.infinity)}}.disabled(next == nil || completing);Divider().frame(height:20);Menu{ForEach(stages){destination in Button{Task{await appState.move(lead,to:destination)}}label:{Label(destination.displayName,systemImage:stageIconMobile(destination))}};Divider();Button{showingSchedule=true}label:{Label(lead.startDate == nil ? "Schedule job":"Edit schedule",systemImage:"calendar.badge.clock")};Button{confirmingJobCompletion=true}label:{Label("Complete job",systemImage:"archivebox")}}label:{Label("Move",systemImage:"arrow.right.circle").frame(maxWidth:.infinity)}}.font(.caption.bold()).buttonStyle(.plain).foregroundStyle(tint).padding(.horizontal,8).frame(height:42).background(.background).overlay(alignment:.top){Divider()}}
         .clipShape(RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.quaternary)).shadow(color:.black.opacity(0.035),radius:3,y:1)
         .sheet(isPresented:$showingSchedule){ScheduleJobSheet(lead:lead)}
         .confirmationDialog("Complete this job?",isPresented:$confirmingJobCompletion,titleVisibility:.visible){Button("Complete job"){Task{await appState.move(lead,to:.completed)}};Button("Cancel",role:.cancel){}}message:{Text("\(lead.name) will move to Completed. Move it to Waiting for Payment when the final invoice is due.")}
@@ -165,7 +165,9 @@ struct ScheduleJobSheet: View {
             var changed = lead
             changed.startDate = PayrollMath.key(startDate)
             changed.endDate = PayrollMath.key(endDate)
-            changed.stage = .scheduled
+            // Only a won job becomes Scheduled here. Editing dates on a live job, or
+            // pencilling dates onto an enquiry, must not move it through the pipeline.
+            if changed.stage == .won { changed.stage = .scheduled }
             await appState.saveLead(changed)
             saving = false
             if appState.leads.first(where: { $0.id == lead.id })?.startDate == changed.startDate { dismiss() }
@@ -224,20 +226,6 @@ private struct MacPipelineView: View {
         }.background(Color(nsColor: .windowBackgroundColor)).navigationTitle("Pipeline")
     }
 
-    private var metrics: some View {
-        HStack(spacing: 0) {
-            PipelineMetric(icon:"cylinder.split.1x2",title:"Pipeline",value:totalPipeline.formatted(.currency(code:"GBP").precision(.fractionLength(0))),color:.orange)
-            Divider().frame(height:44)
-            PipelineMetric(icon:"scope",title:"Forecast",value:forecast.formatted(.currency(code:"GBP").precision(.fractionLength(0))),color:.purple)
-            Divider().frame(height:44)
-            PipelineMetric(icon:"chart.line.uptrend.xyaxis",title:"Win rate",value:"\(winRate)%",color:.green)
-            Divider().frame(height:44)
-            PipelineMetric(icon:"clock",title:"Overdue",value:"\(overdue)",color:overdue > 0 ? .red:.secondary)
-            Spacer()
-            Image(systemName:"house.lodge").font(.system(size:46,weight:.ultraLight)).foregroundStyle(.secondary.opacity(0.18)).padding(.trailing,24)
-        }.padding(.vertical,12).background(.background,in:RoundedRectangle(cornerRadius:9)).overlay(RoundedRectangle(cornerRadius:9).stroke(.quaternary))
-    }
-
     private var toolbar: some View {
         HStack(spacing:10) {
             Picker("Workflow", selection: $workflow) { ForEach(["Sales", "Jobs", "Archive"], id: \.self) { Text($0).tag($0) } }.pickerStyle(.segmented).frame(width: 310)
@@ -248,20 +236,10 @@ private struct MacPipelineView: View {
         }.controlSize(.large)
     }
 
-    private var todayStrip: some View {
-        let today=SupabaseService.today
-        let surveys=appState.leads.filter{$0.surveyDate==today}.count
-        let quotes=appState.leads.filter{$0.stage == .quoteSent}.count
-        let deposits=appState.leads.filter{[.won,.scheduled,.inProgress].contains($0.stage) && !$0.depositPaid && $0.deposit > 0}.count
-        return HStack(spacing:9){Image(systemName:"flag.fill").foregroundStyle(.orange);Text("Today:").bold();Text("\(surveys) surveys").foregroundStyle(.blue);Text("•").foregroundStyle(.secondary);Text("\(quotes) quotes to chase").foregroundStyle(.purple);Text("•").foregroundStyle(.secondary);Text("\(deposits) deposits overdue").foregroundStyle(deposits > 0 ? .red:.secondary);Spacer()}.font(.subheadline).padding(.horizontal,14).frame(height:44).background(.background,in:RoundedRectangle(cornerRadius:8)).overlay(RoundedRectangle(cornerRadius:8).stroke(.quaternary))
-    }
-
     private var board: some View { ScrollView(.horizontal) { LazyHStack(alignment:.top,spacing:12) { ForEach(visibleStages) { stage in MacStageColumn(stage:stage,leads:scopedLeads.filter{$0.stage==stage},allowsAdd:workflow != "Archive",onAdd:{showingAdd=true}) } }.padding(.horizontal,26).padding(.bottom,20) }.scrollIndicators(.visible) }
     private var list: some View { List(scopedLeads) { lead in NavigationLink { LeadDetailView(leadID:lead.id) } label:{HStack{StageDot(stage:lead.stage);LeadRow(lead:lead);Spacer();Text(lead.value,format:.currency(code:"GBP"));Text(lead.assignedTo).foregroundStyle(.secondary).frame(width:110,alignment:.leading)}} }.listStyle(.inset).padding(.horizontal,18) }
     private func probability(_ stage:LeadStage)->Double { switch stage {case .newLead:0.15;case .surveyBooked:0.30;case .quotePreparing:0.45;case .quoteSent:0.60;case .won,.scheduled,.inProgress,.completed,.waitingForPayment,.paid:1;case .lost:0} }
 }
-
-private struct PipelineMetric: View { let icon,title,value:String;let color:Color;var body:some View{HStack(spacing:12){Image(systemName:icon).font(.title2).foregroundStyle(color);VStack(alignment:.leading,spacing:2){Text(title).font(.caption).foregroundStyle(.secondary);Text(value).font(.system(size:18,weight:.semibold,design:.rounded))}}.padding(.horizontal,24).frame(minWidth:180,alignment:.leading)} }
 
 private struct MacStageColumn: View {
     @Environment(AppState.self) private var appState

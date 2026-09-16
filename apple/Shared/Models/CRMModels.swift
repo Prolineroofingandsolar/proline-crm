@@ -250,13 +250,104 @@ struct Lead: Codable, Identifiable, Hashable, Sendable {
         case paidDate = "paid_date"; case createdAt = "created_at"; case updatedAt = "updated_at"
         case wonDate = "won_date"; case myBuilderURL = "mybuilder_url"; case reviewRequestSent = "review_request_sent"
     }
+
+    init(id: String, jobRef: String, name: String, phone: String, email: String, address: String, jobType: String, stage: LeadStage, value: Double, deposit: Double, depositPaid: Bool, balance: Double, source: String, assignedTo: String, surveyDate: String?, surveyTime: String?, startDate: String?, endDate: String?, completedDate: String?, paidDate: String?, progress: Int, tasks: [CRMTask], photos: [CRMPhoto], notes: [CRMNote], files: [CRMFile], materials: [CRMMaterial], wonDate: String?, myBuilderURL: String?, reviewRequestSent: Bool?, lat: Double?, lng: Double?, createdAt: String, updatedAt: String) {
+        self.id = id; self.jobRef = jobRef; self.name = name; self.phone = phone; self.email = email; self.address = address; self.jobType = jobType; self.stage = stage
+        self.value = value; self.deposit = deposit; self.depositPaid = depositPaid; self.balance = balance; self.source = source; self.assignedTo = assignedTo
+        self.surveyDate = surveyDate; self.surveyTime = surveyTime; self.startDate = startDate; self.endDate = endDate; self.completedDate = completedDate; self.paidDate = paidDate
+        self.progress = progress; self.tasks = tasks; self.photos = photos; self.notes = notes; self.files = files; self.materials = materials
+        self.wonDate = wonDate; self.myBuilderURL = myBuilderURL; self.reviewRequestSent = reviewRequestSent; self.lat = lat; self.lng = lng; self.createdAt = createdAt; self.updatedAt = updatedAt
+    }
+
+    /// Rows are shared with the web, Tauri and Capacitor clients, which may leave
+    /// optional columns null or write a stage this build does not know. Decode
+    /// leniently so one such row cannot take the whole pipeline down with it.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        jobRef = try c.decodeIfPresent(String.self, forKey: .jobRef) ?? ""
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Unnamed customer"
+        phone = try c.decodeIfPresent(String.self, forKey: .phone) ?? ""
+        email = try c.decodeIfPresent(String.self, forKey: .email) ?? ""
+        address = try c.decodeIfPresent(String.self, forKey: .address) ?? ""
+        jobType = try c.decodeIfPresent(String.self, forKey: .jobType) ?? ""
+        stage = LeadStage(rawValue: try c.decodeIfPresent(String.self, forKey: .stage) ?? "") ?? .newLead
+        value = try c.decodeIfPresent(Double.self, forKey: .value) ?? 0
+        deposit = try c.decodeIfPresent(Double.self, forKey: .deposit) ?? 0
+        depositPaid = try c.decodeIfPresent(Bool.self, forKey: .depositPaid) ?? false
+        balance = try c.decodeIfPresent(Double.self, forKey: .balance) ?? 0
+        source = try c.decodeIfPresent(String.self, forKey: .source) ?? ""
+        assignedTo = try c.decodeIfPresent(String.self, forKey: .assignedTo) ?? ""
+        surveyDate = try c.decodeIfPresent(String.self, forKey: .surveyDate)
+        surveyTime = try c.decodeIfPresent(String.self, forKey: .surveyTime)
+        startDate = try c.decodeIfPresent(String.self, forKey: .startDate)
+        endDate = try c.decodeIfPresent(String.self, forKey: .endDate)
+        completedDate = try c.decodeIfPresent(String.self, forKey: .completedDate)
+        paidDate = try c.decodeIfPresent(String.self, forKey: .paidDate)
+        progress = try c.decodeIfPresent(Int.self, forKey: .progress) ?? 0
+        tasks = try c.decodeIfPresent([CRMTask].self, forKey: .tasks) ?? []
+        photos = try c.decodeIfPresent([CRMPhoto].self, forKey: .photos) ?? []
+        notes = try c.decodeIfPresent([CRMNote].self, forKey: .notes) ?? []
+        files = try c.decodeIfPresent([CRMFile].self, forKey: .files) ?? []
+        materials = try c.decodeIfPresent([CRMMaterial].self, forKey: .materials) ?? []
+        wonDate = try c.decodeIfPresent(String.self, forKey: .wonDate)
+        myBuilderURL = try c.decodeIfPresent(String.self, forKey: .myBuilderURL)
+        reviewRequestSent = try c.decodeIfPresent(Bool.self, forKey: .reviewRequestSent)
+        lat = try c.decodeIfPresent(Double.self, forKey: .lat)
+        lng = try c.decodeIfPresent(Double.self, forKey: .lng)
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt) ?? ""
+    }
+}
+
+/// The single most useful next action for a lead, derived from its stage.
+enum LeadStep: Hashable, Sendable {
+    case bookSurvey
+    case scheduleJob
+    case recordPayment
+    case move(LeadStage)
+
+    var title: String {
+        switch self {
+        case .bookSurvey: "Book survey"
+        case .scheduleJob: "Schedule job"
+        case .recordPayment: "Record payment"
+        case .move(let stage):
+            switch stage {
+            case .surveyBooked: "Survey booked"
+            case .quotePreparing: "Survey done"
+            case .quoteSent: "Quote sent"
+            case .won: "Mark won"
+            case .scheduled: "Mark scheduled"
+            case .inProgress: "Start job"
+            case .completed: "Mark complete"
+            case .waitingForPayment: "Invoice sent"
+            case .paid: "Mark paid"
+            default: "Move to \(stage.displayName)"
+            }
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .bookSurvey: "calendar.badge.plus"
+        case .scheduleJob: "calendar.badge.clock"
+        case .recordPayment: "sterlingsign.circle"
+        case .move(let stage):
+            switch stage {
+            case .inProgress: "hammer"
+            case .completed: "flag.checkered"
+            case .paid: "checkmark.seal"
+            default: "arrow.right"
+            }
+        }
+    }
 }
 
 struct CRMUser: Codable, Identifiable, Sendable {
     let id: String
     var name: String
     var username: String
-    var passwordHash: String
     var role: String
     var dayRate: Double?
     var cisRate: Int?
@@ -267,7 +358,6 @@ struct CRMUser: Codable, Identifiable, Sendable {
     var organizationID: String? = nil
     enum CodingKeys: String, CodingKey {
         case id, name, username, role
-        case passwordHash = "password_hash"
         case dayRate = "day_rate"; case cisRate = "cis_rate"; case utrNumber = "utr_number"
         case bankName = "bank_name"; case bankAccountNumber = "bank_account_number"; case bankSortCode = "bank_sort_code"
         case organizationID = "organisation_id"

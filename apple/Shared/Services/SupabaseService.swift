@@ -77,8 +77,13 @@ actor SupabaseService {
     func fetchLeads() async throws -> [Lead] {
         let urlRequest = try request(path: "leads", query: [.init(name: "select", value: "*"), .init(name: "order", value: "updated_at.desc")])
         let (data, _) = try await authenticatedData(for: urlRequest)
-        // Older web builds sometimes saved JSONB arrays as JSON strings. Normalise
-        // those rows so one legacy notes/files value cannot blank the whole pipeline.
+        return try decodeLeads(from: data)
+    }
+
+    /// Decodes lead rows written by any ProLine client. Older web builds sometimes
+    /// saved JSONB arrays as JSON strings, and other clients may leave optional
+    /// columns null; normalise so one odd row cannot blank the whole pipeline.
+    private func decodeLeads(from data: Data) throws -> [Lead] {
         guard var rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { throw URLError(.cannotParseResponse) }
         for rowIndex in rows.indices {
             for key in ["tasks", "photos", "notes", "files", "materials"] {
@@ -96,11 +101,8 @@ actor SupabaseService {
     }
 
     func fetchUsers() async throws -> [CRMUser] {
-        if KeychainStore.get("supabaseAccessToken") != nil {
-            let profiles: [AuthProfile] = try await execute(request(path: "profiles", query: [.init(name: "select", value: "*")]), as: [AuthProfile].self)
-            return profiles.filter { $0.active != false }.map(profileUser)
-        }
-        return try await execute(request(path: "app_users", query: [.init(name: "select", value: "*")]), as: [CRMUser].self)
+        let profiles: [AuthProfile] = try await execute(request(path: "profiles", query: [.init(name: "select", value: "*")]), as: [AuthProfile].self)
+        return profiles.filter { $0.active != false }.map(profileUser)
     }
 
     func fetchContacts() async throws -> [CRMContact] { try await fetch("contacts", as: CRMContact.self) }
@@ -402,7 +404,7 @@ actor SupabaseService {
         return profileUser(profile)
     }
 
-    private func profileUser(_ profile: AuthProfile) -> CRMUser { CRMUser(id: profile.id, name: profile.name, username: profile.email ?? profile.username ?? "", passwordHash: "", role: profile.role, dayRate: profile.dayRate, cisRate: profile.cisRate, utrNumber: profile.utrNumber, bankName: profile.bankName, bankAccountNumber: profile.bankAccountNumber, bankSortCode: profile.bankSortCode, organizationID: profile.organisationID) }
+    private func profileUser(_ profile: AuthProfile) -> CRMUser { CRMUser(id: profile.id, name: profile.name, username: profile.email ?? profile.username ?? "", role: profile.role, dayRate: profile.dayRate, cisRate: profile.cisRate, utrNumber: profile.utrNumber, bankName: profile.bankName, bankAccountNumber: profile.bankAccountNumber, bankSortCode: profile.bankSortCode, organizationID: profile.organisationID) }
 
     private func fetch<T: Decodable>(_ table: String, as type: T.Type) async throws -> [T] {
         try await execute(request(path: table, query: [.init(name: "select", value: "*")]), as: [T].self)
@@ -423,10 +425,15 @@ actor SupabaseService {
     }
 
     func insertLead(_ lead: Lead) async throws { try await insert(lead, into: "leads") }
-    func updateLead(_ lead: Lead, expectedUpdatedAt: String? = nil) async throws {
+    /// Writes `lead` only if the server still holds `expectedUpdatedAt`. Returns the
+    /// saved row so the caller can adopt the server's canonical `updated_at`.
+    @discardableResult
+    func updateLead(_ lead: Lead, expectedUpdatedAt: String? = nil) async throws -> Lead? {
         let query = SupabaseWriteCondition.query(id: lead.id, expectedUpdatedAt: expectedUpdatedAt)
-        let rows: [Lead] = try await execute(request(path: "leads", method: "PATCH", query: query, body: try JSONEncoder().encode(lead)), as: [Lead].self)
+        let (data, _) = try await authenticatedData(for: request(path: "leads", method: "PATCH", query: query, body: try JSONEncoder().encode(lead)))
+        let rows = try decodeLeads(from: data)
         guard !SupabaseWriteCondition.isConflict(returnedRowCount: rows.count) else { throw SupabaseWriteConflict() }
+        return rows.first
     }
 
     /// Uploads customer data to a private Storage bucket. Lead JSON stores this
@@ -480,13 +487,6 @@ actor SupabaseService {
     private func parseStorageLocator(_ locator: String) -> (bucket: String, path: String)? {
         guard locator.hasPrefix("storage://"), let url = URL(string: locator), let bucket = url.host else { return nil }
         return (bucket, String(url.path.drop(while: { $0 == "/" })))
-    }
-
-    func updateStage(leadID: String, stage: LeadStage) async throws -> Lead {
-        let payload = try JSONSerialization.data(withJSONObject: ["stage": stage.rawValue, "updated_at": Self.today])
-        let response: [Lead] = try await execute(request(path: "leads", method: "PATCH", query: [.init(name: "id", value: "eq.\(leadID)")], body: payload), as: [Lead].self)
-        guard let lead = response.first else { throw URLError(.cannotParseResponse) }
-        return lead
     }
 
     static var now: String { ISO8601DateFormatter().string(from: .now) }

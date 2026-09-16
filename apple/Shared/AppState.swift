@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Observation
 import SwiftUI
@@ -77,7 +76,8 @@ final class AppState {
     var teamMessages: [TeamMessage] = []
     var teamDayPlans: [TeamDayPlan] = []
     var currentUser: CRMUser?
-    var selectedLeadID: String?
+    /// Set by `openLead`; the root view pushes this lead onto the visible navigation stack and clears it.
+    var pendingLeadID: String?
     var selectedSection: AppSection = .dashboard
     var navigationResetID = UUID()
     var isLoading = false
@@ -90,6 +90,9 @@ final class AppState {
     var showingAssistant = false
     var assistantDraftPrompt: String?
     var pendingWorkerInviteToken: String?
+    /// A call started from the app; when the user comes back we ask how it went.
+    private var pendingCall: PendingCall?
+    var pendingCallOutcome: PendingCall?
     var assistantErrorMessage: String?
     var isAdminUsingSimpleView = UserDefaults.standard.bool(forKey: "adminUsesSimpleView")
     var gmailConnectionStatus: GmailConnectionStatus?
@@ -98,7 +101,6 @@ final class AppState {
         return (try? JSONDecoder().decode([AIAuditEntry].self, from: data)) ?? []
     }()
 
-    var selectedLead: Lead? { leads.first { $0.id == selectedLeadID } }
     var isAuthenticated: Bool { currentUser != nil }
     var isAdmin: Bool { currentUser?.role == "admin" }
     var usesWorkerInterface: Bool {
@@ -119,6 +121,45 @@ final class AppState {
     var unreadTeamCount: Int {
         let seen = UserDefaults.standard.string(forKey: "teamLastRead.\(currentUser?.id ?? "signed-out")") ?? ""
         return teamMessages.filter { $0.authorID != currentUser?.id && $0.createdAt > seen }.count
+    }
+
+    /// Shows a customer/job in place — on the current tab's stack on iPhone, in the
+    /// detail column on Mac — instead of opening a search sheet.
+    func openLead(_ id: String) {
+        guard leads.contains(where: { $0.id == id }) else { errorMessage = "That customer or job is not available to you."; return }
+        pendingLeadID = id
+    }
+
+    /// Starts a phone call and remembers it so the outcome can be logged in one tap
+    /// when the user returns. Returns the URL to open, or nil if there is no usable number.
+    func beginCall(to lead: Lead) -> URL? {
+        guard let url = ContactLinks.telephone(lead.phone) else { return nil }
+        let call = PendingCall(id: lead.id, leadName: lead.name, startedAt: .now)
+        #if os(iOS)
+        pendingCall = call
+        #else
+        pendingCallOutcome = call
+        #endif
+        return url
+    }
+
+    func resumePendingCall() {
+        guard let call = pendingCall else { return }
+        pendingCall = nil
+        // Only ask if they plausibly just came back from the call.
+        if Date.now.timeIntervalSince(call.startedAt) < 3600 { pendingCallOutcome = call }
+    }
+
+    @discardableResult
+    func logCall(leadID: String, outcome: CallOutcome, note: String, followUp: Date?) async -> Bool {
+        let cleanNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let content = cleanNote.isEmpty ? "Call: \(outcome.title)" : "Call: \(outcome.title) — \(cleanNote)"
+        let author = currentUser?.name ?? "Team member"
+        let followUpTask = followUp.map { CRMTask(id: UUID().uuidString, title: "Follow up with customer", completed: false, completedDate: nil, dueDate: SupabaseService.localDay(for: $0), isTemplate: false, priority: "medium", notes: nil) }
+        return await commitLead(leadID, fallback: "The call could not be logged.") { lead in
+            lead.notes.insert(CRMNote(id: UUID().uuidString, content: content, date: SupabaseService.today, author: author), at: 0)
+            if let followUpTask { lead.tasks.append(followUpTask) }
+        }
     }
 
     func openAssistant(with prompt: String) {
@@ -257,17 +298,13 @@ final class AppState {
                 return
             }
         }
-        guard let userID = KeychainStore.get("userID") else { return }
-        do {
-            users = try await SupabaseService.shared.fetchUsers()
-            currentUser = users.first { $0.id == userID }
-            if currentUser != nil { await refresh(showErrors: false) }
-        } catch { errorMessage = "Could not restore your session." }
+        // Sessions from the retired username/password-hash login are not restored.
+        KeychainStore.remove("userID")
     }
 
     #if DEBUG
     private func loadWorkerPreview() {
-        let worker = CRMUser(id: "worker-preview", name: "Sam Worker", username: "worker-preview", passwordHash: "", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let worker = CRMUser(id: "worker-preview", name: "Sam Worker", username: "worker-preview", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
         let today = SupabaseService.today
         currentUser = worker
         users = [worker]
@@ -294,6 +331,9 @@ final class AppState {
         isLoading = true; defer { isLoading = false }
         if let secureEmail = AuthenticationPolicy.secureEmail(for: username) {
             do {
+                // All sign-in goes through Supabase Auth. The old client-side password
+                // hash comparison against `app_users` is gone: it required the anonymous
+                // client to download every account's password hash.
                 let user = try await SupabaseService.shared.signInWithPassword(email: secureEmail, password: password)
                 currentUser = user
                 users = [user]
@@ -307,17 +347,8 @@ final class AppState {
                 return false
             }
         }
-        do {
-            let passwordHash = SHA256.hash(data: Data(password.utf8)).map { String(format: "%02x", $0) }.joined()
-            users = try await SupabaseService.shared.fetchUsers()
-            guard let user = users.first(where: {
-                $0.username.caseInsensitiveCompare(username) == .orderedSame && $0.passwordHash == passwordHash
-            }) else { errorMessage = "Incorrect username or password."; return false }
-            currentUser = user
-            KeychainStore.set(user.id, for: "userID")
-            await refresh(showErrors: false)
-            return true
-        } catch { errorMessage = "Could not connect to ProLine CRM."; return false }
+        errorMessage = "Sign in with your email address. Usernames are no longer accepted."
+        return false
     }
 
     func signOut() {
@@ -398,7 +429,9 @@ final class AppState {
     func refresh(showErrors: Bool = true) async {
         guard SyncPolicy.shouldStart(isAuthenticated: isAuthenticated, isRefreshing: isRefreshing) else { return }
         isRefreshing = true
-        let ownsLoadingState = !isLoading
+        // Only the very first load blocks the UI. Background refreshes must not grey
+        // out buttons across the app every minute.
+        let ownsLoadingState = !isLoading && leads.isEmpty
         if ownsLoadingState { isLoading = true }
         defer {
             isRefreshing = false
@@ -415,29 +448,41 @@ final class AppState {
                 // dataset refreshes below; cached data and the session are retained.
             }
         }
-        var failures: [String] = []
-        do {
-            // Leads are the critical dataset. Optional modules must never blank the
-            // pipeline if their table is absent or contains an older row shape.
-            let fetchedLeads = try await SupabaseService.shared.fetchLeads()
-            leads = LeadAccessScope.visible(fetchedLeads, for: currentUser)
-        }
-        catch { failures.append("Leads and jobs") }
+        // Every dataset is fetched at once; each one fails independently so an
+        // optional module can never blank the pipeline.
+        let service = SupabaseService.shared
+        let admin = isAdmin
+        async let fetchedLeads = Result { try await service.fetchLeads() }
+        async let fetchedSurveys = Result { try await service.fetchSurveys() }
+        async let fetchedUsers = Result { try await service.fetchUsers() }
+        async let fetchedContacts = Result { try await service.fetchContacts() }
+        async let fetchedTasks = Result { try await service.fetchTasks() }
+        async let fetchedTimesheets = Result { try await service.fetchTimesheets() }
+        async let fetchedAdminChecks = Result { admin ? try await service.fetchAdminTimesheetChecks() : [] }
+        async let fetchedRuns = Result { try await service.fetchPaymentRuns() }
+        async let fetchedPayments = Result { try await service.fetchWorkerPayments() }
+        async let fetchedQuotes = Result { try await service.fetchQuotes() }
+        async let fetchedMessages = Result { try await service.fetchTeamMessages() }
+        async let fetchedPlans = Result { try await service.fetchTeamDayPlans() }
 
-        // Surveys are part of the core mobile site workflow. Load them immediately
-        // after leads rather than making the survey screen wait for finance data.
-        do { surveys = WorkflowAccessScope.visible(try await SupabaseService.shared.fetchSurveys(), leads: leads) } catch { failures.append("Surveys") }
-        do { users = UserAccessScope.visible(try await SupabaseService.shared.fetchUsers(), for: currentUser) } catch { failures.append("Team") }
-        do { contacts = ContactAccessScope.visible(try await SupabaseService.shared.fetchContacts(), leads: leads, for: currentUser) } catch { failures.append("Contacts") }
-        do { generalTasks = TaskAccessScope.visible(try await SupabaseService.shared.fetchTasks(), for: currentUser) } catch { failures.append("Tasks and fleet") }
-        do { timesheets = TimesheetAccessScope.visible(try await SupabaseService.shared.fetchTimesheets(), for: currentUser) } catch { failures.append("Timesheets") }
-        if isAdmin {
-            do { adminTimesheetChecks = try await SupabaseService.shared.fetchAdminTimesheetChecks() } catch { failures.append("Admin timesheet copy") }
+        var failures: [String] = []
+        func adopt<T>(_ result: Result<T, Error>, _ label: String, _ apply: (T) -> Void) {
+            switch result { case .success(let value): apply(value); case .failure: failures.append(label) }
         }
-        do { paymentRuns = PaymentAccessScope.visible(try await SupabaseService.shared.fetchPaymentRuns(), for: currentUser) } catch { failures.append("Pay runs") }
-        do { workerPayments = PaymentAccessScope.visible(try await SupabaseService.shared.fetchWorkerPayments(), for: currentUser) } catch { failures.append("Payments") }
-        do { quotes = WorkflowAccessScope.visible(try await SupabaseService.shared.fetchQuotes(), leads: leads) } catch { failures.append("Quotes") }
-        do { try await refreshTeam(showErrors: false) } catch { failures.append("Team Hub") }
+        adopt(await fetchedLeads, "Leads and jobs") { leads = LeadAccessScope.visible($0, for: currentUser) }
+        adopt(await fetchedSurveys, "Surveys") { surveys = WorkflowAccessScope.visible($0, leads: leads) }
+        adopt(await fetchedUsers, "Team") { users = UserAccessScope.visible($0, for: currentUser) }
+        adopt(await fetchedContacts, "Contacts") { contacts = ContactAccessScope.visible($0, leads: leads, for: currentUser) }
+        adopt(await fetchedTasks, "Tasks and fleet") { generalTasks = TaskAccessScope.visible($0, for: currentUser) }
+        adopt(await fetchedTimesheets, "Timesheets") { timesheets = TimesheetAccessScope.visible($0, for: currentUser) }
+        if admin { adopt(await fetchedAdminChecks, "Admin timesheet copy") { adminTimesheetChecks = $0 } }
+        adopt(await fetchedRuns, "Pay runs") { paymentRuns = PaymentAccessScope.visible($0, for: currentUser) }
+        adopt(await fetchedPayments, "Payments") { workerPayments = PaymentAccessScope.visible($0, for: currentUser) }
+        adopt(await fetchedQuotes, "Quotes") { quotes = WorkflowAccessScope.visible($0, leads: leads) }
+        switch (await fetchedMessages, await fetchedPlans) {
+        case (.success(let messages), .success(let plans)): adoptTeam(messages: messages, plans: plans)
+        default: failures.append("Team Hub")
+        }
         syncIssues = failures
         lastRefreshAt = .now
         if showErrors && !failures.isEmpty {
@@ -458,21 +503,44 @@ final class AppState {
 
     @discardableResult
     func move(_ lead: Lead, to stage: LeadStage) async -> Bool {
-        guard let index = leads.firstIndex(where: { $0.id == lead.id }) else { errorMessage = "This job could not be found. Refresh and try again."; return false }
-        let old = leads[index]
-        var changed = lead
-        let today = SupabaseService.today
         guard lead.stage != stage else { return true }
-        changed.stage = stage; changed.updatedAt = SupabaseService.now
-        if stage == .won { changed.wonDate = today }
-        if stage == .inProgress && changed.startDate == nil { changed.startDate = today }
-        if [.completed, .waitingForPayment].contains(stage) { changed.completedDate = changed.completedDate ?? today }
-        if stage == .paid { changed.paidDate = today; changed.balance = 0 }
-        let custom = changed.tasks.filter { $0.isTemplate != true }
-        changed.tasks = (Self.stageTasks[stage] ?? []).map { CRMTask(id: UUID().uuidString, title: $0, completed: false, completedDate: nil, dueDate: nil, isTemplate: true) } + custom
-        leads[index] = changed
-        do { try await SupabaseService.shared.updateLead(changed, expectedUpdatedAt: old.updatedAt); updateWidget(); await scheduleNotifications(); return true }
-        catch { leads[index] = old; reportLeadWrite(error, fallback: "The stage change could not be saved."); return false }
+        return await commitLead(lead.id, base: lead.updatedAt, fallback: "The stage change could not be saved.") { changed in
+            changed = lead
+            Self.apply(stage: stage, to: &changed)
+        }
+    }
+
+    /// The next thing to do for a lead in its current stage, as one primary action.
+    static func nextStep(for lead: Lead) -> LeadStep? {
+        switch lead.stage {
+        case .newLead: return lead.surveyDate == nil ? .bookSurvey : .move(.surveyBooked)
+        case .surveyBooked: return .move(.quotePreparing)
+        case .quotePreparing: return .move(.quoteSent)
+        case .quoteSent: return .move(.won)
+        case .won: return lead.startDate == nil ? .scheduleJob : .move(.scheduled)
+        case .scheduled: return .move(.inProgress)
+        case .inProgress: return .move(.completed)
+        case .completed: return lead.balance > 0 ? .move(.waitingForPayment) : .move(.paid)
+        case .waitingForPayment: return .recordPayment
+        case .paid, .lost: return nil
+        }
+    }
+
+    private static func apply(stage: LeadStage, to lead: inout Lead) {
+        let today = SupabaseService.today
+        lead.stage = stage
+        if stage == .won { lead.wonDate = lead.wonDate ?? today }
+        if stage == .inProgress && lead.startDate == nil { lead.startDate = today }
+        if [.completed, .waitingForPayment].contains(stage) { lead.completedDate = lead.completedDate ?? today }
+        if stage == .paid { lead.paidDate = today; lead.balance = 0; if lead.deposit > 0 { lead.depositPaid = true } }
+        // Keep everything already done and everything added by hand; drop only the
+        // previous stage's untouched checklist, then add this stage's items.
+        let kept = lead.tasks.filter { $0.completed || $0.isTemplate != true }
+        let existing = Set(kept.map { $0.title.lowercased() })
+        let fresh = (stageTasks[stage] ?? [])
+            .filter { !existing.contains($0.lowercased()) }
+            .map { CRMTask(id: UUID().uuidString, title: $0, completed: false, completedDate: nil, dueDate: nil, isTemplate: true) }
+        lead.tasks = kept + fresh
     }
 
     @discardableResult
@@ -525,28 +593,79 @@ final class AppState {
 
     @discardableResult
     func saveLead(_ lead: Lead) async -> Bool {
-        guard let index = leads.firstIndex(where: { $0.id == lead.id }) else { errorMessage = "This lead could not be found. Refresh and try again."; return false }
-        let old = leads[index]
+        guard let old = leads.first(where: { $0.id == lead.id }) else { errorMessage = "This lead could not be found. Refresh and try again."; return false }
         guard isAdmin || old.assignedTo.caseInsensitiveCompare(lead.assignedTo) == .orderedSame else {
             errorMessage = "Only an administrator can reassign customer work."
             return false
         }
-        if old.stage != lead.stage {
-            var unchangedStage = lead; unchangedStage.stage = old.stage
-            return await move(unchangedStage, to: lead.stage)
+        var changed = lead
+        // Money only moves when the figures that drive it move. Fixing a typo in an
+        // address must never reset a balance that has been adjusted by hand.
+        if changed.value != old.value || changed.deposit != old.deposit || changed.depositPaid != old.depositPaid {
+            changed.balance = max(0, changed.value - (changed.depositPaid ? changed.deposit : 0))
         }
-        var changed = lead; changed.updatedAt = SupabaseService.now
+        if old.stage != changed.stage {
+            var unchangedStage = changed; unchangedStage.stage = old.stage
+            return await move(unchangedStage, to: changed.stage)
+        }
+        let saved = await commitLead(lead.id, base: lead.updatedAt, fallback: "Changes could not be saved.") { $0 = changed }
+        // Contact mirroring is helpful, but it is not part of the lead write.
+        // A missing/locked contacts table must never roll back a saved lead.
+        if saved { try? await syncContact(from: changed) }
+        return saved
+    }
+
+    // MARK: Lead write path
+    //
+    // Every change to a lead goes through `commitLead`. Two rules keep multi-device
+    // editing safe:
+    //  1. The conflict check uses the version the edit was *based on* — a sheet's copy,
+    //     or the row as it stood when the user tapped — never whatever the last background
+    //     refresh happened to load. An edit started before a refresh cannot silently
+    //     overwrite a colleague's change.
+    //  2. Writes to the same lead run one at a time, so two quick checklist taps never
+    //     race each other into a false "someone else changed this" conflict.
+    private var leadWriteQueues: [String: Task<Bool, Never>] = [:]
+
+    /// Applies `mutate` to the in-memory row straight away (optimistic UI), then writes it.
+    /// - Parameter base: the `updatedAt` the edit was based on. Pass it when saving a copy
+    ///   that was taken earlier (a sheet). Leave nil for in-place taps, which are based on
+    ///   whatever the row holds when the write actually runs.
+    @discardableResult
+    private func commitLead(_ leadID: String, base: String? = nil, fallback: String, mutate: @escaping @MainActor (inout Lead) -> Void) async -> Bool {
+        guard !isWorkerPreview else { return false }
+        guard let index = leads.firstIndex(where: { $0.id == leadID }) else { errorMessage = "This job could not be found. Refresh and try again."; return false }
+        let snapshot = leads[index]
+        var changed = snapshot
+        mutate(&changed)
+        changed.progress = Self.progress(of: changed.tasks)
         leads[index] = changed
-        do {
-            try await SupabaseService.shared.updateLead(changed, expectedUpdatedAt: old.updatedAt)
-            // Contact mirroring is helpful, but it is not part of the lead write.
-            // A missing/locked contacts table must never roll back a saved lead.
-            try? await syncContact(from: changed)
-            updateWidget()
-            await scheduleNotifications()
-            return true
+
+        let previous = leadWriteQueues[leadID]
+        let write = Task<Bool, Never> { @MainActor [self] in
+            _ = await previous?.value
+            guard let current = leads.firstIndex(where: { $0.id == leadID }) else { return false }
+            var body: Lead
+            let expected: String
+            if let base { body = changed; expected = base }
+            else { body = leads[current]; expected = leads[current].updatedAt }
+            body.updatedAt = SupabaseService.now
+            do {
+                let saved = try await SupabaseService.shared.updateLead(body, expectedUpdatedAt: expected)
+                if let now = leads.firstIndex(where: { $0.id == leadID }) { leads[now].updatedAt = saved?.updatedAt ?? body.updatedAt }
+                updateWidget()
+                await scheduleNotifications()
+                return true
+            } catch {
+                if let now = leads.firstIndex(where: { $0.id == leadID }) { leads[now] = snapshot }
+                reportLeadWrite(error, fallback: fallback)
+                return false
+            }
         }
-        catch { leads[index] = old; reportLeadWrite(error, fallback: "Changes could not be saved."); return false }
+        leadWriteQueues[leadID] = write
+        let result = await write.value
+        if leadWriteQueues[leadID] == write { leadWriteQueues[leadID] = nil }
+        return result
     }
 
     @discardableResult
@@ -802,75 +921,61 @@ final class AppState {
     }
 
     func toggleLeadTask(leadID: String, taskID: String) async {
-        guard !isWorkerPreview else { return }
-        guard let leadIndex = leads.firstIndex(where: { $0.id == leadID }), let taskIndex = leads[leadIndex].tasks.firstIndex(where: { $0.id == taskID }) else { return }
-        let old = leads[leadIndex]
-        leads[leadIndex].tasks[taskIndex].completed.toggle()
-        leads[leadIndex].tasks[taskIndex].completedDate = leads[leadIndex].tasks[taskIndex].completed ? SupabaseService.today : nil
-        recalculateProgress(at: leadIndex)
-        do { try await SupabaseService.shared.updateLead(leads[leadIndex], expectedUpdatedAt: old.updatedAt); updateWidget() }
-        catch { leads[leadIndex] = old; reportLeadWrite(error, fallback: "The task could not be updated.") }
+        guard let lead = leads.first(where: { $0.id == leadID }), lead.tasks.contains(where: { $0.id == taskID }) else { return }
+        await commitLead(leadID, fallback: "The task could not be updated.") { lead in
+            guard let index = lead.tasks.firstIndex(where: { $0.id == taskID }) else { return }
+            lead.tasks[index].completed.toggle()
+            lead.tasks[index].completedDate = lead.tasks[index].completed ? SupabaseService.today : nil
+        }
     }
 
     @discardableResult
     func addLeadTask(leadID: String, title: String, dueDate: String?, priority: String = "medium", notes: String? = nil) async -> Bool {
-        guard let leadIndex = leads.firstIndex(where: { $0.id == leadID }) else { return false }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else { return false }
-        let old = leads[leadIndex]
-        leads[leadIndex].tasks.append(CRMTask(id: UUID().uuidString, title: cleanTitle, completed: false, completedDate: nil, dueDate: dueDate, isTemplate: false, priority: priority, notes: notes))
-        recalculateProgress(at: leadIndex)
-        do { try await SupabaseService.shared.updateLead(leads[leadIndex], expectedUpdatedAt: old.updatedAt); updateWidget(); return true }
-        catch { leads[leadIndex] = old; reportLeadWrite(error, fallback: "The task could not be added."); return false }
+        let task = CRMTask(id: UUID().uuidString, title: cleanTitle, completed: false, completedDate: nil, dueDate: dueDate, isTemplate: false, priority: priority, notes: notes)
+        return await commitLead(leadID, fallback: "The task could not be added.") { $0.tasks.append(task) }
     }
 
     @discardableResult
     func updateLeadTask(leadID: String, taskID: String, title: String, dueDate: String?, priority: String, notes: String?, subtasks: [CRMSubtask]) async -> Bool {
-        guard let leadIndex = leads.firstIndex(where: { $0.id == leadID }), let taskIndex = leads[leadIndex].tasks.firstIndex(where: { $0.id == taskID }) else { return false }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else { return false }
-        let old = leads[leadIndex]
-        leads[leadIndex].tasks[taskIndex].title = cleanTitle
-        leads[leadIndex].tasks[taskIndex].dueDate = dueDate
-        leads[leadIndex].tasks[taskIndex].priority = ["low", "medium", "high"].contains(priority) ? priority : "medium"
         let cleanNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
-        leads[leadIndex].tasks[taskIndex].notes = cleanNotes?.isEmpty == true ? nil : cleanNotes
-        leads[leadIndex].tasks[taskIndex].subtasks = subtasks.compactMap { subtask in
+        let cleanSubtasks: [CRMSubtask] = subtasks.compactMap { subtask in
             let clean = subtask.title.trimmingCharacters(in: .whitespacesAndNewlines)
             return clean.isEmpty ? nil : CRMSubtask(id: subtask.id, title: clean, completed: subtask.completed)
         }
-        do { try await SupabaseService.shared.updateLead(leads[leadIndex], expectedUpdatedAt: old.updatedAt); updateWidget(); await scheduleNotifications(); return true }
-        catch { leads[leadIndex] = old; reportLeadWrite(error, fallback: "The task changes could not be saved."); return false }
+        return await commitLead(leadID, fallback: "The task changes could not be saved.") { lead in
+            guard let index = lead.tasks.firstIndex(where: { $0.id == taskID }) else { return }
+            lead.tasks[index].title = cleanTitle
+            lead.tasks[index].dueDate = dueDate
+            lead.tasks[index].priority = ["low", "medium", "high"].contains(priority) ? priority : "medium"
+            lead.tasks[index].notes = cleanNotes?.isEmpty == true ? nil : cleanNotes
+            lead.tasks[index].subtasks = cleanSubtasks
+        }
     }
 
     func toggleLeadSubtask(leadID: String, taskID: String, subtaskID: String) async {
-        guard let leadIndex = leads.firstIndex(where: { $0.id == leadID }), let taskIndex = leads[leadIndex].tasks.firstIndex(where: { $0.id == taskID }), let subtaskIndex = leads[leadIndex].tasks[taskIndex].subtasks?.firstIndex(where: { $0.id == subtaskID }) else { return }
-        let old = leads[leadIndex]
-        leads[leadIndex].tasks[taskIndex].subtasks?[subtaskIndex].completed.toggle()
-        do { try await SupabaseService.shared.updateLead(leads[leadIndex], expectedUpdatedAt: old.updatedAt); updateWidget() }
-        catch { leads[leadIndex] = old; reportLeadWrite(error, fallback: "The subtask could not be updated.") }
+        await commitLead(leadID, fallback: "The subtask could not be updated.") { lead in
+            guard let taskIndex = lead.tasks.firstIndex(where: { $0.id == taskID }),
+                  let subtaskIndex = lead.tasks[taskIndex].subtasks?.firstIndex(where: { $0.id == subtaskID }) else { return }
+            lead.tasks[taskIndex].subtasks?[subtaskIndex].completed.toggle()
+        }
     }
 
     func completeNextLeadTask(leadID: String, fallbackTitle: String) async {
-        guard let leadIndex = leads.firstIndex(where: { $0.id == leadID }) else { return }
-        if let task = leads[leadIndex].tasks.first(where: { !$0.completed }) {
+        guard let lead = leads.first(where: { $0.id == leadID }) else { return }
+        if let task = lead.tasks.first(where: { !$0.completed }) {
             await toggleLeadTask(leadID: leadID, taskID: task.id)
             return
         }
-        let old = leads[leadIndex]
-        leads[leadIndex].tasks.append(CRMTask(id: UUID().uuidString, title: fallbackTitle, completed: true, completedDate: SupabaseService.today, dueDate: nil, isTemplate: false))
-        recalculateProgress(at: leadIndex)
-        do { try await SupabaseService.shared.updateLead(leads[leadIndex], expectedUpdatedAt: old.updatedAt); updateWidget() }
-        catch { leads[leadIndex] = old; reportLeadWrite(error, fallback: "The action could not be completed.") }
+        let done = CRMTask(id: UUID().uuidString, title: fallbackTitle, completed: true, completedDate: SupabaseService.today, dueDate: nil, isTemplate: false)
+        await commitLead(leadID, fallback: "The action could not be completed.") { $0.tasks.append(done) }
     }
 
     func deleteLeadTask(leadID: String, taskID: String) async {
-        guard let leadIndex = leads.firstIndex(where: { $0.id == leadID }) else { return }
-        let old = leads[leadIndex]
-        leads[leadIndex].tasks.removeAll { $0.id == taskID }
-        recalculateProgress(at: leadIndex)
-        do { try await SupabaseService.shared.updateLead(leads[leadIndex], expectedUpdatedAt: old.updatedAt); updateWidget() }
-        catch { leads[leadIndex] = old; reportLeadWrite(error, fallback: "The task could not be deleted.") }
+        await commitLead(leadID, fallback: "The task could not be deleted.") { $0.tasks.removeAll { $0.id == taskID } }
     }
 
     func saveSurvey(_ survey: RoofSurvey) async -> Bool {
@@ -907,9 +1012,11 @@ final class AppState {
                 try await SupabaseService.shared.insert(changed, into: "quotes")
                 quotes.insert(changed, at: 0)
             }
-            if var lead = leads.first(where: { $0.id == changed.leadID }) {
+            // A draft is just a draft. The job's value follows a quote only once the
+            // customer has actually been sent it (or accepted it).
+            if [.sent, .accepted].contains(changed.status), var lead = leads.first(where: { $0.id == changed.leadID }) {
                 lead.value = changed.total; lead.balance = max(0, changed.total - (lead.depositPaid ? lead.deposit : 0))
-                let target: LeadStage? = changed.status == .accepted ? .won : (changed.status == .sent ? .quoteSent : nil)
+                let target: LeadStage? = changed.status == .accepted ? .won : (lead.stage == .quotePreparing || lead.stage == .newLead || lead.stage == .surveyBooked ? .quoteSent : nil)
                 if let target, lead.stage != target { await move(lead, to: target) } else { await saveLead(lead) }
             }
             return true
@@ -932,10 +1039,8 @@ final class AppState {
         catch { errorMessage = "Quote could not be deleted." }
     }
 
-    private func recalculateProgress(at leadIndex: Int) {
-        let tasks = leads[leadIndex].tasks
-        leads[leadIndex].progress = tasks.isEmpty ? 0 : Int((Double(tasks.filter(\.completed).count) / Double(tasks.count) * 100).rounded())
-        leads[leadIndex].updatedAt = SupabaseService.now
+    private static func progress(of tasks: [CRMTask]) -> Int {
+        tasks.isEmpty ? 0 : Int((Double(tasks.filter(\.completed).count) / Double(tasks.count) * 100).rounded())
     }
 
     private func reportLeadWrite(_ error: Error, fallback: String) {
@@ -947,47 +1052,41 @@ final class AppState {
     }
 
     func uploadLeadPhoto(leadID: String, data: Data, filename: String, contentType: String, category: String, caption: String?) async -> Bool {
-        guard var lead = leads.first(where: { $0.id == leadID }) else { return false }
-        let expectedUpdatedAt = lead.updatedAt
+        guard leads.contains(where: { $0.id == leadID }) else { return false }
         do {
             let locator = try await SupabaseService.shared.uploadAttachment(data: data, filename: filename, contentType: contentType, leadID: leadID)
-            lead.photos.append(CRMPhoto(id: UUID().uuidString, url: locator, category: category, date: SupabaseService.today, caption: caption))
-            lead.updatedAt = SupabaseService.now
-            do { try await SupabaseService.shared.updateLead(lead, expectedUpdatedAt: expectedUpdatedAt); if let index = leads.firstIndex(where: { $0.id == leadID }) { leads[index] = lead }; return true }
-            catch { try? await SupabaseService.shared.deleteAttachment(locator: locator); throw error }
+            let photo = CRMPhoto(id: UUID().uuidString, url: locator, category: category, date: SupabaseService.today, caption: caption)
+            let saved = await commitLead(leadID, fallback: "The photo could not be attached.") { $0.photos.append(photo) }
+            if !saved { try? await SupabaseService.shared.deleteAttachment(locator: locator) }
+            return saved
         } catch { errorMessage = "The photo could not be uploaded: \(error.localizedDescription)"; return false }
     }
 
     func uploadLeadFile(leadID: String, data: Data, filename: String, contentType: String) async -> Bool {
-        guard var lead = leads.first(where: { $0.id == leadID }) else { return false }
-        let expectedUpdatedAt = lead.updatedAt
+        guard leads.contains(where: { $0.id == leadID }) else { return false }
         do {
             let locator = try await SupabaseService.shared.uploadAttachment(data: data, filename: filename, contentType: contentType, leadID: leadID)
             let size = ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)
             let type = contentType.hasPrefix("image/") ? "image" : (filename.lowercased().hasSuffix(".pdf") ? "pdf" : "document")
-            lead.files.append(CRMFile(id: UUID().uuidString, name: filename, type: type, size: size, date: SupabaseService.today, url: locator))
-            lead.updatedAt = SupabaseService.now
-            do { try await SupabaseService.shared.updateLead(lead, expectedUpdatedAt: expectedUpdatedAt); if let index = leads.firstIndex(where: { $0.id == leadID }) { leads[index] = lead }; return true }
-            catch { try? await SupabaseService.shared.deleteAttachment(locator: locator); throw error }
+            let file = CRMFile(id: UUID().uuidString, name: filename, type: type, size: size, date: SupabaseService.today, url: locator)
+            let saved = await commitLead(leadID, fallback: "The file could not be attached.") { $0.files.append(file) }
+            if !saved { try? await SupabaseService.shared.deleteAttachment(locator: locator) }
+            return saved
         } catch { errorMessage = "The file could not be uploaded: \(error.localizedDescription)"; return false }
     }
 
     func deleteLeadPhoto(leadID: String, photoID: String) async {
-        guard var lead = leads.first(where: { $0.id == leadID }), let photo = lead.photos.first(where: { $0.id == photoID }) else { return }
-        let expectedUpdatedAt = lead.updatedAt
-        lead.photos.removeAll { $0.id == photoID }
-        lead.updatedAt = SupabaseService.now
-        do { try await SupabaseService.shared.updateLead(lead, expectedUpdatedAt: expectedUpdatedAt); if let index = leads.firstIndex(where: { $0.id == leadID }) { leads[index] = lead }; try? await SupabaseService.shared.deleteAttachment(locator: photo.url) }
-        catch { reportLeadWrite(error, fallback: "The photo could not be deleted.") }
+        guard let photo = leads.first(where: { $0.id == leadID })?.photos.first(where: { $0.id == photoID }) else { return }
+        if await commitLead(leadID, fallback: "The photo could not be deleted.", mutate: { $0.photos.removeAll { $0.id == photoID } }) {
+            try? await SupabaseService.shared.deleteAttachment(locator: photo.url)
+        }
     }
 
     func deleteLeadFile(leadID: String, fileID: String) async {
-        guard var lead = leads.first(where: { $0.id == leadID }), let file = lead.files.first(where: { $0.id == fileID }) else { return }
-        let expectedUpdatedAt = lead.updatedAt
-        lead.files.removeAll { $0.id == fileID }
-        lead.updatedAt = SupabaseService.now
-        do { try await SupabaseService.shared.updateLead(lead, expectedUpdatedAt: expectedUpdatedAt); if let index = leads.firstIndex(where: { $0.id == leadID }) { leads[index] = lead }; if let locator = file.url { try? await SupabaseService.shared.deleteAttachment(locator: locator) } }
-        catch { reportLeadWrite(error, fallback: "The file could not be deleted.") }
+        guard let file = leads.first(where: { $0.id == leadID })?.files.first(where: { $0.id == fileID }) else { return }
+        if await commitLead(leadID, fallback: "The file could not be deleted.", mutate: { $0.files.removeAll { $0.id == fileID } }), let locator = file.url {
+            try? await SupabaseService.shared.deleteAttachment(locator: locator)
+        }
     }
 
     @discardableResult
@@ -1149,8 +1248,7 @@ final class AppState {
         guard let index = users.firstIndex(where: { $0.id == user.id }) else { errorMessage = "Worker could not be found. Refresh and try again."; return false }
         let old = users[index]; users[index] = user
         do {
-            if KeychainStore.get("supabaseAccessToken") != nil { try await SupabaseService.shared.updateAuthenticatedProfile(user) }
-            else { try await SupabaseService.shared.update(user, in: "app_users", id: user.id) }
+            try await SupabaseService.shared.updateAuthenticatedProfile(user)
             if currentUser?.id == user.id { currentUser = user }
             return true
         }
@@ -1182,22 +1280,29 @@ final class AppState {
 
     func refreshTeam(showErrors: Bool = true) async throws {
         do {
-            let oldIDs = Set(teamMessages.map(\.id))
-            let hadMessages = !teamMessages.isEmpty
             async let fetchedMessages = SupabaseService.shared.fetchTeamMessages()
             async let fetchedPlans = SupabaseService.shared.fetchTeamDayPlans()
             let (messages, plans) = try await (fetchedMessages, fetchedPlans)
-            teamMessages = messages
-            teamDayPlans = plans
-            if hadMessages, let newest = messages.first(where: { !oldIDs.contains($0.id) && $0.authorID != currentUser?.id }) {
-                await notifyAboutTeamMessage(newest)
-            }
-            syncIssues.removeAll { $0 == "Team Hub" }
+            adoptTeam(messages: messages, plans: plans)
         } catch {
             if !syncIssues.contains("Team Hub") { syncIssues.append("Team Hub") }
             if showErrors { errorMessage = "Team Hub could not be refreshed: \(error.localizedDescription)" }
             throw error
         }
+    }
+
+    private func adoptTeam(messages: [TeamMessage], plans: [TeamDayPlan]) {
+        let oldIDs = Set(teamMessages.map(\.id))
+        let hadMessages = !teamMessages.isEmpty
+        teamMessages = messages
+        teamDayPlans = plans
+        // Push already announces new messages on registered devices; only fall back
+        // to a local banner where this device has no push registration.
+        if hadMessages, UserDefaults.standard.string(forKey: "nativePushDeviceToken") == nil,
+           let newest = messages.first(where: { !oldIDs.contains($0.id) && $0.authorID != currentUser?.id }) {
+            Task { await notifyAboutTeamMessage(newest) }
+        }
+        syncIssues.removeAll { $0 == "Team Hub" }
     }
 
     @discardableResult
@@ -1241,38 +1346,9 @@ final class AppState {
         try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "team-message-\(message.id)", content: content, trigger: nil))
     }
 
-    func addUser(name: String, username: String, password: String, role: String) async -> Bool {
-        guard isAdmin else { errorMessage = "Only administrators can create team accounts."; return false }
-        guard KeychainStore.get("supabaseAccessToken") == nil else { errorMessage = "Invite new secure accounts from Supabase Authentication, then add their active CRM profile."; return false }
-        guard !users.contains(where: { $0.username.caseInsensitiveCompare(username) == .orderedSame }) else { errorMessage = "That username is already in use."; return false }
-        let hash = SHA256.hash(data: Data(password.utf8)).map { String(format: "%02x", $0) }.joined()
-        let user = CRMUser(id: UUID().uuidString, name: name, username: username, passwordHash: hash, role: role, dayRate: nil, cisRate: 20, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
-        do { try await SupabaseService.shared.insert(user, into: "app_users"); users.append(user); return true }
-        catch { errorMessage = "The account could not be created."; return false }
-    }
-
-    func changePassword(userID: String, password: String) async -> Bool {
-        if KeychainStore.get("supabaseAccessToken") != nil {
-            guard currentUser?.id == userID else { errorMessage = "Team members must change their own Supabase password."; return false }
-            do { try await SupabaseService.shared.updateAuthenticatedPassword(password); return true }
-            catch { errorMessage = "The password could not be changed."; return false }
-        }
-        guard let index = users.firstIndex(where: { $0.id == userID }) else { return false }
-        let old = users[index]; var changed = old
-        changed.passwordHash = SHA256.hash(data: Data(password.utf8)).map { String(format: "%02x", $0) }.joined()
-        users[index] = changed
-        do { try await SupabaseService.shared.update(changed, in: "app_users", id: userID); if currentUser?.id == userID { currentUser = changed }; return true }
-        catch { users[index] = old; errorMessage = "The password could not be changed."; return false }
-    }
-
-    func deleteUser(_ user: CRMUser) async {
-        guard isAdmin else { errorMessage = "Only administrators can delete team accounts."; return }
-        guard KeychainStore.get("supabaseAccessToken") == nil else { errorMessage = "Disable secure accounts in Supabase Authentication to revoke every active session."; return }
-        guard user.id != currentUser?.id else { errorMessage = "You cannot delete the account currently signed in."; return }
-        guard let index = users.firstIndex(where: { $0.id == user.id }) else { return }
-        users.remove(at: index)
-        do { try await SupabaseService.shared.delete(from: "app_users", id: user.id) }
-        catch { users.insert(user, at: index); errorMessage = "The account could not be deleted." }
+    func changePassword(password: String) async -> Bool {
+        do { try await SupabaseService.shared.updateAuthenticatedPassword(password); return true }
+        catch { errorMessage = "The password could not be changed."; return false }
     }
 
     func enableNotifications() async {
@@ -1323,7 +1399,21 @@ final class AppState {
         // not interrupt normal CRM work with a technical system alert.
     }
 
+    // Many taps in a row should produce one rebuild, not one per tap: rescheduling up
+    // to 60 notifications and reloading widget timelines is system-rate-limited work.
+    private var notificationRebuild: Task<Void, Never>?
+    private var widgetRebuild: Task<Void, Never>?
+
     func scheduleNotifications() async {
+        notificationRebuild?.cancel()
+        notificationRebuild = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard !Task.isCancelled, let self else { return }
+            await self.rebuildNotifications()
+        }
+    }
+
+    private func rebuildNotifications() async {
         await clearCRMNotifications()
         #if os(iOS)
         await updateTaskLiveActivities()
@@ -1464,6 +1554,15 @@ final class AppState {
     }
 
     private func updateWidget() {
+        widgetRebuild?.cancel()
+        widgetRebuild = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled, let self else { return }
+            self.rebuildWidget()
+        }
+    }
+
+    private func rebuildWidget() {
         let today = SupabaseService.today
         let widgetTasks = notificationTasks
             .filter { !$0.completed && $0.category != "Fleet Vehicle" && FleetTaskPolicy.shouldShowInTaskList($0) }
@@ -1487,6 +1586,19 @@ final class AppState {
         Task { await updateTaskLiveActivities() }
         #endif
     }
+}
+
+struct PendingCall: Identifiable, Sendable {
+    let id: String
+    let leadName: String
+    let startedAt: Date
+}
+
+enum CallOutcome: String, CaseIterable, Identifiable, Sendable {
+    case spoke, noAnswer, voicemail
+    var id: String { rawValue }
+    var title: String { switch self { case .spoke: "Spoke to customer"; case .noAnswer: "No answer"; case .voicemail: "Left voicemail" } }
+    var short: String { switch self { case .spoke: "Spoke"; case .noAnswer: "No answer"; case .voicemail: "Voicemail" } }
 }
 
 enum NotificationScope {
@@ -1538,7 +1650,6 @@ enum UserAccessScope {
         return users.map { user in
             guard user.id != currentUser.id else { return user }
             var publicUser = user
-            publicUser.passwordHash = ""
             publicUser.dayRate = nil
             publicUser.cisRate = nil
             publicUser.utrNumber = nil

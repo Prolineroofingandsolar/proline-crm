@@ -1,119 +1,133 @@
 import MapKit
 import SwiftUI
 
+/// A customer/job pushed onto a navigation stack.
+struct LeadRoute: Hashable { let id: String }
+
 struct RootView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.scenePhase) private var scenePhase
-    @State private var detailPath = NavigationPath()
-    private var availableSections: [AppSection] {
-        if !appState.isAdmin { return [.dashboard, .calendar, .jobs, .tasks, .timesheet, .tools] }
-        return [.dashboard, .pipeline, .leads, .jobs, .tasks, .email, .calendar, .team, .contacts, .files, .fleet, .accounts, .timesheet, .tools, .settings].filter(appState.canAccess)
+    @State private var tabPaths: [AppSection: NavigationPath] = [:]
+    @State private var morePath = NavigationPath()
+    @State private var macPath = NavigationPath()
+    #if os(macOS)
+    @Environment(\.openSettings) private var openSettings
+    #endif
+
+    private func path(for section: AppSection) -> Binding<NavigationPath> {
+        Binding(get: { tabPaths[section] ?? NavigationPath() }, set: { tabPaths[section] = $0 })
     }
+
     private var adminSidebarGroups: [(title: String, sections: [AppSection])] {
         [
-            ("WORK", [.dashboard, .pipeline, .jobs, .tasks, .calendar]),
-            ("CUSTOMERS", [.contacts, .email]),
-            ("BUSINESS", [.accounts, .team, .fleet]),
-            ("RESOURCES", [.files, .tools, .settings])
+            ("Work", [.dashboard, .pipeline, .jobs, .tasks, .calendar]),
+            ("Customers", [.contacts, .email]),
+            ("Business", [.accounts, .team, .fleet]),
+            ("Resources", [.files, .tools])
         ]
     }
-    private var mobileTabs: [AppSection] { appState.usesAdminInterface ? [.dashboard, .pipeline, .tasks] : [.dashboard, .jobs, .tasks] }
+    private var workerSections: [AppSection] { [.dashboard, .calendar, .jobs, .tasks, .timesheet, .tools] }
+    private var mobileTabs: [AppSection] { appState.usesAdminInterface ? [.dashboard, .pipeline, .jobs, .tasks] : [.dashboard, .jobs, .tasks] }
+
     var body: some View {
         @Bindable var appState = appState
         #if os(iOS)
         TabView(selection: $appState.selectedSection) {
             ForEach(mobileTabs) { section in
-                NavigationStack {
+                NavigationStack(path: path(for: section)) {
                     SectionContent(section: section)
+                        .navigationDestination(for: LeadRoute.self) { route in leadDestination(route.id) }
                         .toolbar {
                             ToolbarItemGroup(placement: .topBarTrailing) {
                                 if !appState.syncIssues.isEmpty {
-                                    Button(action: showSyncIssues) { Image(systemName: "exclamationmark.icloud.fill").foregroundStyle(.orange) }
+                                    Button(action: showSyncIssues) { Image(systemName: "exclamationmark.icloud") }
                                         .accessibilityLabel("Data sync issue")
                                 }
-                                if appState.usesAdminInterface && section == .dashboard {
+                                if appState.usesAdminInterface {
                                     Button { appState.showingGlobalSearch = true } label: { Image(systemName: "magnifyingglass") }
-                                    Button { appState.showingGlobalAddLead = true } label: { Image(systemName: "plus") }
+                                        .accessibilityLabel("Search")
+                                    if section == .dashboard || section == .pipeline {
+                                        Button { appState.showingGlobalAddLead = true } label: { Image(systemName: "plus") }
+                                            .accessibilityLabel("Add lead")
+                                    }
                                 }
                             }
                         }
                 }
-                    .tabItem { Label(sectionLabel(section), systemImage: section.icon) }
-                    .badge(sectionBadge(section))
-                    .tag(section)
+                .tabItem { Label(sectionLabel(section), systemImage: section.icon) }
+                .badge(sectionBadge(section))
+                .tag(section)
             }
-            if appState.usesAdminInterface {
-                NavigationStack { MobileMoreView() }
-                    .tabItem { Label("More", systemImage: "ellipsis") }
-                    .badge(appState.unreadTeamCount)
-                    .tag(AppSection.settings)
-            } else {
-                NavigationStack { WorkerMoreView() }
-                    .tabItem { Label("More", systemImage: "ellipsis") }
-                    .tag(AppSection.settings)
+            NavigationStack(path: $morePath) {
+                Group {
+                    if appState.usesAdminInterface { MobileMoreView() } else { WorkerMoreView() }
+                }
+                .navigationDestination(for: AppSection.self) { section in SectionContent(section: section) }
+                .navigationDestination(for: LeadRoute.self) { route in leadDestination(route.id) }
             }
+            .tabItem { Label("More", systemImage: "ellipsis") }
+            .badge(appState.usesAdminInterface ? appState.unreadTeamCount : 0)
+            .tag(AppSection.settings)
         }
         .sheet(isPresented: $appState.showingGlobalSearch) { GlobalSearchView() }
         .sheet(isPresented: $appState.showingAssistant) { OperationsAssistantView() }
         .sheet(isPresented: $appState.showingGlobalAddLead) { AddLeadView(defaultStage: .newLead) }
+        .sheet(item: $appState.pendingCallOutcome) { CallOutcomeSheet(pending: $0) }
         .onAppear { ensureAllowedSelection() }
+        .onChange(of: appState.selectedSection) { _, _ in ensureAllowedSelection() }
+        .onChange(of: appState.pendingLeadID) { _, id in if let id { showLead(id) } }
         .onOpenURL(perform: openDeepLink)
         .onReceive(NotificationCenter.default.publisher(for: .crmNotificationDeepLink)) { note in
             if let url = note.object as? URL { openDeepLink(url) }
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .active && !appState.isWorkerPreview { Task { await appState.refresh(showErrors: false) } } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && !appState.isWorkerPreview {
+                appState.resumePendingCall()
+                Task { await appState.refresh(showErrors: false) }
+            }
+        }
         .task { await activeSyncLoop() }
         #else
         NavigationSplitView {
-            VStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 0) { Text("PRO").foregroundStyle(.white); Text("LINE").foregroundStyle(Color(red: 1, green: 0.29, blue: 0.04)) }
-                        .font(.system(size: 24, weight: .black, design: .rounded))
-                    Text("ROOFING CRM").font(.system(size: 9, weight: .bold)).tracking(3).foregroundStyle(.white.opacity(0.72))
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 20)
+            List(selection: $appState.selectedSection) {
                 if appState.isAdmin {
-                    Button { appState.showingGlobalAddLead = true } label: { Label("Add lead", systemImage: "plus").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 9) }
-                        .buttonStyle(.plain).foregroundStyle(.white).background(Color(red: 1, green: 0.29, blue: 0.04), in: RoundedRectangle(cornerRadius: 8)).padding(.horizontal, 16).padding(.bottom, 18)
-                }
-                List(selection: $appState.selectedSection) {
-                    if appState.isAdmin {
-                        ForEach(Array(adminSidebarGroups.enumerated()), id: \.offset) { _, group in
-                            Section {
-                                ForEach(group.sections.filter(appState.canAccess)) { section in sidebarRow(section) }
-                            } header: {
-                                if !group.title.isEmpty {
-                                    Text(group.title).font(.caption2.bold()).tracking(0.7).foregroundStyle(.white.opacity(0.48))
-                                }
-                            }
+                    ForEach(adminSidebarGroups, id: \.title) { group in
+                        Section(group.title) {
+                            ForEach(group.sections.filter(appState.canAccess)) { section in sidebarRow(section) }
                         }
-                    } else {
-                        ForEach(availableSections) { section in sidebarRow(section) }
                     }
-                }
-                .listStyle(.sidebar).scrollContentBackground(.hidden)
-                .onChange(of: appState.selectedSection) { _, _ in
-                    detailPath = NavigationPath()
-                    appState.navigationResetID = UUID()
+                } else {
+                    ForEach(workerSections) { section in sidebarRow(section) }
                 }
             }
-            .background(LinearGradient(colors: [Color(red: 0.025, green: 0.10, blue: 0.16), Color(red: 0.02, green: 0.14, blue: 0.21)], startPoint: .top, endPoint: .bottom))
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
             .safeAreaInset(edge: .bottom) {
                 if let user = appState.currentUser {
-                    HStack { Circle().fill(Color.orange).frame(width: 30, height: 30).overlay(Text(user.name.prefix(1)).font(.caption.bold()).foregroundStyle(.white)); VStack(alignment: .leading) { Text(user.name).lineLimit(1).font(.caption.bold()); Text(user.role.capitalized).font(.caption2).foregroundStyle(.white.opacity(0.55)) }; Spacer(); Menu { Button("Sign Out", role: .destructive) { appState.signOut() } } label: { Image(systemName: "chevron.down") } }
-                        .foregroundStyle(.white).padding(16).background(Color.black.opacity(0.12))
+                    Menu {
+                        Button("Settings…") { openSettings() }
+                        Divider()
+                        Button("Sign Out", role: .destructive) { appState.signOut() }
+                    } label: {
+                        Label { VStack(alignment: .leading) { Text(user.name).lineLimit(1); Text(user.role.capitalized).font(.caption).foregroundStyle(.secondary) } } icon: { Image(systemName: "person.crop.circle") }
+                    }
+                    .menuStyle(.borderlessButton)
+                    .padding(12)
                 }
-            }.navigationSplitViewColumnWidth(min: 190, ideal: 205, max: 220)
-        } detail: {
-            NavigationStack {
-                SectionContent(section: appState.selectedSection)
             }
-            .id(appState.selectedSection)
+            .onChange(of: appState.selectedSection) { _, _ in macPath = NavigationPath() }
+        } detail: {
+            NavigationStack(path: $macPath) {
+                SectionContent(section: appState.selectedSection)
+                    .navigationDestination(for: LeadRoute.self) { route in leadDestination(route.id) }
+            }
             .toolbar {
                 if appState.isAdmin {
+                    Button { appState.showingGlobalAddLead = true } label: { Label("Add lead", systemImage: "plus") }
                     Button { appState.showingGlobalSearch = true } label: { Label("Search", systemImage: "magnifyingglass") }
                 }
                 if !appState.syncIssues.isEmpty {
-                    Button(action: showSyncIssues) { Label("Data sync issue", systemImage: "exclamationmark.icloud.fill") }.foregroundStyle(.orange)
+                    Button(action: showSyncIssues) { Label("Data sync issue", systemImage: "exclamationmark.icloud") }
                 }
                 Button { Task { await appState.refresh() } } label: {
                     if appState.isRefreshing { ProgressView().controlSize(.small) } else { Label("Refresh", systemImage: "arrow.clockwise") }
@@ -123,41 +137,82 @@ struct RootView: View {
         .sheet(isPresented: $appState.showingGlobalAddLead) { AddLeadView(defaultStage: .newLead) }
         .sheet(isPresented: $appState.showingGlobalSearch) { GlobalSearchView() }
         .sheet(isPresented: $appState.showingAssistant) { OperationsAssistantView() }
+        .sheet(item: $appState.pendingCallOutcome) { CallOutcomeSheet(pending: $0) }
+        .onChange(of: appState.pendingLeadID) { _, id in if let id { showLead(id) } }
         .onOpenURL(perform: openDeepLink)
         .onReceive(NotificationCenter.default.publisher(for: .crmNotificationDeepLink)) { note in
             if let url = note.object as? URL { openDeepLink(url) }
         }
         .onAppear { ensureAllowedSelection() }
-        .onChange(of: scenePhase) { _, phase in if phase == .active && !appState.isWorkerPreview { Task { await appState.refresh(showErrors: false) } } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && !appState.isWorkerPreview {
+                appState.resumePendingCall()
+                Task { await appState.refresh(showErrors: false) }
+            }
+        }
         .task { await activeSyncLoop() }
         #endif
     }
 
-    private func openDeepLink(_ url: URL) {
-        guard url.scheme == "prolinecrm" else { return }
-        let components = [url.host].compactMap { $0 } + url.pathComponents.filter { $0 != "/" }
-        guard let kind = components.first else { return }
-        if kind == "lead", components.count > 1 {
-            if appState.usesAdminInterface {
-                appState.selectedLeadID = components[1]
-                appState.showingGlobalSearch = true
-            } else {
-                appState.selectedSection = .jobs
-            }
-        } else if kind.caseInsensitiveCompare("team") == .orderedSame, appState.canAccess(.team) {
-            appState.selectedSection = .team
-        } else if let section = AppSection.allCases.first(where: { $0.rawValue.lowercased() == kind.lowercased() }), appState.canAccess(section) {
+    @ViewBuilder private func leadDestination(_ id: String) -> some View {
+        if appState.usesAdminInterface { LeadDetailView(leadID: id) } else { WorkerJobDetailView(leadID: id) }
+    }
+
+    /// Pushes a lead onto whichever stack the user is looking at.
+    private func showLead(_ id: String) {
+        appState.pendingLeadID = nil
+        appState.showingGlobalSearch = false
+        #if os(iOS)
+        if appState.selectedSection == .settings {
+            morePath.append(LeadRoute(id: id))
+        } else {
+            let section = mobileTabs.contains(appState.selectedSection) ? appState.selectedSection : .dashboard
             appState.selectedSection = section
+            tabPaths[section, default: NavigationPath()].append(LeadRoute(id: id))
+        }
+        #else
+        macPath.append(LeadRoute(id: id))
+        #endif
+    }
+
+    /// Shows a section, on iPhone by selecting its tab or pushing it inside More.
+    private func showSection(_ section: AppSection) {
+        guard appState.canAccess(section) else { return }
+        #if os(iOS)
+        if mobileTabs.contains(section) {
+            appState.selectedSection = section
+        } else {
+            appState.selectedSection = .settings
+            morePath = NavigationPath([section])
+        }
+        #else
+        appState.selectedSection = section
+        #endif
+    }
+
+    private func openDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "prolinecrm" else { return }
+        let components = [url.host].compactMap { $0 } + url.pathComponents.filter { $0 != "/" }
+        guard let kind = components.first?.lowercased() else { return }
+        if kind == "lead", components.count > 1 {
+            appState.openLead(components[1])
+        } else if kind == "team" {
+            showSection(.team)
+        } else if let section = AppSection.allCases.first(where: { $0.rawValue.lowercased() == kind }) {
+            showSection(section)
         }
     }
 
     private func ensureAllowedSelection() {
-        if !appState.canAccess(appState.selectedSection) {
+        if !appState.canAccess(appState.selectedSection) && appState.selectedSection != .settings {
             appState.selectedSection = .dashboard
         }
         #if os(iOS)
         if !mobileTabs.contains(appState.selectedSection) && appState.selectedSection != .settings {
-            appState.selectedSection = .dashboard
+            // A section without a tab lives under More.
+            let section = appState.selectedSection
+            appState.selectedSection = .settings
+            if appState.canAccess(section) { morePath = NavigationPath([section]) }
         }
         #endif
     }
@@ -166,31 +221,17 @@ struct RootView: View {
         if section == .dashboard { return "Today" }
         guard appState.usesWorkerInterface else { return section.rawValue }
         switch section {
-        case .dashboard: return "Today"
-        case .calendar: return "Calendar"
         case .jobs: return "My Jobs"
         case .tasks: return "My Tasks"
         case .timesheet: return "My Time"
-        case .tools: return "Tools"
         default: return section.rawValue
         }
     }
 
     private func sidebarRow(_ section: AppSection) -> some View {
-        HStack {
-            Label(sectionLabel(section), systemImage: section.icon)
-            Spacer()
-            let count = sectionBadge(section)
-            if count > 0 {
-                Text("\(count)").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Color.orange, in: Capsule()).foregroundStyle(.white)
-            }
-        }
-        .font(.system(size: 14, weight: appState.selectedSection == section ? .semibold : .regular))
-        .foregroundStyle(appState.selectedSection == section ? Color.white : Color.white.opacity(0.78))
-        .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 5).contentShape(Rectangle())
-        .tag(section)
-        .listRowBackground(appState.selectedSection == section ? Color.white.opacity(0.10) : Color.clear)
+        Label(sectionLabel(section), systemImage: section.icon)
+            .badge(sectionBadge(section))
+            .tag(section)
     }
 
     private func showSyncIssues() {
@@ -210,7 +251,7 @@ struct RootView: View {
         switch section {
         case .tasks: appState.visibleGeneralTasks.filter { NotificationScope.includes($0, for: appState.currentUser) && !$0.completed && ($0.dueDate ?? "9999-12-31") <= SupabaseService.today }.count
         case .team: appState.unreadTeamCount
-        case .pipeline, .leads: appState.leads.filter { $0.stage == .newLead }.count
+        case .pipeline: appState.leads.filter { $0.stage == .newLead }.count
         case .jobs: appState.leads.filter { ($0.endDate ?? "9999-12-31") < SupabaseService.today && ![.completed, .waitingForPayment, .paid, .lost].contains($0.stage) }.count
         default: 0
         }
@@ -223,123 +264,57 @@ private struct MobileMoreView: View {
     var body: some View {
         List {
             Section("Work") {
-                moreLink(.jobs, "Scheduled and live work", .orange)
-                moreLink(.calendar, "Surveys and job dates", .blue)
-                moreLink(.team, "Messages and day planning", .purple)
+                moreLink(.calendar)
+                moreLink(.team)
             }
             Section("Customers") {
-                moreLink(.contacts, "Customer directory", .teal)
-                moreLink(.email, "Email and follow-ups", .blue)
+                moreLink(.contacts)
+                moreLink(.email)
             }
             Section("Business") {
-                moreLink(.accounts, "Money, payroll, CIS and reports", .green)
-                moreLink(.fleet, "Vans, MOT and servicing", .orange)
+                moreLink(.accounts)
+                moreLink(.fleet)
             }
             Section("Resources") {
-                moreLink(.files, "Photos and documents", .blue)
-                moreLink(.tools, "Roofing calculators", .teal)
-                Button { appState.showingAssistant = true } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "sparkles").font(.headline).foregroundStyle(.purple)
-                            .frame(width: 36, height: 36).background(Color.purple.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
-                        VStack(alignment: .leading, spacing: 2) { Text("Ask ProLine").fontWeight(.semibold); Text("Planning and CRM assistance").font(.caption).foregroundStyle(.secondary) }
-                    }.padding(.vertical, 2)
-                }
+                moreLink(.files)
+                moreLink(.tools)
+                Button { appState.showingAssistant = true } label: { Label("Ask ProLine", systemImage: "sparkles") }
             }
-            if appState.isAdmin {
-                Section("View") { adminSimpleModeToggle }
-            }
-            Section("Account") {
-                if let user = appState.currentUser {
-                    HStack { Circle().fill(.orange.gradient).frame(width: 38, height: 38).overlay(Text(user.name.prefix(1)).font(.headline).foregroundStyle(.white)); VStack(alignment:.leading){Text(user.name).fontWeight(.semibold);Text(user.role.capitalized).font(.caption).foregroundStyle(.secondary)} }
-                }
-                moreLink(.settings, "Team and app setup", .secondary)
-                Button("Sign out", role: .destructive) { appState.signOut() }
-            }
+            Section {
+                moreLink(.settings)
+                if appState.isAdmin { Toggle("Simple mode", isOn: simpleModeBinding) }
+            } footer: { if appState.isAdmin { Text("Simple mode shows the same streamlined app that workers use.") } }
         }
         .navigationTitle("More")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-    private var adminSimpleModeToggle: some View {
-        Toggle(isOn: simpleModeBinding) {
-            VStack(alignment: .leading, spacing: 3) {
-                Label("Simple mode", systemImage: "person.crop.circle").font(.headline)
-                Text("Use the same streamlined app as workers").font(.caption).foregroundStyle(.secondary)
-            }
-        }.tint(.orange)
     }
     private var simpleModeBinding: Binding<Bool> {
         Binding(get: { appState.isAdminUsingSimpleView }, set: { appState.setMobileInterface(simple: $0) })
     }
-    private func moreLink(_ section: AppSection, _ detail: String, _ tint: Color) -> some View {
-        NavigationLink { SectionContent(section: section) } label: {
-            HStack(spacing: 12) {
-                Image(systemName: section.icon).font(.headline).foregroundStyle(tint)
-                    .frame(width: 36, height: 36).background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(section.rawValue).fontWeight(.semibold)
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
-                }
-            }.padding(.vertical, 2)
-        }
+    private func moreLink(_ section: AppSection) -> some View {
+        NavigationLink(value: section) { Label(section.rawValue, systemImage: section.icon) }
+            .badge(section == .team ? appState.unreadTeamCount : 0)
     }
 }
 
 private struct WorkerMoreView: View {
     @Environment(AppState.self) private var appState
-
     var body: some View {
         List {
-            Section("Plan") {
-                NavigationLink { WorkerCalendarView() } label: {
-                    workerMoreRow("Work calendar", "calendar", .blue, "See upcoming jobs and locations")
-                }
-            }
-            Section("Work") {
-                NavigationLink { TimesheetView() } label: {
-                    workerMoreRow("My timesheet", "clock.fill", .orange, "Record days and check your pay")
-                }
-                NavigationLink { RoofingToolsView() } label: {
-                    workerMoreRow("Roofing tools", "ruler.fill", .teal, "Pitch, area and materials calculators")
-                }
+            Section {
+                NavigationLink(value: AppSection.calendar) { Label("Work calendar", systemImage: "calendar") }
+                NavigationLink(value: AppSection.timesheet) { Label("My timesheet", systemImage: "clock") }
+                NavigationLink(value: AppSection.tools) { Label("Roofing tools", systemImage: "ruler") }
             }
             if appState.isAdmin {
-                Section("View") {
-                    Toggle(isOn: simpleModeBinding) {
-                        workerMoreRow("Simple mode", "person.crop.circle", .purple, "Use the same streamlined app as workers")
-                    }.tint(.orange)
-                }
+                Section { Toggle("Simple mode", isOn: simpleModeBinding) } footer: { Text("Turn off to return to the full CRM.") }
             }
             Section("Account") {
-                if let user = appState.currentUser {
-                    HStack(spacing: 12) {
-                        Circle().fill(.orange.gradient).frame(width: 42, height: 42)
-                            .overlay(Text(user.name.prefix(1)).font(.headline).foregroundStyle(.white))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(user.name).fontWeight(.semibold)
-                            Text(user.role.capitalized).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                }
+                LabeledContent("Signed in as", value: appState.currentUser?.name ?? "—")
                 Button("Sign out", role: .destructive) { appState.signOut() }
             }
         }
         .navigationTitle("More")
-        .navigationBarTitleDisplayMode(.inline)
     }
-
-    private func workerMoreRow(_ title: String, _ icon: String, _ tint: Color, _ detail: String) -> some View {
-        HStack(spacing: 13) {
-            Image(systemName: icon).font(.headline).foregroundStyle(tint)
-                .frame(width: 38, height: 38).background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).fontWeight(.semibold).foregroundStyle(.primary)
-                Text(detail).font(.caption).foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 3)
-    }
-
     private var simpleModeBinding: Binding<Bool> {
         Binding(get: { appState.isAdminUsingSimpleView }, set: { appState.setMobileInterface(simple: $0) })
     }
@@ -350,17 +325,16 @@ private struct SectionContent: View {
     @Environment(AppState.self) private var appState
     let section: AppSection
     var body: some View {
-        if !appState.canAccess(section) {
+        if !appState.canAccess(section) && section != .settings {
             ContentUnavailableView("Administrator access required", systemImage: "lock.shield", description: Text("This section contains restricted company or financial information."))
         } else {
             switch section {
-            case .dashboard: appState.usesAdminInterface ? AnyView(DashboardView()) : AnyView(WorkerHomeView())
+            case .dashboard: if appState.usesAdminInterface { DashboardView() } else { WorkerHomeView() }
             case .pipeline: PipelineView()
-            case .leads: LeadListView(stages: [.newLead, .surveyBooked, .quoteSent], title: "Leads")
-            case .jobs: appState.usesAdminInterface ? AnyView(JobsView()) : AnyView(WorkerJobsView())
-            case .tasks: appState.usesAdminInterface ? AnyView(TasksView()) : AnyView(WorkerTasksView())
+            case .jobs: if appState.usesAdminInterface { JobsView() } else { WorkerJobsView() }
+            case .tasks: if appState.usesAdminInterface { TasksView() } else { WorkerTasksView() }
             case .email: EmailWorkspaceView()
-            case .calendar: appState.usesAdminInterface ? AnyView(CRMCalendarView()) : AnyView(WorkerCalendarView())
+            case .calendar: if appState.usesAdminInterface { CRMCalendarView() } else { WorkerCalendarView() }
             case .team: TeamHubView()
             case .contacts: ContactsView()
             case .files: FilesView()
@@ -873,11 +847,7 @@ private struct WorkerJobMapCard: View {
         guard let lat = lead.lat, let lng = lead.lng else { return nil }
         return CLLocationCoordinate2D(latitude: lat, longitude: lng)
     }
-    private var mapsURL: URL? {
-        var parts = URLComponents(string: "https://maps.apple.com/")
-        parts?.queryItems = [URLQueryItem(name: "q", value: lead.address)]
-        return parts?.url
-    }
+    private var mapsURL: URL? { ContactLinks.maps(address: lead.address) }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Job location", systemImage: "map.fill").font(.headline)
@@ -905,37 +875,3 @@ private struct WorkerJobMapCard: View {
 private struct JobMetric:View{let title:String;let value:String;let icon:String;let tint:Color;init(_ title:String,_ value:Int,_ icon:String,_ tint:Color){self.title=title;self.value="\(value)";self.icon=icon;self.tint=tint};init(_ title:String,_ value:String,_ icon:String,_ tint:Color){self.title=title;self.value=value;self.icon=icon;self.tint=tint};var body:some View{HStack(spacing:12){Image(systemName:icon).font(.title2).foregroundStyle(tint);VStack(alignment:.leading){Text(value).font(.title2.bold());Text(title).font(.caption).foregroundStyle(.secondary)}}.padding(15).frame(maxWidth:.infinity,alignment:.leading).background(.background,in:RoundedRectangle(cornerRadius:10)).overlay(RoundedRectangle(cornerRadius:10).stroke(.quaternary))}}
 private struct JobCard:View{let lead:Lead;private var tint:Color{switch lead.stage{case .scheduled:.teal;case .inProgress:.orange;case .waitingForPayment:.indigo;case .completed,.paid:.green;default:.blue}};var body:some View{VStack(alignment:.leading,spacing:12){HStack{Text(lead.jobRef).font(.caption.bold()).foregroundStyle(.secondary);Spacer();Text(lead.stage.displayName).font(.caption.bold()).foregroundStyle(tint).padding(.horizontal,8).padding(.vertical,4).background(tint.opacity(0.1),in:Capsule())};VStack(alignment:.leading,spacing:3){Text(lead.name).font(.headline);Text(lead.jobType).foregroundStyle(.secondary);Label(lead.address.isEmpty ? "Address not added":lead.address,systemImage:"mappin.and.ellipse").font(.caption).foregroundStyle(.secondary).lineLimit(1)};ProgressView(value:Double(lead.progress),total:100).tint(tint);HStack{Text("\(lead.progress)% complete").font(.caption).foregroundStyle(.secondary);Spacer();Text(lead.value,format:.currency(code:"GBP").precision(.fractionLength(0))).fontWeight(.semibold)};HStack{Label(lead.startDate ?? "Date not set",systemImage:"calendar");Spacer();Image(systemName:"chevron.right")}.font(.caption).foregroundStyle(.secondary)}.padding(15).frame(maxWidth:.infinity,alignment:.leading).background(.background,in:RoundedRectangle(cornerRadius:11)).overlay(RoundedRectangle(cornerRadius:11).stroke(.quaternary)).contentShape(Rectangle())}}
 #endif
-
-struct SettingsView: View {
-    @Environment(AppState.self) private var appState
-    @Environment(\.openURL) private var openURL
-    @AppStorage("notifyTeam") private var notifyTeam = true
-    @State private var showingInviteWorker = false
-    @State private var showingAddUser = false
-    var body: some View {
-        #if os(macOS)
-        MacSettingsView()
-        #else
-        Form {
-            Section("Notifications") { Toggle("Team messages", isOn: $notifyTeam); Button("Enable Native Notifications") { Task { await appState.enableNotifications() } } }
-            if appState.isAdmin {
-                Section("Users") {
-                    ForEach(appState.users) { user in LabeledContent(user.name) { Text(user.role.capitalized).foregroundStyle(.secondary) } }
-                    Button { showingAddUser = true } label: { Label("Add user", systemImage: "person.crop.circle.badge.plus") }
-                    Button { showingInviteWorker = true } label: { Label("Invite user", systemImage: "paperplane") }
-                }
-                Section("Gmail assistant") {
-                    if let status = appState.gmailConnectionStatus, status.connected { LabeledContent(status.gmailAddress ?? "Connected") { Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(.green) } } else { Label("Gmail not connected", systemImage: "exclamationmark.circle.fill").foregroundStyle(.orange) }
-                    Text("Important emails become admin tasks and useful replies are saved to Gmail Drafts. Nothing is ever sent automatically.").font(.caption).foregroundStyle(.secondary)
-                    Button(appState.gmailConnectionStatus?.connected == true ? "Reconnect Gmail" : "Connect Gmail") { Task { if let url = await appState.gmailAuthorizationURL() { openURL(url) } } }
-                }
-            }
-            Section("Account") { LabeledContent("Signed in as", value: appState.currentUser?.name ?? "—"); Button("Sign Out", role: .destructive) { appState.signOut() } }
-        }
-        .formStyle(.grouped).navigationTitle("Settings")
-        .sheet(isPresented: $showingAddUser) { AddSecureUserSheet() }
-        .sheet(isPresented: $showingInviteWorker) { InviteWorkerSheet() }
-        .task { await appState.refreshGmailConnectionStatus() }
-        #endif
-    }
-}
