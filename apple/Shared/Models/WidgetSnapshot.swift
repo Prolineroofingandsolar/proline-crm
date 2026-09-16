@@ -1,18 +1,19 @@
 import Foundation
+
 #if os(iOS)
-import ActivityKit
+    import ActivityKit
 #endif
 
 #if os(iOS)
-struct ProLineTaskActivityAttributes: ActivityAttributes {
-    struct ContentState: Codable, Hashable {
-        var taskTitles: [String]
-        var openCount: Int
-        var overdueCount: Int
-        var updatedAt: Date
+    struct ProLineTaskActivityAttributes: ActivityAttributes {
+        struct ContentState: Codable, Hashable {
+            var taskTitles: [String]
+            var openCount: Int
+            var overdueCount: Int
+            var updatedAt: Date
+        }
+        var title: String
     }
-    var title: String
-}
 #endif
 
 struct WidgetSnapshot: Codable, Sendable {
@@ -35,7 +36,8 @@ struct WidgetSnapshot: Codable, Sendable {
 
     static func load() -> WidgetSnapshot {
         guard let data = UserDefaults(suiteName: appGroup)?.data(forKey: storageKey),
-              let snapshot = try? JSONDecoder().decode(Self.self, from: data) else { return .empty }
+            let snapshot = try? JSONDecoder().decode(Self.self, from: data)
+        else { return .empty }
         return snapshot
     }
 

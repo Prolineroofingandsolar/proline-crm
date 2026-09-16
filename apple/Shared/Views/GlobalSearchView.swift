@@ -42,11 +42,15 @@ struct GlobalSearchView: View {
                         ForEach(leads) { lead in
                             NavigationLink(value: SearchRoute.lead(lead.id)) {
                                 HStack(spacing: 12) {
-                                    Image(systemName: [.won, .scheduled, .inProgress, .completed, .waitingForPayment, .paid].contains(lead.stage) ? "hammer" : "person.crop.circle")
-                                        .foregroundStyle(.orange).frame(width: 28)
+                                    Image(
+                                        systemName: [.won, .scheduled, .inProgress, .completed, .waitingForPayment, .paid].contains(
+                                            lead.stage) ? "hammer" : "person.crop.circle"
+                                    )
+                                    .foregroundStyle(Color.accentColor).frame(width: 28)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(lead.name).fontWeight(.semibold)
-                                        Text("\(lead.jobRef) · \(lead.jobType) · \(lead.stage.displayName)").font(.caption).foregroundStyle(.secondary)
+                                        Text("\(lead.jobRef) · \(lead.jobType) · \(lead.stage.displayName)").font(.caption).foregroundStyle(
+                                            .secondary)
                                     }
                                     Spacer()
                                     Text(lead.value, format: .currency(code: "GBP").precision(.fractionLength(0))).font(.subheadline.bold())
@@ -59,7 +63,15 @@ struct GlobalSearchView: View {
                     Section("Contacts") {
                         ForEach(contacts) { contact in
                             NavigationLink(value: SearchRoute.contact(contact.id)) {
-                                Label { VStack(alignment: .leading) { Text(contact.name).fontWeight(.semibold); Text([contact.phone, contact.email].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) } } icon: { Image(systemName: "person.crop.circle").foregroundStyle(.blue) }
+                                Label {
+                                    VStack(alignment: .leading) {
+                                        Text(contact.name).fontWeight(.semibold);
+                                        Text([contact.phone, contact.email].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                } icon: {
+                                    Image(systemName: "person.crop.circle").foregroundStyle(.blue)
+                                }
                             }
                         }
                     }
@@ -71,7 +83,16 @@ struct GlobalSearchView: View {
                                 appState.selectedSection = .tasks
                                 dismiss()
                             } label: {
-                                HStack { Image(systemName: task.completed ? "checkmark.circle.fill" : "circle").foregroundStyle(task.completed ? .green : .orange); VStack(alignment: .leading) { Text(task.title); Text([task.category, task.dueDate].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }; Spacer(); Image(systemName: "arrow.right") }
+                                HStack {
+                                    Image(systemName: task.completed ? "checkmark.circle.fill" : "circle").foregroundStyle(
+                                        task.completed ? .green : Color.accentColor);
+                                    VStack(alignment: .leading) {
+                                        Text(task.title);
+                                        Text(
+                                            [task.category, task.dueDate].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+                                        ).font(.caption).foregroundStyle(.secondary)
+                                    }; Spacer(); Image(systemName: "arrow.right")
+                                }
                             }.buttonStyle(.plain)
                         }
                     }
@@ -91,7 +112,7 @@ struct GlobalSearchView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 720, minHeight: 620)
+            .frame(minWidth: 720, minHeight: 620)
         #endif
     }
 }

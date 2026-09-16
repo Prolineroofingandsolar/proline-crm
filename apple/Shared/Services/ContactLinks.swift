@@ -26,7 +26,8 @@ enum ContactLinks {
     static func email(_ raw: String) -> URL? {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard value.contains("@"),
-              let encoded = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+            let encoded = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        else { return nil }
         return URL(string: "mailto:\(encoded)")
     }
 

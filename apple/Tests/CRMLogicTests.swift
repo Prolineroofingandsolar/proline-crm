@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import ProLine_CRM
 
 final class CRMLogicTests: XCTestCase {
@@ -6,7 +7,9 @@ final class CRMLogicTests: XCTestCase {
         var overdue = lead(id: "late", stage: .inProgress, value: 1000, balance: 500)
         overdue.endDate = "2026-09-05"
         let quote = lead(id: "quote", stage: .quoteSent, value: 1000, balance: 0)
-        let result = OperationsInsights.answer("Create my daily company plan. Rank what I need to do first, identify risks, and suggest the next best actions.", leads: [quote, overdue], tasks: [], today: "2026-09-06")
+        let result = OperationsInsights.answer(
+            "Create my daily company plan. Rank what I need to do first, identify risks, and suggest the next best actions.",
+            leads: [quote, overdue], tasks: [], today: "2026-09-06")
         XCTAssertTrue(result.text.contains("1. Recover overdue jobs"))
         XCTAssertTrue(result.text.contains("Follow up 1 sent quotes"))
         XCTAssertEqual(result.ids, ["late", "quote"])
@@ -19,7 +22,9 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testJobUpdateSuggestionPreservesQuantityAndDueDate() throws {
-        let json = #"{"summary":"Front slope felted and battened.","suggestions":[{"id":"next-1","action":"add","task_id":null,"title":"Collect 12 packs of batten","reason":"Needed in the morning","due_date":"2026-09-06"}]}"#.data(using: .utf8)!
+        let json =
+            #"{"summary":"Front slope felted and battened.","suggestions":[{"id":"next-1","action":"add","task_id":null,"title":"Collect 12 packs of batten","reason":"Needed in the morning","due_date":"2026-09-06"}]}"#
+            .data(using: .utf8)!
         let result = try JSONDecoder().decode(JobNoteAnalysis.self, from: json)
         XCTAssertEqual(result.summary, "Front slope felted and battened.")
         XCTAssertEqual(result.suggestions.first?.title, "Collect 12 packs of batten")
@@ -28,13 +33,17 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testJobUpdateSuggestionAllowsNoStatedDueDate() throws {
-        let json = #"{"summary":"Front slope prepared.","suggestions":[{"id":"next-2","action":"add","task_id":null,"title":"Photograph the front slope","reason":"Explicit next action"}]}"#.data(using: .utf8)!
+        let json =
+            #"{"summary":"Front slope prepared.","suggestions":[{"id":"next-2","action":"add","task_id":null,"title":"Photograph the front slope","reason":"Explicit next action"}]}"#
+            .data(using: .utf8)!
         let result = try JSONDecoder().decode(JobNoteAnalysis.self, from: json)
         XCTAssertNil(result.suggestions.first?.dueDate)
     }
 
     func testJobUpdateDecodesProposedMaterial() throws {
-        let json = #"{"summary":"Need more batten.","suggestions":[],"materials":[{"id":"mat-1","name":"Batten","quantity":12,"unit":"packs","reason":"Needed tomorrow"}],"analysis_mode":"ai"}"#.data(using: .utf8)!
+        let json =
+            #"{"summary":"Need more batten.","suggestions":[],"materials":[{"id":"mat-1","name":"Batten","quantity":12,"unit":"packs","reason":"Needed tomorrow"}],"analysis_mode":"ai"}"#
+            .data(using: .utf8)!
         let result = try JSONDecoder().decode(JobNoteAnalysis.self, from: json)
         XCTAssertEqual(result.materials?.first?.name, "Batten")
         XCTAssertEqual(result.materials?.first?.quantity, 12)
@@ -43,7 +52,9 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testJobTaskDecodesNestedSubtasksAndLegacyTasks() throws {
-        let nested = #"{"id":"task-1","title":"Prepare roof","completed":false,"completedDate":null,"dueDate":"2026-09-08","isTemplate":false,"priority":"high","notes":"Front elevation first","subtasks":[{"id":"step-1","title":"Set scaffold","completed":true},{"id":"step-2","title":"Strip tiles","completed":false}]}"#.data(using: .utf8)!
+        let nested =
+            #"{"id":"task-1","title":"Prepare roof","completed":false,"completedDate":null,"dueDate":"2026-09-08","isTemplate":false,"priority":"high","notes":"Front elevation first","subtasks":[{"id":"step-1","title":"Set scaffold","completed":true},{"id":"step-2","title":"Strip tiles","completed":false}]}"#
+            .data(using: .utf8)!
         let task = try JSONDecoder().decode(CRMTask.self, from: nested)
         XCTAssertEqual(task.subtasks?.count, 2)
         XCTAssertEqual(task.subtasks?.first?.title, "Set scaffold")
@@ -104,27 +115,41 @@ final class CRMLogicTests: XCTestCase {
     func testTeamPlanReminderOnlyTargetsAssignedWorker() {
         var london = Calendar(identifier: .gregorian)
         london.timeZone = TimeZone(identifier: "Europe/London")!
-        let now = ISO8601DateFormatter().date(from: "2026-08-24T06:00:00Z")! // 07:00 BST
-        let assigned = TeamDayPlan(id: "mine", day: "2026-08-24", title: "Start Oak Street roof", notes: "", startTime: "08:30", endTime: "16:30", leadID: nil, assignedTo: ["will conway"], createdBy: "admin", createdAt: "2026-08-23T12:00:00Z")
-        let other = TeamDayPlan(id: "other", day: "2026-08-24", title: "Other job", notes: "", startTime: "09:00", endTime: nil, leadID: nil, assignedTo: ["Alex"], createdBy: "admin", createdAt: "2026-08-23T12:00:00Z")
+        let now = ISO8601DateFormatter().date(from: "2026-08-24T06:00:00Z")!  // 07:00 BST
+        let assigned = TeamDayPlan(
+            id: "mine", day: "2026-08-24", title: "Start Oak Street roof", notes: "", startTime: "08:30", endTime: "16:30", leadID: nil,
+            assignedTo: ["will conway"], createdBy: "admin", createdAt: "2026-08-23T12:00:00Z")
+        let other = TeamDayPlan(
+            id: "other", day: "2026-08-24", title: "Other job", notes: "", startTime: "09:00", endTime: nil, leadID: nil,
+            assignedTo: ["Alex"], createdBy: "admin", createdAt: "2026-08-23T12:00:00Z")
 
-        let reminders = TeamNotificationPolicy.plans(plans: [assigned, other], userName: "Will Conway", enabled: true, now: now, calendar: london)
+        let reminders = TeamNotificationPolicy.plans(
+            plans: [assigned, other], userName: "Will Conway", enabled: true, now: now, calendar: london)
 
         XCTAssertEqual(reminders.map(\.id), ["team-plan-mine"])
         XCTAssertEqual(london.component(.hour, from: reminders[0].date), 8)
         XCTAssertEqual(london.component(.minute, from: reminders[0].date), 0)
-        XCTAssertTrue(TeamNotificationPolicy.plans(plans: [assigned], userName: "Will Conway", enabled: false, now: now, calendar: london).isEmpty)
+        XCTAssertTrue(
+            TeamNotificationPolicy.plans(plans: [assigned], userName: "Will Conway", enabled: false, now: now, calendar: london).isEmpty)
     }
 
     func testNotificationsOnlyIncludeWorkAssignedToStaffMember() {
-        let will = CRMUser(id: "will", name: "Will Conway", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
-        let admin = CRMUser(id: "admin", name: "Admin", username: "admin", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let will = CRMUser(
+            id: "will", name: "Will Conway", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil,
+            bankAccountNumber: nil, bankSortCode: nil)
+        let admin = CRMUser(
+            id: "admin", name: "Admin", username: "admin", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil,
+            bankAccountNumber: nil, bankSortCode: nil)
         var assignedLead = lead(id: "assigned", stage: .scheduled, value: 1, balance: 1)
         assignedLead.assignedTo = "will conway"
         var otherLead = lead(id: "other", stage: .scheduled, value: 1, balance: 1)
         otherLead.assignedTo = "Someone Else"
-        let assignedTask = GeneralTask(id: "assigned", title: "Measure roof", completed: false, completedDate: nil, dueDate: "2026-08-25", priority: "high", category: "Survey", notes: nil, createdAt: "2026-08-24", assignedTo: ["will"])
-        let unassignedTask = GeneralTask(id: "shared", title: "Order tiles", completed: false, completedDate: nil, dueDate: "2026-08-25", priority: "medium", category: "Materials", notes: nil, createdAt: "2026-08-24", assignedTo: [])
+        let assignedTask = GeneralTask(
+            id: "assigned", title: "Measure roof", completed: false, completedDate: nil, dueDate: "2026-08-25", priority: "high",
+            category: "Survey", notes: nil, createdAt: "2026-08-24", assignedTo: ["will"])
+        let unassignedTask = GeneralTask(
+            id: "shared", title: "Order tiles", completed: false, completedDate: nil, dueDate: "2026-08-25", priority: "medium",
+            category: "Materials", notes: nil, createdAt: "2026-08-24", assignedTo: [])
 
         XCTAssertTrue(NotificationScope.includes(assignedLead, for: will))
         XCTAssertFalse(NotificationScope.includes(otherLead, for: will))
@@ -135,7 +160,9 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testLeadOwnershipUsesExactCaseInsensitiveTeamName() {
-        let will = CRMUser(id: "will", name: "Will Conway", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let will = CRMUser(
+            id: "will", name: "Will Conway", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil,
+            bankAccountNumber: nil, bankSortCode: nil)
         var lead = lead(id: "lead", stage: .newLead, value: 1, balance: 1)
         lead.assignedTo = "will conway"
         XCTAssertTrue(LeadOwnership.isAssigned(lead, to: will))
@@ -147,8 +174,12 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testStaffLeadScopeOnlyIncludesExactlyAssignedCustomers() {
-        let staff = CRMUser(id: "will", name: "Will Conway", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
-        let admin = CRMUser(id: "admin", name: "Admin", username: "admin", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let staff = CRMUser(
+            id: "will", name: "Will Conway", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil,
+            bankAccountNumber: nil, bankSortCode: nil)
+        let admin = CRMUser(
+            id: "admin", name: "Admin", username: "admin", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil,
+            bankAccountNumber: nil, bankSortCode: nil)
         var mine = lead(id: "mine", stage: .scheduled, value: 1, balance: 1)
         mine.assignedTo = "will conway"
         var another = lead(id: "another", stage: .scheduled, value: 1, balance: 1)
@@ -174,17 +205,29 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testStaffOnlyReceiveTheirOwnPayrollRecords() {
-        let staff = CRMUser(id: "will", name: "Will", username: "will", role: "user", dayRate: 200, cisRate: 20, utrNumber: "mine", bankName: "Mine", bankAccountNumber: "12345678", bankSortCode: "112233")
-        let other = CRMUser(id: "alex", name: "Alex", username: "alex", role: "user", dayRate: 300, cisRate: 20, utrNumber: "private", bankName: "Other", bankAccountNumber: "87654321", bankSortCode: "332211")
-        let mine = TimesheetEntry(id: "mine", userID: "will", leadID: "job", date: "2026-08-17", type: "full", amount: 200, createdAt: "2026-08-17")
-        let theirs = TimesheetEntry(id: "theirs", userID: "alex", leadID: "job", date: "2026-08-17", type: "full", amount: 300, createdAt: "2026-08-17")
+        let staff = CRMUser(
+            id: "will", name: "Will", username: "will", role: "user", dayRate: 200, cisRate: 20, utrNumber: "mine", bankName: "Mine",
+            bankAccountNumber: "12345678", bankSortCode: "112233")
+        let other = CRMUser(
+            id: "alex", name: "Alex", username: "alex", role: "user", dayRate: 300, cisRate: 20, utrNumber: "private", bankName: "Other",
+            bankAccountNumber: "87654321", bankSortCode: "332211")
+        let mine = TimesheetEntry(
+            id: "mine", userID: "will", leadID: "job", date: "2026-08-17", type: "full", amount: 200, createdAt: "2026-08-17")
+        let theirs = TimesheetEntry(
+            id: "theirs", userID: "alex", leadID: "job", date: "2026-08-17", type: "full", amount: 300, createdAt: "2026-08-17")
         let visibleUsers = UserAccessScope.visible([staff, other], for: staff)
 
         XCTAssertEqual(TimesheetAccessScope.visible([mine, theirs], for: staff).map(\.id), ["mine"])
         XCTAssertEqual(visibleUsers.first(where: { $0.id == "will" })?.bankAccountNumber, "12345678")
         XCTAssertNil(visibleUsers.first(where: { $0.id == "alex" })?.bankAccountNumber)
         XCTAssertNil(visibleUsers.first(where: { $0.id == "alex" })?.dayRate)
-        XCTAssertEqual(TimesheetAccessScope.visible([mine, theirs], for: CRMUser(id: "admin", name: "Admin", username: "admin", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)).count, 2)
+        XCTAssertEqual(
+            TimesheetAccessScope.visible(
+                [mine, theirs],
+                for: CRMUser(
+                    id: "admin", name: "Admin", username: "admin", role: "admin", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil,
+                    bankAccountNumber: nil, bankSortCode: nil)
+            ).count, 2)
     }
 
     func testPayrollWeekStartsOnMondayAcrossWholeWeek() {
@@ -197,14 +240,21 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testStaffSharedDataScopesExcludeCoworkerRecords() {
-        let staff = CRMUser(id: "will", name: "Will", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
-        let mine = GeneralTask(id: "mine", title: "My task", completed: false, completedDate: nil, dueDate: nil, priority: "medium", category: "General", notes: nil, createdAt: "2026-08-24", assignedTo: ["will"])
-        let theirs = GeneralTask(id: "theirs", title: "Their task", completed: false, completedDate: nil, dueDate: nil, priority: "medium", category: "General", notes: nil, createdAt: "2026-08-24", assignedTo: ["alex"])
+        let staff = CRMUser(
+            id: "will", name: "Will", username: "will", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil,
+            bankAccountNumber: nil, bankSortCode: nil)
+        let mine = GeneralTask(
+            id: "mine", title: "My task", completed: false, completedDate: nil, dueDate: nil, priority: "medium", category: "General",
+            notes: nil, createdAt: "2026-08-24", assignedTo: ["will"])
+        let theirs = GeneralTask(
+            id: "theirs", title: "Their task", completed: false, completedDate: nil, dueDate: nil, priority: "medium", category: "General",
+            notes: nil, createdAt: "2026-08-24", assignedTo: ["alex"])
         var assignedLead = lead(id: "lead", stage: .scheduled, value: 1, balance: 1)
         assignedLead.phone = "07123456789"
         assignedLead.email = "mine@example.com"
         let related = CRMContact(id: "related", name: "Customer", phone: "07123456789", email: "", address: "", createdAt: "2026-08-24")
-        let unrelated = CRMContact(id: "unrelated", name: "Other", phone: "07000000000", email: "other@example.com", address: "", createdAt: "2026-08-24")
+        let unrelated = CRMContact(
+            id: "unrelated", name: "Other", phone: "07000000000", email: "other@example.com", address: "", createdAt: "2026-08-24")
 
         XCTAssertEqual(TaskAccessScope.visible([mine, theirs], for: staff).map(\.id), ["mine"])
         XCTAssertEqual(ContactAccessScope.visible([related, unrelated], leads: [assignedLead], for: staff).map(\.id), ["related"])
@@ -219,7 +269,7 @@ final class CRMLogicTests: XCTestCase {
     func testSameDayMorningNotificationSurvivesRefreshBeforeTrigger() {
         var london = Calendar(identifier: .gregorian)
         london.timeZone = TimeZone(identifier: "Europe/London")!
-        let now = ISO8601DateFormatter().date(from: "2026-08-24T06:30:00Z")! // 07:30 BST
+        let now = ISO8601DateFormatter().date(from: "2026-08-24T06:30:00Z")!  // 07:30 BST
         let reminder = NotificationPolicy.reminderDate(for: "2026-08-24", hour: 8, calendar: london)
         XCTAssertNotNil(reminder)
         XCTAssertGreaterThan(reminder!, now)
@@ -229,7 +279,7 @@ final class CRMLogicTests: XCTestCase {
     func testDailyReminderMovesToTomorrowAfterItsHour() {
         var london = Calendar(identifier: .gregorian)
         london.timeZone = TimeZone(identifier: "Europe/London")!
-        let now = ISO8601DateFormatter().date(from: "2026-08-24T09:30:00Z")! // 10:30 BST
+        let now = ISO8601DateFormatter().date(from: "2026-08-24T09:30:00Z")!  // 10:30 BST
         let reminder = NotificationPolicy.nextDailyReminder(hour: 9, now: now, calendar: london)!
         XCTAssertEqual(SupabaseService.localDay(for: reminder, calendar: london), "2026-08-25")
         XCTAssertEqual(london.component(.hour, from: reminder), 9)
@@ -262,9 +312,14 @@ final class CRMLogicTests: XCTestCase {
         london.timeZone = TimeZone(identifier: "Europe/London")!
         let now = ISO8601DateFormatter().date(from: "2026-08-24T06:00:00Z")!
         let tasks = (0..<70).map { index in
-            GeneralTask(id: String(format: "%02d", index), title: "Task \(index)", completed: false, completedDate: nil, dueDate: index == 69 ? "2026-08-25" : "2026-08-24", priority: "medium", category: "General", notes: nil, createdAt: "2026-08-24", assignedTo: ["will"])
+            GeneralTask(
+                id: String(format: "%02d", index), title: "Task \(index)", completed: false, completedDate: nil,
+                dueDate: index == 69 ? "2026-08-25" : "2026-08-24", priority: "medium", category: "General", notes: nil,
+                createdAt: "2026-08-24", assignedTo: ["will"])
         }
-        let plans = NotificationPolicy.plans(leads: [], tasks: tasks, notifySurveys: false, notifyJobStarts: false, notifyTasks: true, notifyPayments: false, isAdmin: false, now: now, calendar: london)
+        let plans = NotificationPolicy.plans(
+            leads: [], tasks: tasks, notifySurveys: false, notifyJobStarts: false, notifyTasks: true, notifyPayments: false, isAdmin: false,
+            now: now, calendar: london)
         let scheduled = Array(plans.prefix(NotificationPolicy.maximumPending))
 
         XCTAssertEqual(plans.count, 70)
@@ -277,9 +332,15 @@ final class CRMLogicTests: XCTestCase {
         var item = lead(id: "lead", stage: .scheduled, value: 1, balance: 1)
         item.surveyDate = "2026-08-25"
         item.startDate = "2026-08-26"
-        let task = GeneralTask(id: "task", title: "Task", completed: false, completedDate: nil, dueDate: "2026-08-25", priority: "medium", category: "General", notes: nil, createdAt: "2026-08-24", assignedTo: [])
+        let task = GeneralTask(
+            id: "task", title: "Task", completed: false, completedDate: nil, dueDate: "2026-08-25", priority: "medium", category: "General",
+            notes: nil, createdAt: "2026-08-24", assignedTo: [])
         let now = ISO8601DateFormatter().date(from: "2026-08-24T06:00:00Z")!
-        XCTAssertTrue(NotificationPolicy.plans(leads: [item], tasks: [task], notifySurveys: false, notifyJobStarts: false, notifyTasks: false, notifyPayments: false, isAdmin: true, now: now).isEmpty)
+        XCTAssertTrue(
+            NotificationPolicy.plans(
+                leads: [item], tasks: [task], notifySurveys: false, notifyJobStarts: false, notifyTasks: false, notifyPayments: false,
+                isAdmin: true, now: now
+            ).isEmpty)
     }
 
     func testLeadUpdatesRequireTheLoadedSupabaseVersion() {
@@ -297,9 +358,15 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testRetiredFleetInsuranceAndTaxRemindersAreHidden() {
-        let insurance = GeneralTask(id: "1", title: "AB12 CDE — Insurance", completed: false, completedDate: nil, dueDate: "2026-09-01", priority: "high", category: "Fleet", notes: nil, createdAt: "2026-08-24", assignedTo: [])
-        let tax = GeneralTask(id: "2", title: "AB12 CDE — Road tax", completed: false, completedDate: nil, dueDate: "2026-09-01", priority: "high", category: "Renewal", notes: nil, createdAt: "2026-08-24", assignedTo: [])
-        let mot = GeneralTask(id: "3", title: "AB12 CDE — MOT", completed: false, completedDate: nil, dueDate: "2026-09-01", priority: "high", category: "Fleet", notes: nil, createdAt: "2026-08-24", assignedTo: [])
+        let insurance = GeneralTask(
+            id: "1", title: "AB12 CDE — Insurance", completed: false, completedDate: nil, dueDate: "2026-09-01", priority: "high",
+            category: "Fleet", notes: nil, createdAt: "2026-08-24", assignedTo: [])
+        let tax = GeneralTask(
+            id: "2", title: "AB12 CDE — Road tax", completed: false, completedDate: nil, dueDate: "2026-09-01", priority: "high",
+            category: "Renewal", notes: nil, createdAt: "2026-08-24", assignedTo: [])
+        let mot = GeneralTask(
+            id: "3", title: "AB12 CDE — MOT", completed: false, completedDate: nil, dueDate: "2026-09-01", priority: "high",
+            category: "Fleet", notes: nil, createdAt: "2026-08-24", assignedTo: [])
 
         XCTAssertTrue(FleetTaskPolicy.isRetiredReminder(insurance))
         XCTAssertTrue(FleetTaskPolicy.isRetiredReminder(tax))
@@ -309,7 +376,7 @@ final class CRMLogicTests: XCTestCase {
     func testPayrollHalfAndFullDays() {
         let entries = [
             TimesheetEntry(id: "1", userID: "u", leadID: "l", date: "2026-08-03", type: "full", amount: 240, createdAt: "2026-08-03"),
-            TimesheetEntry(id: "2", userID: "u", leadID: "l", date: "2026-08-04", type: "half", amount: 120, createdAt: "2026-08-04")
+            TimesheetEntry(id: "2", userID: "u", leadID: "l", date: "2026-08-04", type: "half", amount: 120, createdAt: "2026-08-04"),
         ]
         XCTAssertEqual(PayrollMath.days(entries), 1.5)
         XCTAssertEqual(PayrollMath.gross(entries), 360)
@@ -346,7 +413,9 @@ final class CRMLogicTests: XCTestCase {
     func testAssistantTodayCountsOverdueTasksAndJobs() {
         var overdueJob = lead(id: "late", stage: .inProgress, value: 5_000, balance: 2_000)
         overdueJob.endDate = "2026-08-01"
-        let task = GeneralTask(id: "task", title: "Order tiles", completed: false, completedDate: nil, dueDate: "2026-08-08", priority: "high", category: "Supplies", notes: nil, createdAt: "2026-08-01", assignedTo: [])
+        let task = GeneralTask(
+            id: "task", title: "Order tiles", completed: false, completedDate: nil, dueDate: "2026-08-08", priority: "high",
+            category: "Supplies", notes: nil, createdAt: "2026-08-01", assignedTo: [])
         let result = OperationsInsights.answer("what needs attention today", leads: [overdueJob], tasks: [task], today: "2026-08-09")
         XCTAssertTrue(result.text.contains("1 overdue task"))
         XCTAssertTrue(result.text.contains("1 job"))
@@ -367,9 +436,11 @@ final class CRMLogicTests: XCTestCase {
     func testQuoteCalculatesDiscountVATAndTotal() {
         let items = [
             QuoteLineItem(id: "1", description: "Roofing labour", category: "Labour", quantity: 2, unit: "day", unitPrice: 500),
-            QuoteLineItem(id: "2", description: "Tiles", category: "Materials", quantity: 100, unit: "tile", unitPrice: 2.5)
+            QuoteLineItem(id: "2", description: "Tiles", category: "Materials", quantity: 100, unit: "tile", unitPrice: 2.5),
         ]
-        let quote = CRMQuote(id: "q", leadID: "l", quoteNumber: "Q-1", status: .draft, lineItems: items, vatRate: 20, discount: 50, validUntil: nil, terms: "", customerMessage: "", sentAt: nil, acceptedAt: nil, createdAt: "", updatedAt: "")
+        let quote = CRMQuote(
+            id: "q", leadID: "l", quoteNumber: "Q-1", status: .draft, lineItems: items, vatRate: 20, discount: 50, validUntil: nil,
+            terms: "", customerMessage: "", sentAt: nil, acceptedAt: nil, createdAt: "", updatedAt: "")
         XCTAssertEqual(quote.subtotal, 1_250, accuracy: 0.001)
         XCTAssertEqual(quote.vat, 240, accuracy: 0.001)
         XCTAssertEqual(quote.total, 1_440, accuracy: 0.001)
@@ -381,14 +452,57 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testQuotePDFIsGenerated() {
-        let item = QuoteLineItem(id: "1", description: "Strip and re-tile main roof", category: "Roofing", quantity: 1, unit: "job", unitPrice: 12_500)
-        let quote = CRMQuote(id: "q", leadID: "l", quoteNumber: "Q-2026-0001", status: .draft, lineItems: [item], vatRate: 20, discount: 500, validUntil: "2026-09-15", terms: "Deposit on acceptance. Balance on completion.", customerMessage: "Thank you for inviting us to quote for your roofing project.", sentAt: nil, acceptedAt: nil, createdAt: "", updatedAt: "")
+        let item = QuoteLineItem(
+            id: "1", description: "Strip and re-tile main roof", category: "Roofing", quantity: 1, unit: "job", unitPrice: 12_500)
+        let quote = CRMQuote(
+            id: "q", leadID: "l", quoteNumber: "Q-2026-0001", status: .draft, lineItems: [item], vatRate: 20, discount: 500,
+            validUntil: "2026-09-15", terms: "Deposit on acceptance. Balance on completion.",
+            customerMessage: "Thank you for inviting us to quote for your roofing project.", sentAt: nil, acceptedAt: nil, createdAt: "",
+            updatedAt: "")
         let pdf = QuotePDFRenderer.data(quote: quote, lead: lead(id: "l", stage: .quotePreparing, value: 0, balance: 0))
         XCTAssertTrue(pdf.starts(with: Data("%PDF".utf8)))
         XCTAssertGreaterThan(pdf.count, 1_000)
     }
 
     private func lead(id: String, stage: LeadStage, value: Double, balance: Double) -> Lead {
-        Lead(id: id, jobRef: "JOB-\(id)", name: "Customer \(id)", phone: "", email: "", address: "Bristol", jobType: "Re-roof", stage: stage, value: value, deposit: 0, depositPaid: false, balance: balance, source: "", assignedTo: "", surveyDate: nil, surveyTime: nil, startDate: nil, endDate: nil, completedDate: nil, paidDate: nil, progress: 0, tasks: [], photos: [], notes: [], files: [], materials: [], wonDate: nil, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: "2026-08-01", updatedAt: "2026-08-01")
+        Lead(
+            id: id, jobRef: "JOB-\(id)", name: "Customer \(id)", phone: "", email: "", address: "Bristol", jobType: "Re-roof", stage: stage,
+            value: value, deposit: 0, depositPaid: false, balance: balance, source: "", assignedTo: "", surveyDate: nil, surveyTime: nil,
+            startDate: nil, endDate: nil, completedDate: nil, paidDate: nil, progress: 0, tasks: [], photos: [], notes: [], files: [],
+            materials: [], wonDate: nil, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: "2026-08-01",
+            updatedAt: "2026-08-01")
+    }
+
+    func testLeadDecodesRowsWithNullsAndUnknownStagesFromOtherClients() throws {
+        let json = """
+        [{"id":"1","name":"Mrs Green","stage":"Some Future Stage","source":null,"assigned_to":null,"progress":null,"value":null,"deposit":null,"deposit_paid":null,"balance":null,"tasks":null,"created_at":"2026-09-01","updated_at":"2026-09-01T09:00:00+00:00"}]
+        """
+        let leads = try JSONDecoder().decode([Lead].self, from: Data(json.utf8))
+        XCTAssertEqual(leads.count, 1)
+        XCTAssertEqual(leads[0].stage, .newLead)
+        XCTAssertEqual(leads[0].source, "")
+        XCTAssertEqual(leads[0].tasks, [])
+    }
+
+    func testContactLinksNeverTrapOnMessyInput() {
+        XCTAssertEqual(ContactLinks.telephone("07000 000000")?.absoluteString, "tel:07000000000")
+        XCTAssertNil(ContactLinks.telephone("call me"))
+        XCTAssertNil(ContactLinks.email("john smith"))
+        XCTAssertNotNil(ContactLinks.email(" john smith@example.com "))
+        XCTAssertEqual(ContactLinks.whatsApp("07000 000000")?.absoluteString, "https://wa.me/447000000000")
+        XCTAssertNil(ContactLinks.maps(address: "  "))
+    }
+
+    func testNextStepFollowsThePipeline() {
+        var lead = Lead(id: "1", jobRef: "JOB-1", name: "Mr Taylor", phone: "", email: "", address: "", jobType: "Re-roof", stage: .newLead, value: 0, deposit: 0, depositPaid: false, balance: 0, source: "", assignedTo: "", surveyDate: nil, surveyTime: nil, startDate: nil, endDate: nil, completedDate: nil, paidDate: nil, progress: 0, tasks: [], photos: [], notes: [], files: [], materials: [], wonDate: nil, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: "2026-09-01", updatedAt: "2026-09-01")
+        XCTAssertEqual(AppState.nextStep(for: lead), .bookSurvey)
+        lead.surveyDate = "2026-09-20"
+        XCTAssertEqual(AppState.nextStep(for: lead), .move(.surveyBooked))
+        lead.stage = .won
+        XCTAssertEqual(AppState.nextStep(for: lead), .scheduleJob)
+        lead.stage = .completed; lead.balance = 500
+        XCTAssertEqual(AppState.nextStep(for: lead), .move(.waitingForPayment))
+        lead.stage = .paid
+        XCTAssertNil(AppState.nextStep(for: lead))
     }
 }

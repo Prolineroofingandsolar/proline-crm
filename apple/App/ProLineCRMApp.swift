@@ -1,17 +1,18 @@
+import AppIntents
 import SwiftUI
 import UserNotifications
-import AppIntents
+
 #if os(iOS)
-import UIKit
+    import UIKit
 #elseif os(macOS)
-import AppKit
+    import AppKit
 #endif
 
 enum SiriTaskPriority: String, AppEnum {
     case low, medium, high
     static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Priority")
     static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
-        .low: "Low", .medium: "Medium", .high: "High"
+        .low: "Low", .medium: "Medium", .high: "High",
     ]
 }
 
@@ -63,35 +64,38 @@ extension Notification.Name {
 }
 
 #if os(iOS)
-final class ProLineAppDelegate: NSObject, UIApplicationDelegate {
-    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        NotificationCenter.default.post(name: .crmRemoteDeviceToken, object: deviceToken.map { String(format: "%02x", $0) }.joined())
+    final class ProLineAppDelegate: NSObject, UIApplicationDelegate {
+        func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+            NotificationCenter.default.post(name: .crmRemoteDeviceToken, object: deviceToken.map { String(format: "%02x", $0) }.joined())
+        }
+        func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+            NotificationCenter.default.post(name: .crmRemoteRegistrationFailed, object: error.localizedDescription)
+        }
     }
-    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        NotificationCenter.default.post(name: .crmRemoteRegistrationFailed, object: error.localizedDescription)
-    }
-}
 #elseif os(macOS)
-final class ProLineAppDelegate: NSObject, NSApplicationDelegate {
-    func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        NotificationCenter.default.post(name: .crmRemoteDeviceToken, object: deviceToken.map { String(format: "%02x", $0) }.joined())
+    final class ProLineAppDelegate: NSObject, NSApplicationDelegate {
+        func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+            NotificationCenter.default.post(name: .crmRemoteDeviceToken, object: deviceToken.map { String(format: "%02x", $0) }.joined())
+        }
+        func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+            NotificationCenter.default.post(name: .crmRemoteRegistrationFailed, object: error.localizedDescription)
+        }
     }
-    func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        NotificationCenter.default.post(name: .crmRemoteRegistrationFailed, object: error.localizedDescription)
-    }
-}
 #endif
 
 final class NotificationRouter: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     static let shared = NotificationRouter()
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
+        -> UNNotificationPresentationOptions
+    {
         [.banner, .sound, .badge]
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         guard let value = response.notification.request.content.userInfo["url"] as? String,
-              let url = URL(string: value) else { return }
+            let url = URL(string: value)
+        else { return }
         await MainActor.run {
             NotificationCenter.default.post(name: .crmNotificationDeepLink, object: url)
         }
@@ -101,9 +105,9 @@ final class NotificationRouter: NSObject, UNUserNotificationCenterDelegate, @unc
 @main
 struct ProLineCRMApp: App {
     #if os(iOS)
-    @UIApplicationDelegateAdaptor(ProLineAppDelegate.self) private var platformDelegate
+        @UIApplicationDelegateAdaptor(ProLineAppDelegate.self) private var platformDelegate
     #elseif os(macOS)
-    @NSApplicationDelegateAdaptor(ProLineAppDelegate.self) private var platformDelegate
+        @NSApplicationDelegateAdaptor(ProLineAppDelegate.self) private var platformDelegate
     #endif
     @State private var appState = AppState()
     init() {
@@ -113,45 +117,59 @@ struct ProLineCRMApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if let token = appState.pendingWorkerInviteToken { WorkerInviteSignupView(token: token) }
-                else if appState.isAuthenticated { RootView() }
-                else { LoginView() }
+                if let token = appState.pendingWorkerInviteToken {
+                    WorkerInviteSignupView(token: token)
+                } else if appState.isAuthenticated {
+                    RootView()
+                } else {
+                    LoginView()
+                }
             }
-                .environment(appState)
-                .task { await appState.restoreSession(); appState.resumeRemoteNotificationsIfEnabled() }
-                .onOpenURL { appState.open($0) }
-                .onReceive(NotificationCenter.default.publisher(for: .crmRemoteDeviceToken)) { notification in
-                    guard let token = notification.object as? String else { return }
-                    Task { await appState.registerRemoteNotificationToken(token) }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .crmRemoteRegistrationFailed)) { notification in
-                    appState.handleRemoteNotificationRegistrationFailure(notification.object as? String)
-                }
-                // The sign-in screen shows its own inline message; the alert is for the signed-in app.
-                .alert("ProLine CRM", isPresented: .init(get: { appState.errorMessage != nil && (appState.isAuthenticated || appState.pendingWorkerInviteToken != nil) }, set: { if !$0 { appState.errorMessage = nil } })) {
-                    Button("OK") { appState.errorMessage = nil }
-                } message: { Text(appState.errorMessage ?? "") }
+            .environment(appState)
+            .task {
+                await appState.restoreSession(); appState.resumeRemoteNotificationsIfEnabled()
+            }
+            .onOpenURL { appState.open($0) }
+            .onReceive(NotificationCenter.default.publisher(for: .crmRemoteDeviceToken)) { notification in
+                guard let token = notification.object as? String else { return }
+                Task { await appState.registerRemoteNotificationToken(token) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .crmRemoteRegistrationFailed)) { notification in
+                appState.handleRemoteNotificationRegistrationFailure(notification.object as? String)
+            }
+            // The sign-in screen shows its own inline message; the alert is for the signed-in app.
+            .alert(
+                "ProLine CRM",
+                isPresented: .init(
+                    get: { appState.errorMessage != nil && (appState.isAuthenticated || appState.pendingWorkerInviteToken != nil) },
+                    set: { if !$0 { appState.errorMessage = nil } })
+            ) {
+                Button("OK") { appState.errorMessage = nil }
+            } message: {
+                Text(appState.errorMessage ?? "")
+            }
         }
         #if os(macOS)
-        .defaultSize(width: 1280, height: 820)
-        .commands {
-            SidebarCommands()
-            CommandMenu("CRM") {
-                if appState.isAdmin {
-                    Button("Search CRM…") { appState.showingGlobalSearch = true }.keyboardShortcut("k")
-                    Button("New Lead…") { appState.showingGlobalAddLead = true }.keyboardShortcut("n")
-                    Button("Operations Assistant…") { appState.showingAssistant = true }.keyboardShortcut("a", modifiers: [.command, .shift])
-                    Divider()
-                }
-                Button("Refresh") { Task { await appState.refresh() } }.keyboardShortcut("r")
+            .defaultSize(width: 1280, height: 820)
+            .commands {
+                SidebarCommands()
+                CommandMenu("CRM") {
+                    if appState.isAdmin {
+                        Button("Search CRM…") { appState.showingGlobalSearch = true }.keyboardShortcut("k")
+                        Button("New Lead…") { appState.showingGlobalAddLead = true }.keyboardShortcut("n")
+                        Button("Operations Assistant…") { appState.showingAssistant = true }.keyboardShortcut(
+                            "a", modifiers: [.command, .shift])
+                        Divider()
+                    }
+                    Button("Refresh") { Task { await appState.refresh() } }.keyboardShortcut("r")
                     .disabled(appState.isWorkerPreview)
+                }
             }
-        }
         #endif
         #if os(macOS)
-        Settings {
-            SettingsView().environment(appState).frame(minWidth: 520, minHeight: 560)
-        }
+            Settings {
+                SettingsView().environment(appState).frame(minWidth: 520, minHeight: 560)
+            }
         #endif
     }
 }

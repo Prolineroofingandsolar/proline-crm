@@ -2,9 +2,16 @@ import Foundation
 
 enum CRMReportExport {
     static func csv(leads: [Lead]) -> String {
-        let header = ["Job reference", "Customer", "Phone", "Email", "Address", "Job type", "Stage", "Value", "Deposit", "Deposit paid", "Balance", "Source", "Owner", "Survey date", "Start date", "End date"]
+        let header = [
+            "Job reference", "Customer", "Phone", "Email", "Address", "Job type", "Stage", "Value", "Deposit", "Deposit paid", "Balance",
+            "Source", "Owner", "Survey date", "Start date", "End date",
+        ]
         let rows = leads.sorted { $0.jobRef.localizedStandardCompare($1.jobRef) == .orderedAscending }.map { lead in
-            [lead.jobRef, lead.name, lead.phone, lead.email, lead.address, lead.jobType, lead.stage.displayName, decimal(lead.value), decimal(lead.deposit), lead.depositPaid ? "Yes" : "No", decimal(lead.balance), lead.source, lead.assignedTo, lead.surveyDate ?? "", lead.startDate ?? "", lead.endDate ?? ""]
+            [
+                lead.jobRef, lead.name, lead.phone, lead.email, lead.address, lead.jobType, lead.stage.displayName, decimal(lead.value),
+                decimal(lead.deposit), lead.depositPaid ? "Yes" : "No", decimal(lead.balance), lead.source, lead.assignedTo,
+                lead.surveyDate ?? "", lead.startDate ?? "", lead.endDate ?? "",
+            ]
         }
         return ([header] + rows).map { $0.map(escape).joined(separator: ",") }.joined(separator: "\n")
     }
@@ -47,10 +54,15 @@ struct CRMTask: Codable, Identifiable, Hashable, Sendable {
     var priority: String? = nil
     var notes: String? = nil
     var subtasks: [CRMSubtask]? = nil
-    enum CodingKeys: String, CodingKey { case id, title, completed, priority, notes, subtasks, dueDate = "dueDate", isTemplate = "isTemplate", completedDate = "completedDate" }
+    enum CodingKeys: String, CodingKey {
+        case id, title, completed, priority, notes, subtasks, dueDate = "dueDate", isTemplate = "isTemplate", completedDate =
+            "completedDate"
+    }
 }
 
-struct CRMPhoto: Codable, Identifiable, Hashable, Sendable { let id: String; var url: String; var category: String; var date: String; var caption: String? }
+struct CRMPhoto: Codable, Identifiable, Hashable, Sendable {
+    let id: String; var url: String; var category: String; var date: String; var caption: String?
+}
 struct CRMNote: Codable, Identifiable, Hashable, Sendable { let id: String; var content: String; var date: String; var author: String }
 
 enum JobTaskSuggestionAction: String, Codable, Sendable { case complete, add }
@@ -82,8 +94,12 @@ struct AssistantAttachment: Codable, Sendable {
 }
 struct CRMAssistantAction: Codable, Identifiable, Hashable, Sendable {
     var id: String; var kind: CRMAssistantActionKind; var title: String; var explanation: String
-    var leadID: String?; var taskID: String?; var value: String?; var secondaryValue: String?; var quantity: Double?; var unit: String?; var requiresApproval: Bool
-    enum CodingKeys: String, CodingKey { case id, kind, title, explanation, value, quantity, unit; case leadID = "lead_id"; case taskID = "task_id"; case secondaryValue = "secondary_value"; case requiresApproval = "requires_approval" }
+    var leadID: String?; var taskID: String?; var value: String?; var secondaryValue: String?; var quantity: Double?; var unit: String?;
+    var requiresApproval: Bool
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, explanation, value, quantity, unit; case leadID = "lead_id"; case taskID = "task_id";
+        case secondaryValue = "secondary_value"; case requiresApproval = "requires_approval"
+    }
 }
 struct CRMAssistantResponse: Codable, Sendable {
     var message: String; var leadIDs: [String]; var actions: [CRMAssistantAction]
@@ -93,8 +109,13 @@ struct AIAuditEntry: Codable, Identifiable, Sendable {
     let id: String; let userID: String; let userName: String; let actionKind: String; let actionTitle: String
     let leadID: String?; let outcome: String; let createdAt: String
 }
-struct CRMFile: Codable, Identifiable, Hashable, Sendable { let id: String; var name: String; var type: String; var size: String?; var date: String; var url: String? }
-struct CRMMaterial: Codable, Identifiable, Hashable, Sendable { let id: String; var name: String; var quantity: Double; var unit: String; var cost: Double?; var supplier: String?; var ordered: Bool; var delivered: Bool }
+struct CRMFile: Codable, Identifiable, Hashable, Sendable {
+    let id: String; var name: String; var type: String; var size: String?; var date: String; var url: String?
+}
+struct CRMMaterial: Codable, Identifiable, Hashable, Sendable {
+    let id: String; var name: String; var quantity: Double; var unit: String; var cost: Double?; var supplier: String?; var ordered: Bool;
+    var delivered: Bool
+}
 
 enum SurveyStatus: String, Codable, CaseIterable, Identifiable, Sendable {
     case planned, inProgress = "in_progress", completed
@@ -243,7 +264,8 @@ struct Lead: Codable, Identifiable, Hashable, Sendable {
     var updatedAt: String
 
     enum CodingKeys: String, CodingKey {
-        case id, name, phone, email, address, value, deposit, balance, source, progress, tasks, stage, photos, notes, files, materials, lat, lng
+        case id, name, phone, email, address, value, deposit, balance, source, progress, tasks, stage, photos, notes, files, materials, lat,
+            lng
         case jobRef = "job_ref"; case jobType = "job_type"; case depositPaid = "deposit_paid"
         case assignedTo = "assigned_to"; case surveyDate = "survey_date"; case surveyTime = "survey_time"
         case startDate = "start_date"; case endDate = "end_date"; case completedDate = "completed_date"
@@ -251,12 +273,23 @@ struct Lead: Codable, Identifiable, Hashable, Sendable {
         case wonDate = "won_date"; case myBuilderURL = "mybuilder_url"; case reviewRequestSent = "review_request_sent"
     }
 
-    init(id: String, jobRef: String, name: String, phone: String, email: String, address: String, jobType: String, stage: LeadStage, value: Double, deposit: Double, depositPaid: Bool, balance: Double, source: String, assignedTo: String, surveyDate: String?, surveyTime: String?, startDate: String?, endDate: String?, completedDate: String?, paidDate: String?, progress: Int, tasks: [CRMTask], photos: [CRMPhoto], notes: [CRMNote], files: [CRMFile], materials: [CRMMaterial], wonDate: String?, myBuilderURL: String?, reviewRequestSent: Bool?, lat: Double?, lng: Double?, createdAt: String, updatedAt: String) {
-        self.id = id; self.jobRef = jobRef; self.name = name; self.phone = phone; self.email = email; self.address = address; self.jobType = jobType; self.stage = stage
-        self.value = value; self.deposit = deposit; self.depositPaid = depositPaid; self.balance = balance; self.source = source; self.assignedTo = assignedTo
-        self.surveyDate = surveyDate; self.surveyTime = surveyTime; self.startDate = startDate; self.endDate = endDate; self.completedDate = completedDate; self.paidDate = paidDate
-        self.progress = progress; self.tasks = tasks; self.photos = photos; self.notes = notes; self.files = files; self.materials = materials
-        self.wonDate = wonDate; self.myBuilderURL = myBuilderURL; self.reviewRequestSent = reviewRequestSent; self.lat = lat; self.lng = lng; self.createdAt = createdAt; self.updatedAt = updatedAt
+    init(
+        id: String, jobRef: String, name: String, phone: String, email: String, address: String, jobType: String, stage: LeadStage,
+        value: Double, deposit: Double, depositPaid: Bool, balance: Double, source: String, assignedTo: String, surveyDate: String?,
+        surveyTime: String?, startDate: String?, endDate: String?, completedDate: String?, paidDate: String?, progress: Int,
+        tasks: [CRMTask], photos: [CRMPhoto], notes: [CRMNote], files: [CRMFile], materials: [CRMMaterial], wonDate: String?,
+        myBuilderURL: String?, reviewRequestSent: Bool?, lat: Double?, lng: Double?, createdAt: String, updatedAt: String
+    ) {
+        self.id = id; self.jobRef = jobRef; self.name = name; self.phone = phone; self.email = email; self.address = address;
+        self.jobType = jobType; self.stage = stage
+        self.value = value; self.deposit = deposit; self.depositPaid = depositPaid; self.balance = balance; self.source = source;
+        self.assignedTo = assignedTo
+        self.surveyDate = surveyDate; self.surveyTime = surveyTime; self.startDate = startDate; self.endDate = endDate;
+        self.completedDate = completedDate; self.paidDate = paidDate
+        self.progress = progress; self.tasks = tasks; self.photos = photos; self.notes = notes; self.files = files;
+        self.materials = materials
+        self.wonDate = wonDate; self.myBuilderURL = myBuilderURL; self.reviewRequestSent = reviewRequestSent; self.lat = lat;
+        self.lng = lng; self.createdAt = createdAt; self.updatedAt = updatedAt
     }
 
     /// Rows are shared with the web, Tauri and Capacitor clients, which may leave
@@ -390,8 +423,12 @@ struct CRMContact: Codable, Identifiable, Hashable, Sendable {
 }
 
 struct GeneralTask: Codable, Identifiable, Hashable, Sendable {
-    let id: String; var title: String; var completed: Bool; var completedDate: String?; var dueDate: String?; var priority: String; var category: String; var notes: String?; var createdAt: String; var assignedTo: [String]
-    enum CodingKeys: String, CodingKey { case id, title, completed, priority, category, notes; case completedDate = "completed_date"; case dueDate = "due_date"; case createdAt = "created_at"; case assignedTo = "assigned_to" }
+    let id: String; var title: String; var completed: Bool; var completedDate: String?; var dueDate: String?; var priority: String;
+    var category: String; var notes: String?; var createdAt: String; var assignedTo: [String]
+    enum CodingKeys: String, CodingKey {
+        case id, title, completed, priority, category, notes; case completedDate = "completed_date"; case dueDate = "due_date";
+        case createdAt = "created_at"; case assignedTo = "assigned_to"
+    }
 }
 
 struct TeamMessage: Codable, Identifiable, Hashable, Sendable {
@@ -429,13 +466,22 @@ struct TeamDayPlan: Codable, Identifiable, Hashable, Sendable {
 
 struct TimesheetEntry: Codable, Identifiable, Hashable, Sendable {
     let id: String; var userID: String; var leadID: String; var date: String; var type: String; var amount: Double; var createdAt: String
-    enum CodingKeys: String, CodingKey { case id, date, type, amount; case userID = "user_id"; case leadID = "lead_id"; case createdAt = "created_at" }
+    enum CodingKeys: String, CodingKey {
+        case id, date, type, amount; case userID = "user_id"; case leadID = "lead_id"; case createdAt = "created_at"
+    }
 }
 
 enum PaymentStatus: String, Codable, CaseIterable, Identifiable, Sendable {
     case due, submitted, scheduled, paid
     var id: String { rawValue }
-    var displayName: String { switch self { case .due: "Draft"; case .submitted: "Submitted"; case .scheduled: "Approved"; case .paid: "Paid" } }
+    var displayName: String {
+        switch self {
+        case .due: "Draft";
+        case .submitted: "Submitted";
+        case .scheduled: "Approved";
+        case .paid: "Paid"
+        }
+    }
 }
 
 enum DepositPlan: String, CaseIterable, Identifiable, Sendable {

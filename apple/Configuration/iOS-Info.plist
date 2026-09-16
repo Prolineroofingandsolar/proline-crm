@@ -9,6 +9,7 @@
   <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
   <key>CFBundleDisplayName</key><string>ProLine CRM</string>
   <key>NSMicrophoneUsageDescription</key><string>ProLine CRM uses the microphone to turn spoken job updates into text for your review.</string>
+  <key>NSCameraUsageDescription</key><string>ProLine CRM uses the camera to add before, during and after photos to a job.</string>
   <key>NSSpeechRecognitionUsageDescription</key><string>ProLine CRM uses speech recognition to prepare reviewed job progress notes and task changes.</string>
   <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>com.prolineroofingandsolar.crm</string><key>CFBundleURLSchemes</key><array><string>prolinecrm</string></array></dict></array>
   <key>UILaunchScreen</key><dict/>

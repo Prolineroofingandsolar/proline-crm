@@ -12,6 +12,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: J87GB8M4RD
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 targets:
   ProLineCRM-iOS:
     type: application

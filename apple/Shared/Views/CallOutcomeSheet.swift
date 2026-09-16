@@ -18,16 +18,20 @@ struct CallOutcomeSheet: View {
                     Picker("Outcome", selection: $outcome) { ForEach(CallOutcome.allCases) { Text($0.short).tag($0) } }
                         .pickerStyle(.segmented)
                     TextField("What was said?", text: $note, axis: .vertical).lineLimit(2...5)
-                } header: { Text(pending.leadName) }
+                } header: {
+                    Text(pending.leadName)
+                }
                 Section {
                     Toggle("Follow up", isOn: $followUp)
                     if followUp { DatePicker("On", selection: $followUpDate, displayedComponents: .date) }
-                } footer: { Text("Adds a follow-up task to this customer's job.") }
+                } footer: {
+                    Text("Adds a follow-up task to this customer's job.")
+                }
             }
             .formStyle(.grouped)
             .navigationTitle("Log call")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Skip") { dismiss() } }
@@ -38,14 +42,16 @@ struct CallOutcomeSheet: View {
             .onChange(of: outcome) { _, value in if value != .spoke { followUp = true } }
         }
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 320)
+            .frame(minWidth: 420, minHeight: 320)
         #endif
     }
 
     private func save() {
         saving = true
         Task {
-            if await appState.logCall(leadID: pending.id, outcome: outcome, note: note, followUp: followUp ? followUpDate : nil) { dismiss() }
+            if await appState.logCall(leadID: pending.id, outcome: outcome, note: note, followUp: followUp ? followUpDate : nil) {
+                dismiss()
+            }
             saving = false
         }
     }

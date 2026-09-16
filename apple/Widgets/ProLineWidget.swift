@@ -1,13 +1,23 @@
 import SwiftUI
 import WidgetKit
+
 #if os(iOS)
-import ActivityKit
+    import ActivityKit
 #endif
 
 struct ProLineEntry: TimelineEntry { let date: Date; let snapshot: WidgetSnapshot }
 
 struct ProLineProvider: TimelineProvider {
-    func placeholder(in context: Context) -> ProLineEntry { .init(date: .now, snapshot: .init(surveysToday: 2, overdueJobs: 1, activeJobs: 3, tasks: [.init(id: "1", title: "Call customer about roof survey", dueDate: nil, priority: "high"), .init(id: "2", title: "Send revised quotation", dueDate: nil, priority: "medium")], updatedAt: .now)) }
+    func placeholder(in context: Context) -> ProLineEntry {
+        .init(
+            date: .now,
+            snapshot: .init(
+                surveysToday: 2, overdueJobs: 1, activeJobs: 3,
+                tasks: [
+                    .init(id: "1", title: "Call customer about roof survey", dueDate: nil, priority: "high"),
+                    .init(id: "2", title: "Send revised quotation", dueDate: nil, priority: "medium"),
+                ], updatedAt: .now))
+    }
     func getSnapshot(in context: Context, completion: @escaping (ProLineEntry) -> Void) { completion(.init(date: .now, snapshot: .load())) }
     func getTimeline(in context: Context, completion: @escaping (Timeline<ProLineEntry>) -> Void) {
         completion(Timeline(entries: [.init(date: .now, snapshot: .load())], policy: .after(.now.addingTimeInterval(900))))
@@ -32,7 +42,12 @@ struct ProLineWidgetView: View {
 
 private struct Metric: View {
     let value: Int; let label: String; var warning = false
-    var body: some View { VStack(alignment: .leading) { Text("\(value)").font(.title2.bold()).foregroundStyle(warning ? .red : .primary); Text(label).font(.caption).foregroundStyle(.secondary) }.frame(maxWidth: .infinity, alignment: .leading) }
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("\(value)").font(.title2.bold()).foregroundStyle(warning ? .red : .primary);
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 
 struct ProLineTodayWidget: Widget {
@@ -67,7 +82,10 @@ struct ProLineTaskListWidgetView: View {
                         Image(systemName: "circle").font(.caption).foregroundStyle(task.priority == "high" ? .red : .orange)
                         Text(task.title).font(.caption).lineLimit(1)
                         Spacer(minLength: 4)
-                        if let due = task.dueDate { Text(shortDate(due)).font(.caption2).foregroundStyle(due < String(ISO8601DateFormatter().string(from: .now).prefix(10)) ? .red : .secondary) }
+                        if let due = task.dueDate {
+                            Text(shortDate(due)).font(.caption2).foregroundStyle(
+                                due < String(ISO8601DateFormatter().string(from: .now).prefix(10)) ? .red : .secondary)
+                        }
                     }
                 }
                 Spacer(minLength: 0)
@@ -95,23 +113,42 @@ struct ProLineTaskListWidget: Widget {
 }
 
 #if os(iOS)
-struct ProLineTaskLiveActivity: Widget {
-    var body: some WidgetConfiguration {
-        ActivityConfiguration(for: ProLineTaskActivityAttributes.self) { context in
-            VStack(alignment: .leading, spacing: 8) {
-                HStack { Label("Office tasks", systemImage: "checklist").font(.headline).foregroundStyle(.orange); Spacer(); Text("\(context.state.openCount) open").font(.caption.bold()) }
-                ForEach(context.state.taskTitles.prefix(3), id: \.self) { title in Label(title, systemImage: "circle").font(.caption).lineLimit(1) }
-                if context.state.overdueCount > 0 { Label("\(context.state.overdueCount) overdue", systemImage: "exclamationmark.triangle.fill").font(.caption.bold()).foregroundStyle(.red) }
-            }.padding().activityBackgroundTint(Color.black.opacity(0.86)).activitySystemActionForegroundColor(.white)
-        } dynamicIsland: { context in
-            DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) { Label("Tasks", systemImage: "checklist").foregroundStyle(.orange) }
-                DynamicIslandExpandedRegion(.trailing) { Text("\(context.state.openCount) open").font(.caption.bold()) }
-                DynamicIslandExpandedRegion(.bottom) { VStack(alignment: .leading, spacing: 4) { ForEach(context.state.taskTitles.prefix(2), id: \.self) { Text("• \($0)").font(.caption).lineLimit(1) } }.frame(maxWidth: .infinity, alignment: .leading) }
-            } compactLeading: { Image(systemName: "checklist").foregroundStyle(.orange) } compactTrailing: { Text("\(context.state.openCount)") } minimal: { Image(systemName: context.state.overdueCount > 0 ? "exclamationmark.circle.fill" : "checkmark.circle").foregroundStyle(context.state.overdueCount > 0 ? .red : .orange) }
+    struct ProLineTaskLiveActivity: Widget {
+        var body: some WidgetConfiguration {
+            ActivityConfiguration(for: ProLineTaskActivityAttributes.self) { context in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label("Office tasks", systemImage: "checklist").font(.headline).foregroundStyle(.orange); Spacer();
+                        Text("\(context.state.openCount) open").font(.caption.bold())
+                    }
+                    ForEach(context.state.taskTitles.prefix(3), id: \.self) { title in
+                        Label(title, systemImage: "circle").font(.caption).lineLimit(1)
+                    }
+                    if context.state.overdueCount > 0 {
+                        Label("\(context.state.overdueCount) overdue", systemImage: "exclamationmark.triangle.fill").font(.caption.bold())
+                            .foregroundStyle(.red)
+                    }
+                }.padding().activityBackgroundTint(Color.black.opacity(0.86)).activitySystemActionForegroundColor(.white)
+            } dynamicIsland: { context in
+                DynamicIsland {
+                    DynamicIslandExpandedRegion(.leading) { Label("Tasks", systemImage: "checklist").foregroundStyle(.orange) }
+                    DynamicIslandExpandedRegion(.trailing) { Text("\(context.state.openCount) open").font(.caption.bold()) }
+                    DynamicIslandExpandedRegion(.bottom) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(context.state.taskTitles.prefix(2), id: \.self) { Text("• \($0)").font(.caption).lineLimit(1) }
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } compactLeading: {
+                    Image(systemName: "checklist").foregroundStyle(.orange)
+                } compactTrailing: {
+                    Text("\(context.state.openCount)")
+                } minimal: {
+                    Image(systemName: context.state.overdueCount > 0 ? "exclamationmark.circle.fill" : "checkmark.circle").foregroundStyle(
+                        context.state.overdueCount > 0 ? .red : .orange)
+                }
+            }
         }
     }
-}
 #endif
 
 @main
@@ -120,7 +157,7 @@ struct ProLineWidgets: WidgetBundle {
         ProLineTodayWidget()
         ProLineTaskListWidget()
         #if os(iOS)
-        ProLineTaskLiveActivity()
+            ProLineTaskLiveActivity()
         #endif
     }
 }

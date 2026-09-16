@@ -17,8 +17,11 @@ actor SupabaseService {
     private let storageURL = URL(string: "https://qzvdzzvkocmulcfujyea.supabase.co/storage/v1")!
     private let authURL = URL(string: "https://qzvdzzvkocmulcfujyea.supabase.co/auth/v1")!
     private let functionsURL = URL(string: "https://qzvdzzvkocmulcfujyea.supabase.co/functions/v1")!
-    private let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6dmR6enZrb2NtdWxjZnVqeWVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NzIxNjUsImV4cCI6MjA5NDQ0ODE2NX0.g42AvuElukfbpgbg9Y6XImnuHQ2Po5GEaVVGMz3Siu0"
-    private let decoder: JSONDecoder = { let value = JSONDecoder(); return value }()
+    private let anonKey =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6dmR6enZrb2NtdWxjZnVqeWVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NzIxNjUsImV4cCI6MjA5NDQ0ODE2NX0.g42AvuElukfbpgbg9Y6XImnuHQ2Po5GEaVVGMz3Siu0"
+    private let decoder: JSONDecoder = {
+        let value = JSONDecoder(); return value
+    }()
 
     private func request(path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil) throws -> URLRequest {
         var components = URLComponents(url: baseURL.appending(path: path), resolvingAgainstBaseURL: false)!
@@ -42,8 +45,7 @@ actor SupabaseService {
         let (firstData, firstResponse) = try await URLSession.shared.data(for: originalRequest)
         guard let firstHTTP = firstResponse as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         if firstHTTP.statusCode == 401, KeychainStore.get("supabaseRefreshToken") != nil {
-            do { try await refreshAccessToken() }
-            catch { throw SupabaseSessionExpired() }
+            do { try await refreshAccessToken() } catch { throw SupabaseSessionExpired() }
             var retry = originalRequest
             guard let token = KeychainStore.get("supabaseAccessToken") else { throw SupabaseSessionExpired() }
             retry.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -55,7 +57,9 @@ actor SupabaseService {
             }
             return (retryData, retryHTTP)
         }
-        guard 200..<300 ~= firstHTTP.statusCode else { throw SupabaseHTTPError(statusCode: firstHTTP.statusCode, message: Self.safeServerMessage(from: firstData)) }
+        guard 200..<300 ~= firstHTTP.statusCode else {
+            throw SupabaseHTTPError(statusCode: firstHTTP.statusCode, message: Self.safeServerMessage(from: firstData))
+        }
         return (firstData, firstHTTP)
     }
 
@@ -66,7 +70,8 @@ actor SupabaseService {
 
     private func refreshAccessToken() async throws {
         guard let refreshToken = KeychainStore.get("supabaseRefreshToken") else { throw SupabaseSessionExpired() }
-        var refresh = URLRequest(url: authURL.appending(path: "token").appending(queryItems: [.init(name: "grant_type", value: "refresh_token")]))
+        var refresh = URLRequest(
+            url: authURL.appending(path: "token").appending(queryItems: [.init(name: "grant_type", value: "refresh_token")]))
         refresh.httpMethod = "POST"
         refresh.httpBody = try JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
         refresh.setValue(anonKey, forHTTPHeaderField: "apikey")
@@ -75,7 +80,8 @@ actor SupabaseService {
     }
 
     func fetchLeads() async throws -> [Lead] {
-        let urlRequest = try request(path: "leads", query: [.init(name: "select", value: "*"), .init(name: "order", value: "updated_at.desc")])
+        let urlRequest = try request(
+            path: "leads", query: [.init(name: "select", value: "*"), .init(name: "order", value: "updated_at.desc")])
         let (data, _) = try await authenticatedData(for: urlRequest)
         return try decodeLeads(from: data)
     }
@@ -89,9 +95,13 @@ actor SupabaseService {
             for key in ["tasks", "photos", "notes", "files", "materials"] {
                 if let string = rows[rowIndex][key] as? String {
                     if let nested = string.data(using: .utf8),
-                       let parsed = try? JSONSerialization.jsonObject(with: nested),
-                       let array = parsed as? [Any] { rows[rowIndex][key] = array }
-                    else { rows[rowIndex][key] = [] }
+                        let parsed = try? JSONSerialization.jsonObject(with: nested),
+                        let array = parsed as? [Any]
+                    {
+                        rows[rowIndex][key] = array
+                    } else {
+                        rows[rowIndex][key] = []
+                    }
                 } else if rows[rowIndex][key] is NSNull {
                     rows[rowIndex][key] = []
                 }
@@ -101,7 +111,8 @@ actor SupabaseService {
     }
 
     func fetchUsers() async throws -> [CRMUser] {
-        let profiles: [AuthProfile] = try await execute(request(path: "profiles", query: [.init(name: "select", value: "*")]), as: [AuthProfile].self)
+        let profiles: [AuthProfile] = try await execute(
+            request(path: "profiles", query: [.init(name: "select", value: "*")]), as: [AuthProfile].self)
         return profiles.filter { $0.active != false }.map(profileUser)
     }
 
@@ -111,13 +122,23 @@ actor SupabaseService {
     func fetchPaymentRuns() async throws -> [PaymentRun] { try await fetch("payment_runs", as: PaymentRun.self) }
     func fetchWorkerPayments() async throws -> [WorkerPayment] { try await fetch("worker_payments", as: WorkerPayment.self) }
     func fetchSurveys() async throws -> [RoofSurvey] { try await fetch("roof_surveys", as: RoofSurvey.self) }
-    func fetchAdminTimesheetChecks() async throws -> [TimesheetEntry] { try await fetch("admin_timesheet_entries", as: TimesheetEntry.self) }
+    func fetchAdminTimesheetChecks() async throws -> [TimesheetEntry] {
+        try await fetch("admin_timesheet_entries", as: TimesheetEntry.self)
+    }
     func fetchQuotes() async throws -> [CRMQuote] { try await fetch("quotes", as: CRMQuote.self) }
     func fetchTeamMessages() async throws -> [TeamMessage] {
-        try await execute(request(path: "team_messages", query: [.init(name: "select", value: "*"), .init(name: "order", value: "created_at.desc"), .init(name: "limit", value: "200")]), as: [TeamMessage].self)
+        try await execute(
+            request(
+                path: "team_messages",
+                query: [
+                    .init(name: "select", value: "*"), .init(name: "order", value: "created_at.desc"), .init(name: "limit", value: "200"),
+                ]), as: [TeamMessage].self)
     }
     func fetchTeamDayPlans() async throws -> [TeamDayPlan] {
-        try await execute(request(path: "team_day_plans", query: [.init(name: "select", value: "*"), .init(name: "order", value: "day.asc,start_time.asc")]), as: [TeamDayPlan].self)
+        try await execute(
+            request(
+                path: "team_day_plans", query: [.init(name: "select", value: "*"), .init(name: "order", value: "day.asc,start_time.asc")]),
+            as: [TeamDayPlan].self)
     }
 
     func lookupMOT(registration: String) async throws -> MOTVehicleLookup {
@@ -132,16 +153,24 @@ actor SupabaseService {
     }
 
     func analyseJobNote(lead: Lead, note: String) async throws -> JobNoteAnalysis {
-        struct TaskRecord: Encodable { let id: String; let title: String; let completed: Bool; let dueDate: String?; enum CodingKeys: String, CodingKey { case id, title, completed; case dueDate = "due_date" } }
+        struct TaskRecord: Encodable {
+            let id: String; let title: String; let completed: Bool; let dueDate: String?;
+            enum CodingKeys: String, CodingKey { case id, title, completed; case dueDate = "due_date" }
+        }
         struct MaterialRecord: Encodable { let name: String; let quantity: Double; let unit: String }
         struct Payload: Encodable {
-            let jobType: String; let stage: String; let note: String; let tasks: [TaskRecord]; let materials: [MaterialRecord]; let today: String
+            let jobType: String; let stage: String; let note: String; let tasks: [TaskRecord]; let materials: [MaterialRecord];
+            let today: String
             enum CodingKeys: String, CodingKey { case stage, note, tasks, materials, today; case jobType = "job_type" }
         }
         var call = URLRequest(url: functionsURL.appending(path: "analyse-job-note"))
         call.httpMethod = "POST"
         call.timeoutInterval = 35
-        call.httpBody = try JSONEncoder().encode(Payload(jobType: lead.jobType, stage: lead.stage.rawValue, note: note, tasks: lead.tasks.map { .init(id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate) }, materials: lead.materials.map { .init(name: $0.name, quantity: $0.quantity, unit: $0.unit) }, today: Self.today))
+        call.httpBody = try JSONEncoder().encode(
+            Payload(
+                jobType: lead.jobType, stage: lead.stage.rawValue, note: note,
+                tasks: lead.tasks.map { .init(id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate) },
+                materials: lead.materials.map { .init(name: $0.name, quantity: $0.quantity, unit: $0.unit) }, today: Self.today))
         call.setValue(anonKey, forHTTPHeaderField: "apikey")
         call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
         call.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -149,32 +178,61 @@ actor SupabaseService {
         return try decoder.decode(JobNoteAnalysis.self, from: data)
     }
 
-    func askOperationsAssistant(prompt: String, history: [AssistantConversationTurn], attachment: AssistantAttachment? = nil, leads: [Lead], tasks: [GeneralTask], actions: [CompanyAction], user: CRMUser) async throws -> CRMAssistantResponse {
+    func askOperationsAssistant(
+        prompt: String, history: [AssistantConversationTurn], attachment: AssistantAttachment? = nil, leads: [Lead], tasks: [GeneralTask],
+        actions: [CompanyAction], user: CRMUser
+    ) async throws -> CRMAssistantResponse {
         struct SafeUser: Encodable { let id: String; let name: String; let role: String }
-        struct SafeTask: Encodable { let id: String; let title: String; let completed: Bool; let dueDate: String?; let priority: String; let category: String; let assignedTo: [String] }
+        struct SafeTask: Encodable {
+            let id: String; let title: String; let completed: Bool; let dueDate: String?; let priority: String; let category: String;
+            let assignedTo: [String]
+        }
         struct SafeJobTask: Encodable { let id: String; let title: String; let completed: Bool; let dueDate: String? }
         struct SafeNote: Encodable { let content: String; let date: String }
         struct SafeLead: Encodable {
             let id: String; let jobRef: String; let customerName: String; let address: String; let jobType: String; let stage: String
-            let value: Double; let deposit: Double; let depositPaid: Bool; let balance: Double; let assignedTo: String; let surveyDate: String?; let surveyTime: String?
+            let value: Double; let deposit: Double; let depositPaid: Bool; let balance: Double; let assignedTo: String;
+            let surveyDate: String?; let surveyTime: String?
             let startDate: String?; let endDate: String?; let progress: Int; let tasks: [SafeJobTask]; let recentNotes: [SafeNote]
         }
-        struct SafeAction: Encodable { let kind: String; let priority: String; let title: String; let detail: String; let reason: String; let leadID: String?; let dueDate: String?; enum CodingKeys: String, CodingKey { case kind, priority, title, detail, reason; case leadID = "lead_id"; case dueDate = "due_date" } }
-        struct Payload: Encodable { let prompt: String; let history: [AssistantConversationTurn]; let attachment: AssistantAttachment?; let leads: [SafeLead]; let tasks: [SafeTask]; let actions: [SafeAction]; let user: SafeUser; let today: String }
-        let safeLeads = leads.prefix(100).map { lead in
-            SafeLead(id: lead.id, jobRef: lead.jobRef, customerName: lead.name, address: lead.address, jobType: lead.jobType,
-                     stage: lead.stage.rawValue, value: lead.value, deposit: lead.deposit, depositPaid: lead.depositPaid, balance: lead.balance, assignedTo: lead.assignedTo,
-                     surveyDate: lead.surveyDate, surveyTime: lead.surveyTime, startDate: lead.startDate, endDate: lead.endDate,
-                     progress: lead.progress,
-                     tasks: lead.tasks.map { SafeJobTask(id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate) },
-                     recentNotes: lead.notes.suffix(3).map { SafeNote(content: $0.content, date: $0.date) })
+        struct SafeAction: Encodable {
+            let kind: String; let priority: String; let title: String; let detail: String; let reason: String; let leadID: String?;
+            let dueDate: String?;
+            enum CodingKeys: String, CodingKey {
+                case kind, priority, title, detail, reason; case leadID = "lead_id"; case dueDate = "due_date"
+            }
         }
-        let safeTasks = tasks.prefix(100).map { SafeTask(id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate, priority: $0.priority, category: $0.category, assignedTo: $0.assignedTo) }
-        let safeActions = actions.prefix(30).map { SafeAction(kind: $0.kind.rawValue, priority: $0.priority.label, title: $0.title, detail: $0.detail, reason: $0.reason, leadID: $0.leadID, dueDate: $0.dueDate) }
+        struct Payload: Encodable {
+            let prompt: String; let history: [AssistantConversationTurn]; let attachment: AssistantAttachment?; let leads: [SafeLead];
+            let tasks: [SafeTask]; let actions: [SafeAction]; let user: SafeUser; let today: String
+        }
+        let safeLeads = leads.prefix(100).map { lead in
+            SafeLead(
+                id: lead.id, jobRef: lead.jobRef, customerName: lead.name, address: lead.address, jobType: lead.jobType,
+                stage: lead.stage.rawValue, value: lead.value, deposit: lead.deposit, depositPaid: lead.depositPaid, balance: lead.balance,
+                assignedTo: lead.assignedTo,
+                surveyDate: lead.surveyDate, surveyTime: lead.surveyTime, startDate: lead.startDate, endDate: lead.endDate,
+                progress: lead.progress,
+                tasks: lead.tasks.map { SafeJobTask(id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate) },
+                recentNotes: lead.notes.suffix(3).map { SafeNote(content: $0.content, date: $0.date) })
+        }
+        let safeTasks = tasks.prefix(100).map {
+            SafeTask(
+                id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate, priority: $0.priority, category: $0.category,
+                assignedTo: $0.assignedTo)
+        }
+        let safeActions = actions.prefix(30).map {
+            SafeAction(
+                kind: $0.kind.rawValue, priority: $0.priority.label, title: $0.title, detail: $0.detail, reason: $0.reason,
+                leadID: $0.leadID, dueDate: $0.dueDate)
+        }
         var call = URLRequest(url: functionsURL.appending(path: "operations-assistant"))
         call.httpMethod = "POST"
         call.timeoutInterval = attachment == nil ? 55 : 70
-        call.httpBody = try JSONEncoder().encode(Payload(prompt: prompt, history: Array(history.suffix(12)), attachment: attachment, leads: safeLeads, tasks: safeTasks, actions: safeActions, user: .init(id: user.id, name: user.name, role: user.role), today: Self.today))
+        call.httpBody = try JSONEncoder().encode(
+            Payload(
+                prompt: prompt, history: Array(history.suffix(12)), attachment: attachment, leads: safeLeads, tasks: safeTasks,
+                actions: safeActions, user: .init(id: user.id, name: user.name, role: user.role), today: Self.today))
         call.setValue(anonKey, forHTTPHeaderField: "apikey")
         call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
         call.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -183,15 +241,20 @@ actor SupabaseService {
     }
 
     func gmailAuthorizationURL() async throws -> URL {
-        struct Reply: Decodable { let authorizationURL: String; enum CodingKeys: String, CodingKey { case authorizationURL = "authorization_url" } }
+        struct Reply: Decodable {
+            let authorizationURL: String; enum CodingKeys: String, CodingKey { case authorizationURL = "authorization_url" }
+        }
         var call = URLRequest(url: functionsURL.appending(path: "gmail-oauth-start")); call.httpMethod = "POST"
-        call.setValue(anonKey, forHTTPHeaderField: "apikey"); call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
+        call.setValue(anonKey, forHTTPHeaderField: "apikey");
+        call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
         let (data, _) = try await authenticatedData(for: call)
-        guard let url = URL(string: try decoder.decode(Reply.self, from: data).authorizationURL) else { throw URLError(.badURL) }; return url
+        guard let url = URL(string: try decoder.decode(Reply.self, from: data).authorizationURL) else { throw URLError(.badURL) };
+        return url
     }
     func gmailConnectionStatus() async throws -> GmailConnectionStatus {
         var call = URLRequest(url: functionsURL.appending(path: "gmail-status")); call.httpMethod = "GET"; call.timeoutInterval = 12
-        call.setValue(anonKey, forHTTPHeaderField: "apikey"); call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
+        call.setValue(anonKey, forHTTPHeaderField: "apikey");
+        call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
         let (data, _) = try await authenticatedData(for: call)
         return try decoder.decode(GmailConnectionStatus.self, from: data)
     }
@@ -199,11 +262,14 @@ actor SupabaseService {
         struct Reply: Decodable { let tasksCreated: Int; enum CodingKeys: String, CodingKey { case tasksCreated = "tasks_created" } }
         var call = URLRequest(url: functionsURL.appending(path: "gmail-scan")); call.httpMethod = "POST"
         call.timeoutInterval = 75
-        call.setValue(anonKey, forHTTPHeaderField: "apikey"); call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
+        call.setValue(anonKey, forHTTPHeaderField: "apikey");
+        call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
         let (data, _) = try await authenticatedData(for: call); return try decoder.decode(Reply.self, from: data).tasksCreated
     }
 
-    func generateQuoteDraft(lead: Lead, survey: RoofSurvey?, brief: String, photos: [AssistantAttachment]) async throws -> GeneratedQuoteDraft {
+    func generateQuoteDraft(lead: Lead, survey: RoofSurvey?, brief: String, photos: [AssistantAttachment]) async throws
+        -> GeneratedQuoteDraft
+    {
         struct QuoteContext: Encodable {
             let customerName: String
             let address: String
@@ -218,17 +284,18 @@ actor SupabaseService {
         var call = URLRequest(url: functionsURL.appending(path: "generate-quote"))
         call.httpMethod = "POST"
         call.timeoutInterval = 40
-        call.httpBody = try JSONEncoder().encode(QuoteContext(
-            customerName: lead.name,
-            address: lead.address,
-            jobType: lead.jobType,
-            currentJobValue: lead.value,
-            brief: brief,
-            notes: lead.notes.suffix(8).map(\.content),
-            materials: lead.materials.map { "\($0.name): \($0.quantity.formatted()) \($0.unit)" },
-            survey: survey,
-            photos: Array(photos.prefix(4))
-        ))
+        call.httpBody = try JSONEncoder().encode(
+            QuoteContext(
+                customerName: lead.name,
+                address: lead.address,
+                jobType: lead.jobType,
+                currentJobValue: lead.value,
+                brief: brief,
+                notes: lead.notes.suffix(8).map(\.content),
+                materials: lead.materials.map { "\($0.name): \($0.quantity.formatted()) \($0.unit)" },
+                survey: survey,
+                photos: Array(photos.prefix(4))
+            ))
         call.setValue(anonKey, forHTTPHeaderField: "apikey")
         call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
         call.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -237,7 +304,8 @@ actor SupabaseService {
     }
 
     func signInWithPassword(email: String, password: String) async throws -> CRMUser {
-        var request = URLRequest(url: authURL.appending(path: "token").appending(queryItems: [.init(name: "grant_type", value: "password")]))
+        var request = URLRequest(
+            url: authURL.appending(path: "token").appending(queryItems: [.init(name: "grant_type", value: "password")]))
         request.httpMethod = "POST"
         request.httpBody = try JSONSerialization.data(withJSONObject: ["email": email, "password": password])
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
@@ -262,11 +330,14 @@ actor SupabaseService {
 
     func createSecureUser(name: String, email: String, password: String, role: String, dayRate: Double?, cisRate: Int) async throws {
         guard let token = KeychainStore.get("supabaseAccessToken") else { throw SupabaseSessionExpired() }
-        var payload: [String: Any] = ["action": "create_user", "name": name, "email": email, "password": password, "role": role, "cis_rate": cisRate]
+        var payload: [String: Any] = [
+            "action": "create_user", "name": name, "email": email, "password": password, "role": role, "cis_rate": cisRate,
+        ]
         if let dayRate { payload["day_rate"] = dayRate }
         var call = URLRequest(url: functionsURL.appending(path: "worker-invite")); call.httpMethod = "POST"; call.timeoutInterval = 20
         call.httpBody = try JSONSerialization.data(withJSONObject: payload)
-        call.setValue(anonKey, forHTTPHeaderField: "apikey"); call.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization"); call.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        call.setValue(anonKey, forHTTPHeaderField: "apikey"); call.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization");
+        call.setValue("application/json", forHTTPHeaderField: "Content-Type")
         _ = try await authenticatedData(for: call)
     }
 
@@ -274,7 +345,7 @@ actor SupabaseService {
         var payload: [String: Any] = [
             "action": "accept", "token": token, "name": details.name, "password": details.password,
             "cis_rate": details.cisRate, "utr_number": details.utrNumber, "bank_name": details.bankName,
-            "bank_account_number": details.bankAccountNumber, "bank_sort_code": details.bankSortCode
+            "bank_account_number": details.bankAccountNumber, "bank_sort_code": details.bankSortCode,
         ]
         if let dayRate = details.dayRate { payload["day_rate"] = dayRate }
         var call = URLRequest(url: functionsURL.appending(path: "worker-invite"))
@@ -286,14 +357,17 @@ actor SupabaseService {
         call.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, response) = try await URLSession.shared.data(for: call)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-        guard 200..<300 ~= http.statusCode else { throw SupabaseHTTPError(statusCode: http.statusCode, message: Self.safeServerMessage(from: data)) }
+        guard 200..<300 ~= http.statusCode else {
+            throw SupabaseHTTPError(statusCode: http.statusCode, message: Self.safeServerMessage(from: data))
+        }
         struct Result: Decodable { let email: String }
         return try decoder.decode(Result.self, from: data).email
     }
 
     func restoreAuthenticatedSession() async throws -> CRMUser? {
         guard let refreshToken = KeychainStore.get("supabaseRefreshToken") else { return nil }
-        var request = URLRequest(url: authURL.appending(path: "token").appending(queryItems: [.init(name: "grant_type", value: "refresh_token")]))
+        var request = URLRequest(
+            url: authURL.appending(path: "token").appending(queryItems: [.init(name: "grant_type", value: "refresh_token")]))
         request.httpMethod = "POST"
         request.httpBody = try JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
@@ -330,33 +404,44 @@ actor SupabaseService {
         guard let userID = KeychainStore.get("supabaseAuthUserID") else { throw SupabaseSessionExpired() }
         let body = try JSONSerialization.data(withJSONObject: [
             "user_id": userID, "device_token": token, "platform": platform, "environment": environment,
-            "bundle_id": bundleID, "active": true, "last_seen_at": ISO8601DateFormatter().string(from: Date())
+            "bundle_id": bundleID, "active": true, "last_seen_at": ISO8601DateFormatter().string(from: Date()),
         ])
-        var deviceRequest = try request(path: "native_push_devices", method: "POST", query: [.init(name: "on_conflict", value: "device_token")], body: body)
+        var deviceRequest = try request(
+            path: "native_push_devices", method: "POST", query: [.init(name: "on_conflict", value: "device_token")], body: body)
         deviceRequest.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
         _ = try await authenticatedData(for: deviceRequest)
     }
 
     func unregisterNativePushDevice(token: String) async throws {
-        var deviceRequest = try request(path: "native_push_devices", method: "DELETE", query: [.init(name: "device_token", value: "eq.\(token)")])
+        var deviceRequest = try request(
+            path: "native_push_devices", method: "DELETE", query: [.init(name: "device_token", value: "eq.\(token)")])
         deviceRequest.setValue("return=minimal", forHTTPHeaderField: "Prefer")
         _ = try await authenticatedData(for: deviceRequest)
         UserDefaults.standard.removeObject(forKey: "nativePushDeviceToken")
     }
 
-    func sendPushEvent(_ event: String, name: String = "", detail: String = "", recordID: String = "", userIDs: [String] = []) async throws -> Int {
+    func sendPushEvent(_ event: String, name: String = "", detail: String = "", recordID: String = "", userIDs: [String] = []) async throws
+        -> Int
+    {
         guard let token = KeychainStore.get("supabaseAccessToken") else { throw SupabaseSessionExpired() }
         var call = URLRequest(url: functionsURL.appending(path: "send-push"))
         call.httpMethod = "POST"
         call.timeoutInterval = 20
-        call.httpBody = try JSONSerialization.data(withJSONObject: ["event": event, "name": name, "detail": detail, "record_id": recordID, "user_ids": userIDs])
+        call.httpBody = try JSONSerialization.data(withJSONObject: [
+            "event": event, "name": name, "detail": detail, "record_id": recordID, "user_ids": userIDs,
+        ])
         call.setValue(anonKey, forHTTPHeaderField: "apikey")
         call.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         call.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, _) = try await authenticatedData(for: call)
-        struct Delivery: Decodable { let nativeSent: Int; let nativeFailed: Int; enum CodingKeys: String, CodingKey { case nativeSent = "native_sent"; case nativeFailed = "native_failed" } }
+        struct Delivery: Decodable {
+            let nativeSent: Int; let nativeFailed: Int;
+            enum CodingKeys: String, CodingKey { case nativeSent = "native_sent"; case nativeFailed = "native_failed" }
+        }
         let delivery = try decoder.decode(Delivery.self, from: data)
-        if delivery.nativeSent == 0, delivery.nativeFailed > 0 { throw SupabaseHTTPError(statusCode: 503, message: "Apple Push is not fully configured yet.") }
+        if delivery.nativeSent == 0, delivery.nativeFailed > 0 {
+            throw SupabaseHTTPError(statusCode: 503, message: "Apple Push is not fully configured yet.")
+        }
         return delivery.nativeSent
     }
 
@@ -365,7 +450,7 @@ actor SupabaseService {
             "name": user.name, "username": user.username,
             "day_rate": user.dayRate, "cis_rate": user.cisRate, "utr_number": user.utrNumber,
             "bank_name": user.bankName, "bank_account_number": user.bankAccountNumber,
-            "bank_sort_code": user.bankSortCode
+            "bank_sort_code": user.bankSortCode,
         ]
         let body = try JSONSerialization.data(withJSONObject: payload.compactMapValues { $0 })
         var profileRequest = try request(path: "profiles", method: "PATCH", query: [.init(name: "id", value: "eq.\(user.id)")], body: body)
@@ -398,13 +483,20 @@ actor SupabaseService {
     }
 
     private func fetchAuthenticatedProfile(userID: String) async throws -> CRMUser {
-        let rows: [AuthProfile] = try await execute(request(path: "profiles", query: [.init(name: "id", value: "eq.\(userID)"), .init(name: "select", value: "*")]), as: [AuthProfile].self)
+        let rows: [AuthProfile] = try await execute(
+            request(path: "profiles", query: [.init(name: "id", value: "eq.\(userID)"), .init(name: "select", value: "*")]),
+            as: [AuthProfile].self)
         guard let profile = rows.first, profile.active != false else { throw SupabaseSessionExpired() }
         if let organisationID = profile.organisationID { KeychainStore.set(organisationID, for: "supabaseOrganisationID") }
         return profileUser(profile)
     }
 
-    private func profileUser(_ profile: AuthProfile) -> CRMUser { CRMUser(id: profile.id, name: profile.name, username: profile.email ?? profile.username ?? "", role: profile.role, dayRate: profile.dayRate, cisRate: profile.cisRate, utrNumber: profile.utrNumber, bankName: profile.bankName, bankAccountNumber: profile.bankAccountNumber, bankSortCode: profile.bankSortCode, organizationID: profile.organisationID) }
+    private func profileUser(_ profile: AuthProfile) -> CRMUser {
+        CRMUser(
+            id: profile.id, name: profile.name, username: profile.email ?? profile.username ?? "", role: profile.role,
+            dayRate: profile.dayRate, cisRate: profile.cisRate, utrNumber: profile.utrNumber, bankName: profile.bankName,
+            bankAccountNumber: profile.bankAccountNumber, bankSortCode: profile.bankSortCode, organizationID: profile.organisationID)
+    }
 
     private func fetch<T: Decodable>(_ table: String, as type: T.Type) async throws -> [T] {
         try await execute(request(path: table, query: [.init(name: "select", value: "*")]), as: [T].self)
@@ -415,7 +507,9 @@ actor SupabaseService {
     }
 
     func update<T: Codable>(_ value: T, in table: String, id: String) async throws {
-        let _: [T] = try await execute(request(path: table, method: "PATCH", query: [.init(name: "id", value: "eq.\(id)")], body: try JSONEncoder().encode(value)), as: [T].self)
+        let _: [T] = try await execute(
+            request(path: table, method: "PATCH", query: [.init(name: "id", value: "eq.\(id)")], body: try JSONEncoder().encode(value)),
+            as: [T].self)
     }
 
     func delete(from table: String, id: String) async throws {
@@ -430,7 +524,8 @@ actor SupabaseService {
     @discardableResult
     func updateLead(_ lead: Lead, expectedUpdatedAt: String? = nil) async throws -> Lead? {
         let query = SupabaseWriteCondition.query(id: lead.id, expectedUpdatedAt: expectedUpdatedAt)
-        let (data, _) = try await authenticatedData(for: request(path: "leads", method: "PATCH", query: query, body: try JSONEncoder().encode(lead)))
+        let (data, _) = try await authenticatedData(
+            for: request(path: "leads", method: "PATCH", query: query, body: try JSONEncoder().encode(lead)))
         let rows = try decodeLeads(from: data)
         guard !SupabaseWriteCondition.isConflict(returnedRowCount: rows.count) else { throw SupabaseWriteConflict() }
         return rows.first
@@ -442,7 +537,9 @@ actor SupabaseService {
         let cleanName = filename.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "-", options: .regularExpression)
         let organisationID = KeychainStore.get("supabaseOrganisationID") ?? "legacy"
         let path = "\(organisationID)/leads/\(leadID)/\(UUID().uuidString)-\(cleanName.isEmpty ? "attachment" : cleanName)"
-        let encodedPath = path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
+        let encodedPath = path.split(separator: "/").map {
+            String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0)
+        }.joined(separator: "/")
         var upload = URLRequest(url: storageURL.appending(path: "object/crm-attachments/\(encodedPath)"))
         upload.httpMethod = "POST"
         upload.httpBody = data
@@ -459,7 +556,9 @@ actor SupabaseService {
             guard let direct = URL(string: locator) else { throw URLError(.badURL) }
             return direct
         }
-        let encodedPath = value.path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
+        let encodedPath = value.path.split(separator: "/").map {
+            String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0)
+        }.joined(separator: "/")
         var sign = URLRequest(url: storageURL.appending(path: "object/sign/\(value.bucket)/\(encodedPath)"))
         sign.httpMethod = "POST"
         sign.httpBody = try JSONSerialization.data(withJSONObject: ["expiresIn": expiresIn])
@@ -468,7 +567,8 @@ actor SupabaseService {
         sign.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, _) = try await authenticatedData(for: sign)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let raw = (object["signedURL"] ?? object["signedUrl"]) as? String else { throw URLError(.badServerResponse) }
+            let raw = (object["signedURL"] ?? object["signedUrl"]) as? String
+        else { throw URLError(.badServerResponse) }
         if let absolute = URL(string: raw), absolute.scheme != nil { return absolute }
         guard let resolved = URL(string: raw, relativeTo: storageURL)?.absoluteURL else { throw URLError(.badURL) }
         return resolved
@@ -476,7 +576,9 @@ actor SupabaseService {
 
     func deleteAttachment(locator: String) async throws {
         guard let value = parseStorageLocator(locator) else { return }
-        let encodedPath = value.path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
+        let encodedPath = value.path.split(separator: "/").map {
+            String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0)
+        }.joined(separator: "/")
         var request = URLRequest(url: storageURL.appending(path: "object/\(value.bucket)/\(encodedPath)"))
         request.httpMethod = "DELETE"
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
@@ -512,7 +614,9 @@ struct SupabaseSessionExpired: LocalizedError {
 struct SupabaseHTTPError: LocalizedError {
     let statusCode: Int
     var message: String? = nil
-    var errorDescription: String? { message.map { "The server returned HTTP \(statusCode): \($0)" } ?? "The server returned HTTP \(statusCode)." }
+    var errorDescription: String? {
+        message.map { "The server returned HTTP \(statusCode): \($0)" } ?? "The server returned HTTP \(statusCode)."
+    }
 }
 
 enum SupabaseWriteCondition {
@@ -575,5 +679,8 @@ private struct AuthProfile: Decodable {
 }
 
 private extension DateFormatter {
-    static let isoDay: DateFormatter = { let value = DateFormatter(); value.calendar = Calendar(identifier: .iso8601); value.locale = Locale(identifier: "en_US_POSIX"); value.dateFormat = "yyyy-MM-dd"; return value }()
+    static let isoDay: DateFormatter = {
+        let value = DateFormatter(); value.calendar = Calendar(identifier: .iso8601); value.locale = Locale(identifier: "en_US_POSIX");
+        value.dateFormat = "yyyy-MM-dd"; return value
+    }()
 }
