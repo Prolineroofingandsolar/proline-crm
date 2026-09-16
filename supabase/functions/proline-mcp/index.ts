@@ -7,12 +7,12 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const FUNCTION_BASE = `${PROJECT_URL}/functions/v1/proline-mcp`;
 const MCP_RESOURCE = `${FUNCTION_BASE}/mcp`;
-const RESOURCE_METADATA = `${FUNCTION_BASE}/.well-known/oauth-protected-resource?v=6`;
+const RESOURCE_METADATA = `${FUNCTION_BASE}/.well-known/oauth-protected-resource?v=7`;
 const SUPABASE_AUTH_ORIGIN = `${PROJECT_URL}/auth/v1`;
 // Cursor's cloud token exchange can be challenged by the Supabase edge.
 // Publish the ProLine OAuth facade, which proxies only the OAuth protocol
 // endpoints to this same Supabase Auth server and returns standards-compliant JSON.
-const AUTHORIZATION_SERVER = "https://proline-oauth-proxy.royal-art-964b.workers.dev";
+const AUTHORIZATION_SERVER = `${FUNCTION_BASE}/oauth`;
 const SCOPES = ["email", "profile"];
 
 const cors = {
@@ -152,6 +152,24 @@ Deno.serve(async (request) => {
       scopes_supported: SCOPES,
       bearer_methods_supported: ["header"],
     });
+  }
+  if (url.pathname.endsWith("/oauth/.well-known/oauth-authorization-server")) {
+    return json({
+      issuer: AUTHORIZATION_SERVER,
+      authorization_endpoint: `${SUPABASE_AUTH_ORIGIN}/oauth/authorize`,
+      token_endpoint: `${AUTHORIZATION_SERVER}/connect/complete`,
+      jwks_uri: `${SUPABASE_AUTH_ORIGIN}/.well-known/jwks.json`,
+      userinfo_endpoint: `${AUTHORIZATION_SERVER}/userinfo`,
+      registration_endpoint: `${AUTHORIZATION_SERVER}/register`,
+      scopes_supported: ["openid", "profile", "email", "phone", "offline_access"],
+      response_types_supported: ["code"],
+      response_modes_supported: ["query"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      subject_types_supported: ["public"],
+      id_token_signing_alg_values_supported: ["RS256", "HS256", "ES256"],
+      token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post", "none"],
+      code_challenge_methods_supported: ["S256", "plain"],
+    }, 200, { "Cache-Control": "public, max-age=60" });
   }
   if (url.pathname.endsWith("/health")) {
     return json({ ok: true, service: "proline-mcp", transport: "streamable-http", protocol_version: "2025-06-18" });
