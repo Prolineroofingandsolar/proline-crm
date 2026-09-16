@@ -1131,8 +1131,7 @@ private struct MobileDashboardView: View {
                   let task = lead.tasks.first(where: { $0.id == taskID }) {
             editingJobTask = JobChecklistItem(lead: lead, task: task)
         } else if let leadID = action.leadID {
-            appState.selectedLeadID = leadID
-            appState.showingGlobalSearch = true
+            appState.openLead(leadID)
         } else if action.kind == .timesheet {
             appState.selectedSection = .tasks
         }

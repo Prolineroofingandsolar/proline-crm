@@ -335,6 +335,7 @@ final class AppState {
                 // hash comparison against `app_users` is gone: it required the anonymous
                 // client to download every account's password hash.
                 let user = try await SupabaseService.shared.signInWithPassword(email: secureEmail, password: password)
+                errorMessage = nil
                 currentUser = user
                 users = [user]
                 cacheSignedInUser(user)
@@ -452,18 +453,21 @@ final class AppState {
         // optional module can never blank the pipeline.
         let service = SupabaseService.shared
         let admin = isAdmin
-        async let fetchedLeads = Result { try await service.fetchLeads() }
-        async let fetchedSurveys = Result { try await service.fetchSurveys() }
-        async let fetchedUsers = Result { try await service.fetchUsers() }
-        async let fetchedContacts = Result { try await service.fetchContacts() }
-        async let fetchedTasks = Result { try await service.fetchTasks() }
-        async let fetchedTimesheets = Result { try await service.fetchTimesheets() }
-        async let fetchedAdminChecks = Result { admin ? try await service.fetchAdminTimesheetChecks() : [] }
-        async let fetchedRuns = Result { try await service.fetchPaymentRuns() }
-        async let fetchedPayments = Result { try await service.fetchWorkerPayments() }
-        async let fetchedQuotes = Result { try await service.fetchQuotes() }
-        async let fetchedMessages = Result { try await service.fetchTeamMessages() }
-        async let fetchedPlans = Result { try await service.fetchTeamDayPlans() }
+        func attempt<T: Sendable>(_ work: @Sendable () async throws -> T) async -> Result<T, Error> {
+            do { return .success(try await work()) } catch { return .failure(error) }
+        }
+        async let fetchedLeads = attempt { try await service.fetchLeads() }
+        async let fetchedSurveys = attempt { try await service.fetchSurveys() }
+        async let fetchedUsers = attempt { try await service.fetchUsers() }
+        async let fetchedContacts = attempt { try await service.fetchContacts() }
+        async let fetchedTasks = attempt { try await service.fetchTasks() }
+        async let fetchedTimesheets = attempt { try await service.fetchTimesheets() }
+        async let fetchedAdminChecks = attempt { admin ? try await service.fetchAdminTimesheetChecks() : [] }
+        async let fetchedRuns = attempt { try await service.fetchPaymentRuns() }
+        async let fetchedPayments = attempt { try await service.fetchWorkerPayments() }
+        async let fetchedQuotes = attempt { try await service.fetchQuotes() }
+        async let fetchedMessages = attempt { try await service.fetchTeamMessages() }
+        async let fetchedPlans = attempt { try await service.fetchTeamDayPlans() }
 
         var failures: [String] = []
         func adopt<T>(_ result: Result<T, Error>, _ label: String, _ apply: (T) -> Void) {
@@ -1866,7 +1870,7 @@ enum SyncPolicy {
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case dashboard = "Dashboard", pipeline = "Pipeline", leads = "Leads", jobs = "Jobs", tasks = "Tasks", email = "Email", calendar = "Calendar", team = "Team Hub", contacts = "Contacts", files = "Files", fleet = "Fleet", accounts = "Accounts", finance = "Finance", reports = "Reports", timesheet = "Timesheet", cis = "CIS", tools = "Tools", settings = "Settings"
+    case dashboard = "Dashboard", pipeline = "Pipeline", jobs = "Jobs", tasks = "Tasks", email = "Email", calendar = "Calendar", team = "Team Hub", contacts = "Contacts", files = "Files", fleet = "Fleet", accounts = "Accounts", finance = "Finance", reports = "Reports", timesheet = "Timesheet", cis = "CIS", tools = "Tools", settings = "Settings"
     var id: String { rawValue }
-    var icon: String { switch self { case .dashboard: "chart.bar"; case .pipeline: "rectangle.3.group"; case .leads: "person.2"; case .jobs: "briefcase"; case .tasks: "checklist"; case .email: "envelope.badge"; case .calendar: "calendar"; case .team: "bubble.left.and.bubble.right.fill"; case .contacts: "person.crop.circle"; case .files: "folder"; case .fleet: "car.2"; case .accounts: "building.columns"; case .finance: "sterlingsign.circle"; case .reports: "chart.pie"; case .timesheet: "clock"; case .cis: "doc.text"; case .tools: "wrench.and.screwdriver"; case .settings: "gearshape" } }
+    var icon: String { switch self { case .dashboard: "chart.bar"; case .pipeline: "rectangle.3.group"; case .jobs: "briefcase"; case .tasks: "checklist"; case .email: "envelope.badge"; case .calendar: "calendar"; case .team: "bubble.left.and.bubble.right.fill"; case .contacts: "person.crop.circle"; case .files: "folder"; case .fleet: "car.2"; case .accounts: "building.columns"; case .finance: "sterlingsign.circle"; case .reports: "chart.pie"; case .timesheet: "clock"; case .cis: "doc.text"; case .tools: "wrench.and.screwdriver"; case .settings: "gearshape" } }
 }

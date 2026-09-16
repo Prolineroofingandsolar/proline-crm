@@ -89,12 +89,6 @@ struct GlobalSearchView: View {
                 case .contact(let id): ContactDetailView(contactID: id)
                 }
             }
-            .onAppear {
-                if let id = appState.selectedLeadID, appState.leads.contains(where: { $0.id == id }) {
-                    path = [.lead(id)]
-                    appState.selectedLeadID = nil
-                }
-            }
         }
         #if os(macOS)
         .frame(minWidth: 720, minHeight: 620)

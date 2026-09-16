@@ -127,7 +127,8 @@ struct ProLineCRMApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: .crmRemoteRegistrationFailed)) { notification in
                     appState.handleRemoteNotificationRegistrationFailure(notification.object as? String)
                 }
-                .alert("ProLine CRM", isPresented: .init(get: { appState.errorMessage != nil }, set: { if !$0 { appState.errorMessage = nil } })) {
+                // The sign-in screen shows its own inline message; the alert is for the signed-in app.
+                .alert("ProLine CRM", isPresented: .init(get: { appState.errorMessage != nil && (appState.isAuthenticated || appState.pendingWorkerInviteToken != nil) }, set: { if !$0 { appState.errorMessage = nil } })) {
                     Button("OK") { appState.errorMessage = nil }
                 } message: { Text(appState.errorMessage ?? "") }
         }
@@ -146,6 +147,8 @@ struct ProLineCRMApp: App {
                     .disabled(appState.isWorkerPreview)
             }
         }
+        #endif
+        #if os(macOS)
         Settings {
             SettingsView().environment(appState).frame(minWidth: 520, minHeight: 560)
         }

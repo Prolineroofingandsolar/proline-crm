@@ -9,11 +9,17 @@ import AppKit
 #endif
 
 struct PhoneActionMenu: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.openURL) private var openURL
     let number: String
     var label: String = "Phone"
+    /// When the number belongs to a lead, calls are tracked so the outcome can be logged afterwards.
+    var lead: Lead? = nil
     var body: some View {
         Menu {
-            if let url = ContactLinks.telephone(number) { Link(destination: url) { Label("Call", systemImage: "phone.fill") } }
+            if let lead {
+                Button { if let url = appState.beginCall(to: lead) { openURL(url) } } label: { Label("Call", systemImage: "phone.fill") }
+            } else if let url = ContactLinks.telephone(number) { Link(destination: url) { Label("Call", systemImage: "phone.fill") } }
             if let url = ContactLinks.message(number) { Link(destination: url) { Label("Text message", systemImage: "message.fill") } }
             if let url = ContactLinks.whatsApp(number) { Link(destination: url) { Label("WhatsApp", systemImage: "bubble.left.and.bubble.right.fill") } }
             Divider()
@@ -156,7 +162,7 @@ struct LeadDetailView: View {
             }
             Spacer()
             HStack(spacing: 12) {
-                if !lead.phone.isEmpty { PhoneActionMenu(number: lead.phone, label: "Contact").frame(width: 112, height: 42).foregroundStyle(.white).background(.blue, in: RoundedRectangle(cornerRadius: 8)).buttonStyle(.plain) }
+                if !lead.phone.isEmpty { PhoneActionMenu(number: lead.phone, label: "Contact", lead: lead).frame(width: 112, height: 42).foregroundStyle(.white).background(.blue, in: RoundedRectangle(cornerRadius: 8)).buttonStyle(.plain) }
                 if let mailURL = ContactLinks.email(lead.email) { Link(destination: mailURL) { Label("Email", systemImage: "envelope").frame(width: 112, height: 42).background(.background, in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary)) }.buttonStyle(.plain) }
                 Button { addingTask = true } label: { Label("Add task", systemImage: "checkmark.square").frame(width: 120, height: 42).background(.background, in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary)) }.buttonStyle(.plain)
             }
@@ -334,7 +340,7 @@ struct LeadDetailView: View {
     private func macInfo(_ lead: Lead) -> some View {
         VStack(alignment: .leading, spacing: 24) {
             detailSection("Contact") {
-                if !lead.phone.isEmpty { HStack(spacing: 14) { Image(systemName: "phone").frame(width: 22); Text("Phone"); Spacer(); PhoneActionMenu(number: lead.phone, label: lead.phone) }.padding(.horizontal, 16).frame(height: 50).overlay(alignment: .bottom) { Divider().padding(.leading, 52) } }
+                if !lead.phone.isEmpty { HStack(spacing: 14) { Image(systemName: "phone").frame(width: 22); Text("Phone"); Spacer(); PhoneActionMenu(number: lead.phone, label: lead.phone, lead: lead) }.padding(.horizontal, 16).frame(height: 50).overlay(alignment: .bottom) { Divider().padding(.leading, 52) } }
                 detailRow("Email", icon: "envelope", value: lead.email, link: ContactLinks.email(lead.email))
                 detailRow("Address", icon: "mappin.circle", value: lead.address)
                 detailRow("Preferred contact", icon: "person", value: !lead.phone.isEmpty ? "Phone" : (!lead.email.isEmpty ? "Email" : "Not set"))
@@ -412,7 +418,7 @@ struct LeadDetailView: View {
     private func stageColor(_ stage: LeadStage) -> Color { switch stage { case .newLead: .orange; case .surveyBooked: .green; case .quotePreparing, .quoteSent: .purple; case .won, .completed, .paid: .green; case .waitingForPayment: .indigo; case .lost: .red; default: .teal } }
     #endif
 
-    private func info(_ lead: Lead) -> some View { Form { Section("Customer") { LabeledContent("Name", value: lead.name); if !lead.phone.isEmpty { PhoneActionMenu(number: lead.phone, label: lead.phone) }; if let mail = ContactLinks.email(lead.email) { Link(destination: mail) { LabeledContent("Email", value:lead.email) } } else if !lead.email.isEmpty { LabeledContent("Email", value:lead.email) }; LabeledContent("Address", value:lead.address) }; jobHealth(lead); Section("Job") { LabeledContent("Reference", value:lead.jobRef); LabeledContent("Type", value:lead.jobType); LabeledContent("Stage", value:lead.stage.rawValue); LabeledContent("Value", value:lead.value.formatted(.currency(code:"GBP"))); LabeledContent("Deposit", value:lead.deposit.formatted(.currency(code:"GBP")));LabeledContent("Balance", value:lead.balance.formatted(.currency(code:"GBP"))); LabeledContent("Source", value:lead.source);if !lead.depositPaid && lead.deposit > 0{Button("Record deposit paid"){confirmingDeposit=true}};if lead.balance > 0 && [.won,.scheduled,.inProgress,.completed].contains(lead.stage){Button("Mark balance paid"){confirmingFinalPayment=true}} }; Section("Dates") { if let value=lead.surveyDate { LabeledContent("Survey", value:[value,lead.surveyTime].compactMap{$0}.joined(separator:" · ")) }; if let value=lead.startDate { LabeledContent("Starts", value:value) }; if let value=lead.endDate { LabeledContent("Ends", value:value) } } }.formStyle(.grouped) }
+    private func info(_ lead: Lead) -> some View { Form { Section("Customer") { LabeledContent("Name", value: lead.name); if !lead.phone.isEmpty { PhoneActionMenu(number: lead.phone, label: lead.phone, lead: lead) }; if let mail = ContactLinks.email(lead.email) { Link(destination: mail) { LabeledContent("Email", value:lead.email) } } else if !lead.email.isEmpty { LabeledContent("Email", value:lead.email) }; LabeledContent("Address", value:lead.address) }; jobHealth(lead); Section("Job") { LabeledContent("Reference", value:lead.jobRef); LabeledContent("Type", value:lead.jobType); LabeledContent("Stage", value:lead.stage.rawValue); LabeledContent("Value", value:lead.value.formatted(.currency(code:"GBP"))); LabeledContent("Deposit", value:lead.deposit.formatted(.currency(code:"GBP")));LabeledContent("Balance", value:lead.balance.formatted(.currency(code:"GBP"))); LabeledContent("Source", value:lead.source);if !lead.depositPaid && lead.deposit > 0{Button("Record deposit paid"){confirmingDeposit=true}};if lead.balance > 0 && [.won,.scheduled,.inProgress,.completed].contains(lead.stage){Button("Mark balance paid"){confirmingFinalPayment=true}} }; Section("Dates") { if let value=lead.surveyDate { LabeledContent("Survey", value:[value,lead.surveyTime].compactMap{$0}.joined(separator:" · ")) }; if let value=lead.startDate { LabeledContent("Starts", value:value) }; if let value=lead.endDate { LabeledContent("Ends", value:value) } } }.formStyle(.grouped) }
     private func jobHealth(_ lead: Lead) -> some View { let entries = appState.timesheets.filter { $0.leadID == lead.id }; let labour = entries.reduce(0) { $0 + $1.amount }; let materials = lead.materials.reduce(0) { $0 + (($1.cost ?? 0) * max(1, $1.quantity)) }; let spent = labour + materials; let remaining = lead.value - spent; return Section("Job cost & profit") { LabeledContent("Labour days", value: entries.reduce(0) { $0 + ($1.type == "half" ? 0.5 : $1.type == "off" ? 0 : 1) }.formatted()); LabeledContent("Labour cost", value: labour.formatted(.currency(code:"GBP"))); LabeledContent("Materials recorded", value: materials.formatted(.currency(code:"GBP"))); LabeledContent("Forecast profit", value: remaining.formatted(.currency(code:"GBP"))); ProgressView(value: lead.value > 0 ? min(1, spent / lead.value) : 0).tint(remaining >= lead.value * 0.2 ? .green : remaining >= 0 ? .orange : .red); Text(remaining < 0 ? "Over budget — review labour and materials." : remaining < lead.value * 0.2 ? "Profit margin is getting tight." : "Currently on track for profit.").font(.caption).foregroundStyle(remaining < 0 ? .red : remaining < lead.value * 0.2 ? .orange : .green) } }
 
     private func tasks(_ lead: Lead) -> some View { List { Section { ForEach(lead.tasks) { task in Button { Task { await appState.toggleLeadTask(leadID:lead.id,taskID:task.id) } } label: { HStack { Label(task.title, systemImage:task.completed ? "checkmark.circle.fill":"circle").foregroundStyle(task.completed ? .secondary:.primary); Spacer(); if let due=task.dueDate { Text(String(due.prefix(10))).font(.caption).foregroundStyle(!task.completed && due < SupabaseService.today ? .red:.secondary) } } }.buttonStyle(.plain).contextMenu { Button("Delete task",role:.destructive) { Task { await appState.deleteLeadTask(leadID:lead.id,taskID:task.id) } } } } } header: { Text("\(lead.tasks.filter{$0.completed}.count) of \(lead.tasks.count) completed") }; Section { Button { addingTask=true } label:{Label("Add task",systemImage:"plus")} } } }

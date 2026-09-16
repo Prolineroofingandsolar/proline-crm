@@ -751,7 +751,7 @@ struct WorkerJobDetailView: View {
                         VStack(alignment: .leading, spacing: 6) { Text(lead.name).font(.largeTitle.bold()); Text("\(lead.jobRef) · \(lead.jobType)").foregroundStyle(.secondary); Text(lead.stage.displayName).font(.caption.bold()).foregroundStyle(.orange).padding(.horizontal, 9).padding(.vertical, 5).background(Color.orange.opacity(0.12), in: Capsule()) }
                         VStack(spacing: 0) {
                             workerDetailRow("Address", lead.address.isEmpty ? "Not added" : lead.address, "mappin.and.ellipse")
-                            if !lead.phone.isEmpty { HStack { Label("Customer", systemImage: "phone.fill"); Spacer(); PhoneActionMenu(number: lead.phone, label: lead.phone) }.padding(15) }
+                            if !lead.phone.isEmpty { HStack { Label("Customer", systemImage: "phone.fill"); Spacer(); PhoneActionMenu(number: lead.phone, label: lead.phone, lead: lead) }.padding(15) }
                             if let start = lead.startDate { workerDetailRow("Starts", start, "calendar") }
                             if let end = lead.endDate { workerDetailRow("Expected finish", end, "flag.checkered") }
                         }.background(.background, in: RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(.quaternary))
