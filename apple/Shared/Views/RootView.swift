@@ -86,6 +86,7 @@ struct RootView: View {
             .onAppear { ensureAllowedSelection() }
             .onChange(of: appState.selectedSection) { _, _ in ensureAllowedSelection() }
             .onChange(of: appState.pendingLeadID) { _, id in if let id { showLead(id) } }
+        .onChange(of: appState.pendingSection) { _, section in if let section { appState.pendingSection = nil; showSection(section) } }
             .onOpenURL(perform: openDeepLink)
             .onReceive(NotificationCenter.default.publisher(for: .crmNotificationDeepLink)) { note in
                 if let url = note.object as? URL { openDeepLink(url) }
@@ -169,6 +170,7 @@ struct RootView: View {
             .sheet(isPresented: $appState.showingAssistant) { OperationsAssistantView() }
             .sheet(item: $appState.pendingCallOutcome) { CallOutcomeSheet(pending: $0) }
             .onChange(of: appState.pendingLeadID) { _, id in if let id { showLead(id) } }
+        .onChange(of: appState.pendingSection) { _, section in if let section { appState.pendingSection = nil; showSection(section) } }
             .onOpenURL(perform: openDeepLink)
             .onReceive(NotificationCenter.default.publisher(for: .crmNotificationDeepLink)) { note in
                 if let url = note.object as? URL { openDeepLink(url) }
@@ -375,7 +377,16 @@ private struct SectionContent: View {
                 description: Text("This section contains restricted company or financial information."))
         } else {
             switch section {
-            case .dashboard: if appState.usesAdminInterface { DashboardView() } else { WorkerHomeView() }
+            case .dashboard:
+                if appState.usesAdminInterface {
+                    #if os(iOS)
+                    FocusTodayView()
+                    #else
+                    DashboardView()
+                    #endif
+                } else {
+                    WorkerHomeView()
+                }
             case .pipeline: PipelineView()
             case .jobs: if appState.usesAdminInterface { JobsView() } else { WorkerJobsView() }
             case .tasks: if appState.usesAdminInterface { TasksView() } else { WorkerTasksView() }

@@ -89,6 +89,8 @@ final class AppState {
     var currentUser: CRMUser?
     /// Set by `openLead`; the root view pushes this lead onto the visible navigation stack and clears it.
     var pendingLeadID: String?
+    /// Set to show a section from anywhere; the root view routes it (a tab, or a push inside More) and clears it.
+    var pendingSection: AppSection?
     var selectedSection: AppSection = .dashboard
     var navigationResetID = UUID()
     var isLoading = false
@@ -124,7 +126,7 @@ final class AppState {
     var usesAdminInterface: Bool { isAdmin && !usesWorkerInterface }
     var isWorkerPreview: Bool {
         #if DEBUG
-            ProcessInfo.processInfo.arguments.contains("--worker-preview")
+            ProcessInfo.processInfo.arguments.contains("--worker-preview") || ProcessInfo.processInfo.arguments.contains("--admin-preview")
         #else
             false
         #endif
@@ -366,10 +368,12 @@ final class AppState {
 
     #if DEBUG
         private func loadWorkerPreview() {
+            let adminPreview = ProcessInfo.processInfo.arguments.contains("--admin-preview")
             let worker = CRMUser(
-                id: "worker-preview", name: "Sam Worker", username: "worker-preview", role: "user", dayRate: nil, cisRate: nil,
+                id: "worker-preview", name: adminPreview ? "Will" : "Sam Worker", username: "worker-preview", role: adminPreview ? "admin" : "user", dayRate: nil, cisRate: nil,
                 utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
             let today = SupabaseService.today
+            if adminPreview { isAdminUsingSimpleView = false }
             currentUser = worker
             users = [worker]
             leads = [
@@ -404,6 +408,15 @@ final class AppState {
                     id: "preview-general-1", title: "Send site photos to the office", completed: false, completedDate: nil, dueDate: today,
                     priority: "medium", category: "General", notes: nil, createdAt: today, assignedTo: [worker.id])
             ]
+            if adminPreview {
+                let yesterday = SupabaseService.localDay(for: Calendar.current.date(byAdding: .day, value: -1, to: .now) ?? .now)
+                let lastWeek = SupabaseService.localDay(for: Calendar.current.date(byAdding: .day, value: -8, to: .now) ?? .now)
+                leads += [
+                    Lead(id: "preview-lead-1", jobRef: "JOB-201", name: "Mr Patel", phone: "07000 111222", email: "", address: "4 Orchard Way, Keynsham", jobType: "Solar Installation", stage: .quoteSent, value: 8400, deposit: 2520, depositPaid: false, balance: 8400, source: "Website", assignedTo: worker.name, surveyDate: nil, surveyTime: nil, startDate: nil, endDate: nil, completedDate: nil, paidDate: nil, progress: 0, tasks: [], photos: [], notes: [], files: [], materials: [], wonDate: nil, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: lastWeek, updatedAt: lastWeek),
+                    Lead(id: "preview-lead-2", jobRef: "JOB-202", name: "Mrs Hughes", phone: "07000 333444", email: "", address: "19 Mill Lane, Bath", jobType: "Roof Repair", stage: .newLead, value: 0, deposit: 0, depositPaid: false, balance: 0, source: "Referral", assignedTo: worker.name, surveyDate: today, surveyTime: "10:30", startDate: nil, endDate: nil, completedDate: nil, paidDate: nil, progress: 0, tasks: [CRMTask(id: "preview-task-4", title: "Call customer to discuss requirements", completed: false, completedDate: nil, dueDate: yesterday, isTemplate: true)], photos: [], notes: [], files: [], materials: [], wonDate: nil, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: yesterday, updatedAt: yesterday),
+                    Lead(id: "preview-lead-3", jobRef: "JOB-203", name: "Mr Okafor", phone: "", email: "", address: "2 Station Road, Bristol", jobType: "Flat Roof", stage: .completed, value: 3200, deposit: 960, depositPaid: true, balance: 2240, source: "Google", assignedTo: worker.name, surveyDate: nil, surveyTime: nil, startDate: lastWeek, endDate: yesterday, completedDate: yesterday, paidDate: nil, progress: 100, tasks: [], photos: [], notes: [], files: [], materials: [], wonDate: lastWeek, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: lastWeek, updatedAt: yesterday),
+                ]
+            }
             timesheets = []
             if ProcessInfo.processInfo.arguments.contains("--worker-preview-tools") {
                 selectedSection = .tools
