@@ -73,7 +73,7 @@ export default function App() {
     if (!isMacApp() || !isLoaded || !currentUserId) return;
     const today = new Date().toISOString().split('T')[0];
     const surveysToday = leads.filter(lead => lead.surveyDate === today).length;
-    const overdueJobs = leads.filter(lead => lead.endDate && lead.endDate < today && !['Completed', 'Paid'].includes(lead.stage)).length;
+    const overdueJobs = leads.filter(lead => lead.endDate && lead.endDate < today && !['Completed', 'Waiting for Payment', 'Paid'].includes(lead.stage)).length;
     const dueTasks = generalTasks.filter(task => !task.completed && task.dueDate && task.dueDate <= today).length;
     const badgeCount = surveysToday + overdueJobs + dueTasks;
 

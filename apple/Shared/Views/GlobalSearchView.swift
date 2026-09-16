@@ -42,7 +42,7 @@ struct GlobalSearchView: View {
                         ForEach(leads) { lead in
                             NavigationLink(value: SearchRoute.lead(lead.id)) {
                                 HStack(spacing: 12) {
-                                    Image(systemName: [.won, .scheduled, .inProgress, .completed, .paid].contains(lead.stage) ? "hammer" : "person.crop.circle")
+                                    Image(systemName: [.won, .scheduled, .inProgress, .completed, .waitingForPayment, .paid].contains(lead.stage) ? "hammer" : "person.crop.circle")
                                         .foregroundStyle(.orange).frame(width: 28)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(lead.name).fontWeight(.semibold)

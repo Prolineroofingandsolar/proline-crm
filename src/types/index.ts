@@ -15,6 +15,7 @@ export type Stage =
   | 'Won'
   | 'In Progress'
   | 'Completed'
+  | 'Waiting for Payment'
   | 'Paid';
 
 export interface Task {

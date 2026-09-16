@@ -454,6 +454,7 @@
       case .scheduled: .teal
       case .inProgress: .cyan
       case .completed: .mint
+      case .waitingForPayment: .indigo
       case .lost: .gray
       }
     }

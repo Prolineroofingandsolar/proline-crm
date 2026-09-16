@@ -13,6 +13,7 @@ const stageConfig: Record<Stage, { header: string; dot: string; bg: string; drop
   'Won':           { header: 'bg-green-500',    dot: 'bg-green-400',  bg: 'bg-green-50',   dropBg: 'bg-green-100' },
   'In Progress':   { header: 'bg-orange-600',   dot: 'bg-orange-400', bg: 'bg-orange-50',  dropBg: 'bg-orange-100' },
   'Completed':     { header: 'bg-emerald-600',  dot: 'bg-emerald-400',bg: 'bg-emerald-50', dropBg: 'bg-emerald-100' },
+  'Waiting for Payment': { header: 'bg-indigo-600', dot: 'bg-indigo-400', bg: 'bg-indigo-50', dropBg: 'bg-indigo-100' },
   'Paid':          { header: 'bg-teal-600',     dot: 'bg-teal-400',   bg: 'bg-teal-50',    dropBg: 'bg-teal-100' },
 };
 

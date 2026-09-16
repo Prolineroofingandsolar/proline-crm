@@ -5,7 +5,7 @@ import { TrendingUp, PoundSterling, Users, Briefcase } from 'lucide-react';
 export default function ReportsPage() {
   const { leads } = useStore();
 
-  const byStage = ['New Lead','Survey Booked','Quote Sent','Won','In Progress','Completed','Paid'].map(stage => ({
+  const byStage = ['New Lead','Survey Booked','Quote Sent','Won','In Progress','Completed','Waiting for Payment','Paid'].map(stage => ({
     stage,
     count: leads.filter(l => l.stage === stage).length,
     value: leads.filter(l => l.stage === stage).reduce((s, l) => s + l.value, 0),
@@ -28,7 +28,7 @@ export default function ReportsPage() {
     ? leads.filter(l => l.value > 0).reduce((s, l) => s + l.value, 0) / leads.filter(l => l.value > 0).length
     : 0;
   const convRate = leads.length
-    ? Math.round(leads.filter(l => ['Won','In Progress','Completed','Paid'].includes(l.stage)).length / leads.length * 100)
+    ? Math.round(leads.filter(l => ['Won','In Progress','Completed','Waiting for Payment','Paid'].includes(l.stage)).length / leads.length * 100)
     : 0;
 
   const maxCount = Math.max(...byStage.map(s => s.count), 1);
@@ -127,7 +127,7 @@ export default function ReportsPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h2 className="font-bold text-gray-800 mb-4">Outstanding Balances</h2>
           <div className="space-y-2">
-            {leads.filter(l => l.balance > 0 && ['In Progress','Completed','Won'].includes(l.stage)).map(lead => (
+            {leads.filter(l => l.balance > 0 && ['In Progress','Completed','Waiting for Payment','Won'].includes(l.stage)).map(lead => (
               <div key={lead.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
                 <div className="w-8 h-8 rounded-full bg-red-100 text-red-700 flex items-center justify-center font-bold text-xs shrink-0">
                   {lead.name[0]}
@@ -139,7 +139,7 @@ export default function ReportsPage() {
                 <span className="text-sm font-bold text-red-600 shrink-0">{formatCurrency(lead.balance)}</span>
               </div>
             ))}
-            {leads.filter(l => l.balance > 0 && ['In Progress','Completed','Won'].includes(l.stage)).length === 0 && (
+            {leads.filter(l => l.balance > 0 && ['In Progress','Completed','Waiting for Payment','Won'].includes(l.stage)).length === 0 && (
               <p className="text-sm text-gray-400 text-center py-4">No outstanding balances</p>
             )}
           </div>

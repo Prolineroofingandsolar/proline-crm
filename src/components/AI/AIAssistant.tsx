@@ -57,7 +57,7 @@ const CRM_TOOLS = [
         lead_id: { type: 'string', description: 'The lead ID (from get_pipeline)' },
         stage: {
           type: 'string',
-          enum: ['New Lead', 'Survey Booked', 'Quote Sent', 'In Progress', 'Completed', 'Paid'],
+          enum: ['New Lead', 'Survey Booked', 'Quote Sent', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid'],
         },
       },
       required: ['lead_id', 'stage'],
@@ -298,7 +298,7 @@ function executeTool(name: string, input: Record<string, unknown>): unknown {
           .slice(0, 5)
           .map(l => ({ name: l.name, surveyDate: l.surveyDate, surveyTime: l.surveyTime, jobType: l.jobType })),
         outstandingBalances: store.leads
-          .filter(l => l.balance > 0 && ['In Progress', 'Completed', 'Won'].includes(l.stage))
+          .filter(l => l.balance > 0 && ['In Progress', 'Completed', 'Waiting for Payment', 'Won'].includes(l.stage))
           .map(l => ({ name: l.name, balance: l.balance, stage: l.stage, jobRef: l.jobRef })),
         overdueGeneralTasks: store.generalTasks
           .filter(t => !t.completed && t.dueDate && t.dueDate < today)
@@ -332,7 +332,7 @@ Your tools let you:
 - Add general reminders (MOT, admin, etc.)
 - Draft professional WhatsApp/email/SMS messages for customers
 
-Pipeline stages in order: New Lead → Survey Booked → Quote Sent → Won → In Progress → Completed → Paid
+Pipeline stages in order: New Lead → Survey Booked → Quote Sent → Won → In Progress → Completed → Waiting for Payment → Paid
 
 Tips:
 - When drafting messages, make them warm, professional and concise — use the customer's first name

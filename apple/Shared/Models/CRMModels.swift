@@ -24,10 +24,17 @@ enum LeadStage: String, Codable, CaseIterable, Identifiable, Sendable {
     case scheduled = "Scheduled"
     case inProgress = "In Progress"
     case completed = "Completed"
+    case waitingForPayment = "Waiting for Payment"
     case paid = "Paid"
     case lost = "Lost"
     var id: String { rawValue }
     var displayName: String { self == .newLead ? "New Enquiry" : rawValue }
+}
+
+struct CRMSubtask: Codable, Identifiable, Hashable, Sendable {
+    let id: String
+    var title: String
+    var completed: Bool
 }
 
 struct CRMTask: Codable, Identifiable, Hashable, Sendable {
@@ -37,7 +44,10 @@ struct CRMTask: Codable, Identifiable, Hashable, Sendable {
     var completedDate: String?
     var dueDate: String?
     var isTemplate: Bool?
-    enum CodingKeys: String, CodingKey { case id, title, completed, dueDate = "dueDate", isTemplate = "isTemplate", completedDate = "completedDate" }
+    var priority: String? = nil
+    var notes: String? = nil
+    var subtasks: [CRMSubtask]? = nil
+    enum CodingKeys: String, CodingKey { case id, title, completed, priority, notes, subtasks, dueDate = "dueDate", isTemplate = "isTemplate", completedDate = "completedDate" }
 }
 
 struct CRMPhoto: Codable, Identifiable, Hashable, Sendable { let id: String; var url: String; var category: String; var date: String; var caption: String? }
@@ -48,7 +58,13 @@ struct JobTaskSuggestion: Codable, Identifiable, Hashable, Sendable {
     var id: String; var action: JobTaskSuggestionAction; var taskID: String?; var title: String; var reason: String; var dueDate: String?
     enum CodingKeys: String, CodingKey { case id, action, title, reason; case taskID = "task_id"; case dueDate = "due_date" }
 }
-struct JobNoteAnalysis: Codable, Sendable { var summary: String; var suggestions: [JobTaskSuggestion] }
+struct JobMaterialSuggestion: Codable, Identifiable, Hashable, Sendable {
+    var id: String; var name: String; var quantity: Double; var unit: String; var reason: String
+}
+struct JobNoteAnalysis: Codable, Sendable {
+    var summary: String; var suggestions: [JobTaskSuggestion]; var materials: [JobMaterialSuggestion]?; var analysisMode: String?
+    enum CodingKeys: String, CodingKey { case summary, suggestions, materials; case analysisMode = "analysis_mode" }
+}
 
 enum CRMAssistantActionKind: String, Codable, Sendable {
     case addJobTask = "add_job_task", completeJobTask = "complete_job_task", createGeneralTask = "create_general_task"

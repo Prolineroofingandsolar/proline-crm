@@ -14,10 +14,10 @@ export default function DashboardPage() {
     totalLeads: leads.filter(l => ['New Lead', 'Survey Booked', 'Quote Sent'].includes(l.stage)).length,
     activeJobs: leads.filter(l => l.stage === 'In Progress').length,
     revenue: leads.filter(l => l.stage === 'Paid').reduce((s, l) => s + l.value, 0),
-    pipeline: leads.filter(l => ['Won', 'In Progress', 'Completed'].includes(l.stage)).reduce((s, l) => s + l.value, 0),
+    pipeline: leads.filter(l => ['Won', 'In Progress', 'Completed', 'Waiting for Payment'].includes(l.stage)).reduce((s, l) => s + l.value, 0),
     won: leads.filter(l => l.stage === 'Won').length,
-    completed: leads.filter(l => l.stage === 'Completed').length,
-    convRate: leads.length ? Math.round(leads.filter(l => ['Won','In Progress','Completed','Paid'].includes(l.stage)).length / leads.length * 100) : 0,
+    completed: leads.filter(l => ['Completed', 'Waiting for Payment'].includes(l.stage)).length,
+    convRate: leads.length ? Math.round(leads.filter(l => ['Won','In Progress','Completed','Waiting for Payment','Paid'].includes(l.stage)).length / leads.length * 100) : 0,
   };
 
   // Automations
@@ -27,7 +27,7 @@ export default function DashboardPage() {
   const jobsStartingTmrw   = leads.filter(l => l.startDate === tomorrow);
   const jobsEndingToday    = leads.filter(l => l.endDate === today);
   const overduePayments    = leads.filter(l => {
-    if (l.stage !== 'Completed') return false;
+    if (!['Completed', 'Waiting for Payment'].includes(l.stage)) return false;
     if (!l.completedDate) return false;
     const days = Math.floor((Date.now() - new Date(l.completedDate).getTime()) / 86400000);
     return days >= 7;
@@ -152,7 +152,7 @@ export default function DashboardPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
         <h2 className="font-bold text-gray-800 mb-4">Pipeline Breakdown</h2>
         <div className="space-y-3">
-          {(['New Lead','Survey Booked','Quote Sent','Won','In Progress','Completed','Paid'] as const).map(stage => {
+          {(['New Lead','Survey Booked','Quote Sent','Won','In Progress','Completed','Waiting for Payment','Paid'] as const).map(stage => {
             const count = leads.filter(l => l.stage === stage).length;
             const val = leads.filter(l => l.stage === stage).reduce((s, l) => s + l.value, 0);
             const pct = leads.length ? Math.round(count / leads.length * 100) : 0;

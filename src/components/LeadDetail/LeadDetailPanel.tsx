@@ -21,6 +21,7 @@ const stageColors: Record<string, string> = {
   'Won': 'bg-green-100 text-green-700',
   'In Progress': 'bg-orange-100 text-orange-700',
   'Completed': 'bg-emerald-100 text-emerald-700',
+  'Waiting for Payment': 'bg-indigo-100 text-indigo-700',
   'Paid': 'bg-teal-100 text-teal-700',
 };
 
@@ -141,6 +142,12 @@ export default function LeadDetailPanel() {
               </button>
             )}
             {lead.stage === 'Completed' && (
+              <button onClick={() => moveToStage(lead.id, 'Waiting for Payment')}
+                className="w-full flex items-center justify-center gap-1.5 text-sm bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2 rounded-xl font-medium transition-colors">
+                <CreditCard size={15} /> Move to Waiting for Payment
+              </button>
+            )}
+            {lead.stage === 'Waiting for Payment' && (
               <button onClick={handleMarkPaid}
                 className="w-full flex items-center justify-center gap-1.5 text-sm bg-teal-600 text-white hover:bg-teal-700 px-4 py-2 rounded-xl font-medium transition-colors">
                 <CreditCard size={15} /> Mark Paid

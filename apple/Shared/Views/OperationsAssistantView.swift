@@ -28,7 +28,7 @@ struct OperationsAssistantView: View {
     @State private var choosingAttachment = false
     @State private var attachmentError: String?
 
-    private let suggestions = ["What needs attention today?", "Which quotes need following up?", "Show outstanding balances", "What surveys are coming up?", "Summarise active jobs"]
+    private let suggestions = ["Create my daily company plan", "Which quotes need following up?", "What is putting live jobs at risk?", "How can we grow this week?", "Show outstanding balances"]
 
     var body: some View {
         NavigationStack {
@@ -73,6 +73,11 @@ struct OperationsAssistantView: View {
             .navigationTitle("ProLine Assistant")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
             .sheet(item: $pendingAction) { action in actionReview(action) }
+            .onAppear {
+                guard let prompt = appState.assistantDraftPrompt else { return }
+                appState.assistantDraftPrompt = nil
+                Task { await submit(prompt) }
+            }
             #if !os(macOS)
             .fileImporter(isPresented: $choosingAttachment, allowedContentTypes: [.pdf, .image]) { selectAttachment($0) }
             #endif
@@ -102,7 +107,7 @@ struct OperationsAssistantView: View {
         } else {
             let local = answer(prompt)
             let detail = appState.assistantErrorMessage.map { "\n\nConnection detail: \($0)" } ?? ""
-            messages.append(AssistantMessage(role: .assistant, text: local.text + "\n\nGemini is not connected yet, so this answer used the app’s local read-only assistant." + detail, leadIDs: local.ids, actions: []))
+            messages.append(AssistantMessage(role: .assistant, text: local.text + "\n\nProline could not reach the live assistant, so this answer used the app’s local read-only fallback." + detail, leadIDs: local.ids, actions: []))
         }
         isThinking = false
     }
@@ -161,13 +166,38 @@ struct OperationsAssistantView: View {
 enum OperationsInsights {
     static func answer(_ prompt: String, leads: [Lead], tasks: [GeneralTask], today: String) -> (text: String, ids: [String]) {
         let query = prompt.lowercased()
+        if query.contains("daily") || query.contains("company plan") || query.contains("plan my day") || query.contains("priorit") || query.contains("risk") {
+            let active = leads.filter { ![.completed, .waitingForPayment, .paid, .lost].contains($0.stage) }
+            let overdue = active.filter { !($0.endDate ?? "").isEmpty && ($0.endDate ?? "") < today }.sorted { ($0.endDate ?? "") < ($1.endDate ?? "") }
+            let dueTasks = tasks.filter { !$0.completed && !($0.dueDate ?? "").isEmpty && ($0.dueDate ?? "") <= today }.sorted { ($0.dueDate ?? "") < ($1.dueDate ?? "") }
+            let surveys = active.filter { $0.surveyDate == today }
+            let deposits = active.filter { [.won, .scheduled, .inProgress].contains($0.stage) && $0.deposit > 0 && !$0.depositPaid }
+            let balances = leads.filter { [.completed, .waitingForPayment].contains($0.stage) && $0.balance > 0 }.sorted { $0.balance > $1.balance }
+            let enquiries = active.filter { $0.stage == .newLead }
+            let quotes = active.filter { $0.stage == .quoteSent }.sorted { $0.updatedAt < $1.updatedAt }
+            var lines: [String] = []
+            var ids: [String] = []
+            func add(_ text: String, _ rows: [Lead]) {
+                lines.append("\(lines.count + 1). \(text)")
+                for row in rows where !ids.contains(row.id) { ids.append(row.id) }
+            }
+            if !overdue.isEmpty { add("Recover overdue jobs: \(overdue.prefix(3).map(\.name).joined(separator: ", ")). Confirm blockers, crew and a revised finish date; these jobs are past their planned end date.", overdue) }
+            if !dueTasks.isEmpty { add("Complete \(dueTasks.count) tasks due today or overdue: \(dueTasks.prefix(3).map(\.title).joined(separator: ", ")). Confirm an owner and resolve blockers.", []) }
+            if !surveys.isEmpty { add("Confirm today’s surveys: \(surveys.prefix(3).map(\.name).joined(separator: ", ")). Check access and attendance.", surveys) }
+            if !deposits.isEmpty { add("Check unpaid deposits on \(deposits.count) won or active jobs. Confirm payment arrangements before committing further materials or labour.", deposits) }
+            if !balances.isEmpty { add("Review completed-job balances of \(balances.reduce(0) { $0 + $1.balance }.formatted(.currency(code: "GBP"))). Check agreed payment terms and follow up where due.", balances) }
+            if !enquiries.isEmpty { add("Contact \(enquiries.count) new enquiries to qualify the work and agree the next step.", enquiries) }
+            if !quotes.isEmpty { add("Follow up \(quotes.count) sent quotes, starting with the oldest updated: \(quotes.prefix(3).map(\.name).joined(separator: ", ")). Confirm the customer’s decision and next contact date.", quotes) }
+            if lines.isEmpty { return ("No urgent items were identified in the available CRM records. Review upcoming work, crew availability and materials before planning the day. Missing dates or records may hide risks.", []) }
+            return ("Daily company plan — ranked from available CRM records:\n\n" + lines.joined(separator: "\n\n") + "\n\nCheck crew availability, materials and weather before confirming the plan; these risks have not been verified.", ids)
+        }
         if query.contains("quote") || query.contains("follow") {
             let rows = leads.filter { $0.stage == .quoteSent }.sorted { $0.updatedAt < $1.updatedAt }
             let value = rows.reduce(0) { $0 + $1.value }
             return rows.isEmpty ? ("There are no sent quotes waiting for follow-up.", []) : ("\(rows.count) sent quote\(rows.count == 1 ? "" : "s") need attention, worth \(value.formatted(.currency(code: "GBP"))). Oldest updates are shown first.", rows.map(\.id))
         }
         if query.contains("balance") || query.contains("payment") || query.contains("owe") {
-            let rows = leads.filter { $0.balance > 0 && [.won, .scheduled, .inProgress, .completed].contains($0.stage) }.sorted { $0.balance > $1.balance }
+            let rows = leads.filter { $0.balance > 0 && [.won, .scheduled, .inProgress, .completed, .waitingForPayment].contains($0.stage) }.sorted { $0.balance > $1.balance }
             let total = rows.reduce(0) { $0 + $1.balance }
             return rows.isEmpty ? ("No active jobs have an outstanding balance.", []) : ("Outstanding customer balances total \(total.formatted(.currency(code: "GBP"))) across \(rows.count) job\(rows.count == 1 ? "" : "s").", rows.map(\.id))
         }
@@ -179,7 +209,7 @@ enum OperationsInsights {
             let overdueTasks = tasks.filter { !$0.completed && ($0.dueDate ?? "9999-12-31") < today }
             let newLeads = leads.filter { $0.stage == .newLead }
             let quoteLeads = leads.filter { $0.stage == .quoteSent }
-            let overdueJobs = leads.filter { ($0.endDate ?? "9999-12-31") < today && ![.completed, .paid, .lost].contains($0.stage) }
+            let overdueJobs = leads.filter { ($0.endDate ?? "9999-12-31") < today && ![.completed, .waitingForPayment, .paid, .lost].contains($0.stage) }
             let text = "Today: \(newLeads.count) new enquir\(newLeads.count == 1 ? "y" : "ies"), \(quoteLeads.count) quote follow-up\(quoteLeads.count == 1 ? "" : "s"), \(overdueTasks.count) overdue task\(overdueTasks.count == 1 ? "" : "s"), and \(overdueJobs.count) job\(overdueJobs.count == 1 ? "" : "s") beyond the planned end date."
             return (text, Array((newLeads + quoteLeads + overdueJobs).map(\.id).prefix(8)))
         }

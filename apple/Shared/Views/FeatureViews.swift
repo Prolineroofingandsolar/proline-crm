@@ -21,7 +21,7 @@ struct AccountsWorkspaceView: View {
             switch tab { case .overview: accountsOverview; case .finance: FinanceCentreView(); case .reports: ReportsView(); case .timesheets: TimesheetView(); case .cis: CISView(); case .handover: accountantHandover }
         }.navigationTitle("Accounts").fileExporter(isPresented: $exporting, document: exportDocument, contentType: .commaSeparatedText, defaultFilename: "ProLine-Accountant-Handover-\(SupabaseService.today)") { result in if case .failure = result { appState.errorMessage = "The accountant export could not be saved." } }
     }
-    private var activeJobs: [Lead] { appState.leads.filter { [.won, .scheduled, .inProgress, .completed, .paid].contains($0.stage) } }
+    private var activeJobs: [Lead] { appState.leads.filter { [.won, .scheduled, .inProgress, .completed, .waitingForPayment, .paid].contains($0.stage) } }
     private var collected: Double { activeJobs.reduce(0) { $0 + max(0, $1.value - $1.balance) } }
     private var due: Double { activeJobs.reduce(0) { $0 + max(0, $1.balance) } }
     private var payroll: Double { appState.timesheets.reduce(0) { $0 + $1.amount } }
@@ -36,8 +36,8 @@ struct AccountsWorkspaceView: View {
 }
 
 struct RoofingToolsView: View {
-    private enum Tool: String, CaseIterable, Identifiable { case pitch = "Pitch finder", gauge = "Gauge finder"; var id: String { rawValue } }
-    @State private var tool: Tool = .pitch
+    private enum Tool: String, CaseIterable, Identifiable { case pitch = "Pitch finder", gauge = "Gauger"; var id: String { rawValue } }
+    @State private var tool: Tool = ProcessInfo.processInfo.arguments.contains("--worker-preview-tools") ? .gauge : .pitch
     var body: some View {
         VStack(spacing: 0) {
             HStack { VStack(alignment: .leading, spacing: 3) { Text("Roofing tools").font(.system(size: 29, weight: .bold)); Text("Fast site calculations without leaving the CRM.").foregroundStyle(.secondary) }; Spacer() }.padding(.horizontal, 24).padding(.top, 18).padding(.bottom, 12)
@@ -51,31 +51,52 @@ struct RoofingToolsView: View {
 private struct RoofPitchFinder: View {
     @State private var rise = ""
     @State private var run = ""
+    @State private var showsCalculator = false
     private var riseValue: Double { Double(rise.replacingOccurrences(of: ",", with: ".")) ?? 0 }
     private var runValue: Double { Double(run.replacingOccurrences(of: ",", with: ".")) ?? 0 }
     private var angle: Double? { guard riseValue > 0, runValue > 0 else { return nil }; return atan(riseValue / runValue) * 180 / .pi }
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ToolIntro(icon: "angle", title: "Roof pitch finder", detail: "Place the iPhone flat against the roof slope for a live reading, like the Measure app level.")
+        VStack(alignment: .leading, spacing: 20) {
+            ToolIntro(icon: "angle", title: "Pitch finder", detail: "Put your iPhone against the roof and read the pitch.")
             #if os(iOS)
             LiveRoofLevel()
-            Text("Or calculate from measurements").font(.headline).padding(.top, 4)
+            DisclosureGroup(isExpanded: $showsCalculator) {
+                pitchCalculator.padding(.top, 14)
+            } label: {
+                Label("Calculate from rise and run", systemImage: "ruler")
+                    .font(.headline)
+            }
+            .padding(16)
+            .background(.background, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(.quaternary))
             #else
             Label("Live level is available on iPhone", systemImage: "iphone.gen3").foregroundStyle(.secondary).padding(14).frame(maxWidth: .infinity, alignment: .leading).background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+            pitchCalculator
             #endif
-            HStack(spacing: 14) { ToolNumberField(title: "Vertical rise", placeholder: "e.g. 1200", unit: "mm", value: $rise); ToolNumberField(title: "Horizontal run", placeholder: "e.g. 2400", unit: "mm", value: $run) }
-            if let angle {
-                VStack(alignment: .leading, spacing: 8) { Text("Calculated pitch").font(.caption.bold()).foregroundStyle(.secondary); Text("\(angle, specifier: "%.1f")°").font(.system(size: 42, weight: .bold)).foregroundStyle(.orange); Text("Ratio 1 : \(runValue / riseValue, specifier: "%.2f")").font(.headline); Text(pitchAdvice(angle)).foregroundStyle(.secondary) }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-            } else { ToolEmpty(text: "Enter both measurements to calculate the pitch.") }
         }
     }
-    private func pitchAdvice(_ angle: Double) -> String { angle < 15 ? "Low pitch—check the selected tile or sheet manufacturer's minimum pitch." : angle < 22.5 ? "Low-to-moderate pitch—confirm headlap and product limits." : "Typical pitched-roof range. Always confirm the tile manufacturer's specification." }
+    private var pitchCalculator: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) { ToolNumberField(title: "Rise", placeholder: "1200", unit: "mm", value: $rise); ToolNumberField(title: "Run", placeholder: "2400", unit: "mm", value: $run) }
+            if let angle {
+                HStack(spacing: 16) {
+                    Text("\(angle, specifier: "%.1f")°").font(.system(size: 40, weight: .bold, design: .rounded)).monospacedDigit().foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 3) { Text("Calculated pitch").fontWeight(.semibold); Text("1 : \(runValue / riseValue, specifier: "%.2f") · \(pitchAdvice(angle))").font(.caption).foregroundStyle(.secondary) }
+                    Spacer()
+                }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            } else { Text("Enter the vertical rise and horizontal run.").font(.caption).foregroundStyle(.secondary) }
+        }
+    }
+    private func pitchAdvice(_ angle: Double) -> String { angle < 15 ? "Very low pitch" : angle < 22.5 ? "Low pitch" : "Pitched roof" }
 }
 
 private struct TileGaugeFinder: View {
     private enum Step: Int, CaseIterable { case tile = 1, roof, result }
-    private enum RidgeType: String, CaseIterable, Identifiable { case dry = "Dry ridge", mortar = "Mortar ridge", dryHip = "Dry hip", other = "Other system"; var id: String { rawValue } }
-    private enum Exposure: String, CaseIterable, Identifiable { case sheltered = "Sheltered", normal = "Normal", exposed = "Exposed / coastal"; var id: String { rawValue } }
+    private enum RidgeType: String, CaseIterable, Identifiable {
+        case mortar = "Mortar ridge"
+        case dry = "Dry ridge"
+        var id: String { rawValue }
+    }
     private static let tiles = [
         TileSpecification(make:"Somerset / Bridgwater",name:"Somerset No. 13 (reclaimed)",pitch:"30° historic guidance",minGauge:295,maxGauge:325,headlap:"Set to suit the reclaimed batch",tileLength:394,minPitchDegrees:30,gaugeBasis:"Somerset trade working range—measure and trial-lay the reclaimed batch"),
         TileSpecification(make:"Somerset / Bridgwater",name:"Sandtoft Bridgwater Double Roman",pitch:"30°",minGauge:345,maxGauge:345,headlap:"75 mm fixed",tileLength:420,minPitchDegrees:30,fasciaProjection:"45–55 mm"),
@@ -96,22 +117,19 @@ private struct TileGaugeFinder: View {
     ]
     @State private var tileID = "Marley Modern"
     @State private var search = ""
-    @State private var step: Step = .tile
+    @State private var step: Step = ProcessInfo.processInfo.arguments.contains("--worker-preview-gauge-result") ? .result : (ProcessInfo.processInfo.arguments.contains("--worker-preview-gauge-details") ? .roof : .tile)
     @State private var apexMeasurement = ""
-    @State private var roofIsNotSquare = false
-    @State private var leftApexMeasurement = ""
-    @State private var centreApexMeasurement = ""
-    @State private var rightApexMeasurement = ""
-    @State private var ridgeType: RidgeType = .dry
-    @State private var ridgeSystem = "Marley Universal RidgeFast"
-    @State private var exposure: Exposure = .normal
-    @State private var roofPitch = ""
-    @State private var breathableUnderlay = true
+    @State private var roofIsNotSquare = ProcessInfo.processInfo.arguments.contains("--worker-preview-gauge-result")
+    @State private var leftApexMeasurement = ProcessInfo.processInfo.arguments.contains("--worker-preview-gauge-result") ? "4980" : ""
+    @State private var centreApexMeasurement = ProcessInfo.processInfo.arguments.contains("--worker-preview-gauge-result") ? "5000" : ""
+    @State private var rightApexMeasurement = ProcessInfo.processInfo.arguments.contains("--worker-preview-gauge-result") ? "5020" : ""
+    @State private var ridgeType: RidgeType = .mortar
+    @State private var topBattenSetback = ProcessInfo.processInfo.arguments.contains("--worker-preview-gauge-result") ? "100" : ""
+    @State private var roofPitch = ProcessInfo.processInfo.arguments.contains("--worker-preview-gauge-result") ? "30" : ""
     private var tile: TileSpecification { Self.tiles.first { $0.id == tileID } ?? Self.tiles[0] }
     private var matches: [TileSpecification] { let q=search.trimmingCharacters(in:.whitespaces); return q.isEmpty ? Self.tiles : Self.tiles.filter { $0.fullName.localizedCaseInsensitiveContains(q) } }
     private func number(_ value: String) -> Double { Double(value.replacingOccurrences(of: ",", with: ".")) ?? 0 }
-    private var hasVerifiedRidgeSetback: Bool { ridgeType == .dry && tile.make == "Marley" && ridgeSystem == "Marley Universal RidgeFast" }
-    private var ridgeSetback: Double? { ridgeType == .dry ? 45 : nil }
+    private var ridgeSetback: Double? { number(topBattenSetback) > 0 ? number(topBattenSetback) : nil }
     private var enteredRafterLengths: [Double] {
         roofIsNotSquare
             ? [number(leftApexMeasurement), number(centreApexMeasurement), number(rightApexMeasurement)]
@@ -128,8 +146,7 @@ private struct TileGaugeFinder: View {
     private var canCalculate: Bool { !enteredRafterLengths.contains(where: { $0 <= 0 }) && ridgeSetback != nil && pitchIsSuitable }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            ToolIntro(icon: "ruler", title: "Tile & batten set-out", detail: "Follow three quick steps to identify the tile, describe the roof and produce a practical batten gauge.")
-            stepStrip
+            ToolIntro(icon: "ruler", title: "Gauger", detail: "Choose the tile, enter two measurements and get the batten gauge.")
             Group {
                 switch step {
                 case .tile: tileStep
@@ -159,38 +176,41 @@ private struct TileGaugeFinder: View {
     }
 
     private var tileStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Choose tile").font(.title2.bold())
+            HStack { Image(systemName:"magnifyingglass").foregroundStyle(.secondary); TextField("Type tile name or manufacturer",text:$search).textFieldStyle(.plain); if !search.isEmpty { Button { search="" } label:{Image(systemName:"xmark.circle.fill")}.buttonStyle(.plain).foregroundStyle(.secondary) } }.padding(12).background(.quaternary.opacity(0.35),in:RoundedRectangle(cornerRadius:10))
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(matches) { product in
+                        Button { tileID = product.id; search = "" } label: {
+                            HStack { VStack(alignment:.leading,spacing:2){Text(product.name).fontWeight(tileID == product.id ? .semibold:.regular);Text(product.make).font(.caption).foregroundStyle(.secondary)}; Spacer(); if tileID == product.id { Image(systemName:"checkmark.circle.fill").foregroundStyle(.orange) } }.padding(12).contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                        if product.id != matches.last?.id { Divider() }
+                    }
+                }
+            }.frame(maxHeight: 230).background(.background, in: RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
             VStack(alignment: .leading, spacing: 10) {
-                Text("1. What tile are you using?").font(.title3.bold())
-                Text("Search by manufacturer, range or local tile name.").font(.callout).foregroundStyle(.secondary)
-                HStack { Image(systemName:"magnifyingglass").foregroundStyle(.secondary); TextField("Search manufacturer or tile name…",text:$search).textFieldStyle(.plain); if !search.isEmpty { Button { search="" } label:{Image(systemName:"xmark.circle.fill")}.buttonStyle(.plain).foregroundStyle(.secondary) } }.padding(11).background(.quaternary.opacity(0.35),in:RoundedRectangle(cornerRadius:9))
-                ScrollView { LazyVStack(spacing:0) { ForEach(matches) { product in Button { tileID=product.id; search="" } label:{HStack{VStack(alignment:.leading,spacing:2){Text(product.name).fontWeight(tileID == product.id ? .semibold:.regular);Text(product.make).font(.caption).foregroundStyle(.secondary)};Spacer();if tileID == product.id {Image(systemName:"checkmark.circle.fill").foregroundStyle(.orange)}}.padding(.horizontal,10).padding(.vertical,8).contentShape(Rectangle())}.buttonStyle(.plain);if product.id != matches.last?.id {Divider()} } } }.frame(maxHeight: search.isEmpty ? 150:260)
-            }.padding(14).background(.background, in: RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
-            HStack { Text(tile.make).font(.caption.bold()).foregroundStyle(.orange); Text(tile.name).font(.headline); Spacer(); Text("\(Self.tiles.count) products").font(.caption).foregroundStyle(.secondary) }
-            if tile.make == "Somerset / Bridgwater" { Label("Regional or reclaimed clay tiles can vary through firing, age and manufacturer. Measure a representative sample and confirm the lap before setting out the full roof.", systemImage:"building.columns").font(.callout).foregroundStyle(.secondary).padding(12).background(Color.brown.opacity(0.08),in:RoundedRectangle(cornerRadius:10)) }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], spacing: 10) { TileSpecCard(title: "TILE LENGTH", value: tile.tileLength.map { "\(Int($0)) mm" } ?? "Verify product"); TileSpecCard(title: "PITCH LIMIT", value: tile.pitch); TileSpecCard(title: "MINIMUM GAUGE", value: gaugeValue(tile.minGauge)); TileSpecCard(title: "MAXIMUM GAUGE", value: gaugeValue(tile.maxGauge)); TileSpecCard(title: "HEADLAP", value: tile.headlap); TileSpecCard(title: "FASCIA PROJECTION", value: tile.fasciaProjection ?? "Verify detail") }
-            if tile.minGauge == tile.maxGauge { Label("This is a fixed-gauge tile: minimum and maximum are both \(gaugeValue(tile.maxGauge)).", systemImage: "lock.fill").font(.caption).foregroundStyle(.secondary) }
-            if let basis = tile.gaugeBasis { Label(basis, systemImage: "info.circle.fill").font(.caption).foregroundStyle(.orange) }
-            Button { withAnimation { step = .roof } } label: { Label("Next: roof details", systemImage: "arrow.right").frame(maxWidth: .infinity) }.buttonStyle(.borderedProminent).tint(.orange).controlSize(.large)
+                Text("Selected").font(.caption.bold()).foregroundStyle(.secondary)
+                Text(tile.fullName).font(.headline)
+                HStack { compactSpec("MAX GAUGE", gaugeValue(tile.maxGauge)); compactSpec("HEADLAP", tile.headlap); compactSpec("MIN PITCH", tile.pitch) }
+            }.padding(16).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            Button { withAnimation { step = .roof } } label: { Label("Use this tile", systemImage: "arrow.right").frame(maxWidth: .infinity) }.buttonStyle(.borderedProminent).tint(.orange).controlSize(.large)
         }
     }
 
     private var roofStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("2. Set the first course and ridge").font(.title3.bold())
-            Text("Position the first batten from the tile projection, then choose the actual ridge system.").foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Ridge finish").font(.caption.bold()).foregroundStyle(.secondary)
-                Picker("Ridge finish", selection: $ridgeType) { ForEach(RidgeType.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented)
-                if ridgeType == .dry || ridgeType == .dryHip { Picker("Manufacturer / system", selection: $ridgeSystem) { Text("Marley Universal RidgeFast").tag("Marley Universal RidgeFast"); Text("Sandtoft RollRidge").tag("Sandtoft RollRidge"); Text("Sandtoft Profile Ridge").tag("Sandtoft Profile Ridge"); Text("BMI Redland Continuous Ridge").tag("BMI Redland Continuous Ridge"); Text("Other / site-specific").tag("Other / site-specific") } }
-                Label(ridgeAdvice, systemImage: ridgeType == .dry ? "wrench.and.screwdriver.fill" : "house.fill").font(.callout).foregroundStyle(.secondary)
-            }.padding(14).background(.background, in: RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
-            if hasVerifiedRidgeSetback { Label("Verified combination: Marley Universal RidgeFast · top tiling batten approximately 45 mm from the rafter apex · 75 mm ridge-tile overlap.", systemImage: "checkmark.seal.fill").font(.callout).foregroundStyle(.green) }
-            else if ridgeType == .dry { Label("Using the typical dry-ridge setting: 45 mm top-batten setback and 75 mm ridge overlap. Check the supplied kit before fixing.", systemImage: "ruler").font(.callout).foregroundStyle(.orange) }
-            else { Label("A reliable universal setback cannot be used for this finish. Use the system-specific detail.", systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(.orange) }
+        VStack(alignment: .leading, spacing: 14) {
+            HStack { Button("Back") { withAnimation { step = .tile } }; Spacer(); Text(tile.name).font(.caption.bold()).foregroundStyle(.secondary) }
+            Text("Enter roof measurements").font(.title2.bold())
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Ridge type").font(.headline)
+                Picker("Ridge type", selection: $ridgeType) {
+                    ForEach(RidgeType.allCases) { type in Text(type.rawValue).tag(type) }
+                }.pickerStyle(.segmented).labelsHidden()
+            }
             VStack(alignment: .leading, spacing: 12) {
                 Toggle("Roof is not square", isOn: $roofIsNotSquare)
-                Text(roofIsNotSquare ? "Measure from the first-batten line to the apex at the left, centre and right of the roof." : "Use one rafter measurement when the eaves and ridge are parallel.")
+                Text(roofIsNotSquare ? "Measure from the first-batten line to the apex at the left, centre and right." : "Measure from the first-batten line to the rafter apex.")
                     .font(.caption).foregroundStyle(.secondary)
                 if roofIsNotSquare {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
@@ -202,64 +222,52 @@ private struct TileGaugeFinder: View {
                     ToolNumberField(title: "First-batten line to rafter apex", placeholder: "e.g. 5000", unit: "mm", value: $apexMeasurement)
                 }
             }.padding(14).background(.background, in: RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
-            ToolNumberField(title: "Measured roof pitch", placeholder: "e.g. 30", unit: "°", value: $roofPitch)
+            ToolNumberField(title: "Top batten down from apex", placeholder: "e.g. 100", unit: "mm", value: $topBattenSetback)
+            Text(ridgeSetbackHelp).font(.caption).foregroundStyle(.secondary)
+            ToolNumberField(title: "Roof pitch", placeholder: "e.g. 30", unit: "°", value: $roofPitch)
             if !pitchIsSuitable { Label("This tile is unsuitable at the entered pitch. Minimum stored limit: \(tile.pitch).", systemImage: "xmark.octagon.fill").font(.callout.bold()).foregroundStyle(.red) }
-            VStack(alignment: .leading, spacing: 12) {
-                Picker("Site exposure", selection: $exposure) { ForEach(Exposure.allCases) { Text($0.rawValue).tag($0) } }
-                Toggle("Breathable underlay", isOn: $breathableUnderlay)
-            }.padding(14).background(.background, in: RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
-            HStack { Button("Back") { withAnimation { step = .tile } }.buttonStyle(.bordered); Button { withAnimation { step = .result } } label: { Label("Calculate set-out", systemImage: "ruler").frame(maxWidth: .infinity) }.buttonStyle(.borderedProminent).tint(.orange).disabled(!canCalculate) }
+            Button { withAnimation { step = .result } } label: { Label("Calculate gauge", systemImage: "ruler").frame(maxWidth: .infinity) }.buttonStyle(.borderedProminent).tint(.orange).controlSize(.large).disabled(!canCalculate)
         }
     }
 
     private var resultStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack { VStack(alignment: .leading) { Text("3. Your batten set-out").font(.title3.bold()); Text(tile.fullName).foregroundStyle(.secondary) }; Spacer(); Button("Edit") { withAnimation { step = .roof } } }
+        VStack(alignment: .leading, spacing: 14) {
+            HStack { VStack(alignment: .leading) { Text("Your gauge").font(.title2.bold()); Text(tile.fullName).foregroundStyle(.secondary) }; Spacer(); Button("Edit") { withAnimation { step = .roof } } }
             if let courses, let actualGauge {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
                         resultMetric("COURSES", "\(courses)", .primary)
                         resultMetric(roofIsNotSquare ? "GAUGE RANGE" : "ACTUAL GAUGE", roofIsNotSquare ? gaugeRangeText(courses: courses) : String(format: "%.1f mm", actualGauge), resultGaugeIsInvalid ? .red : .orange)
-                        resultMetric(roofIsNotSquare ? "LONGEST RAFTER" : "GAUGEABLE LENGTH", "\(Int(gaugeableLength)) mm", .primary)
                     }
                     if resultGaugeIsInvalid { Label("At least one calculated gauge is outside the permitted \(gaugeDescription). This roof needs an adjusted or separate set-out before fixing battens.", systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(.red) }
                     if roofIsNotSquare {
                         Label("The three measurements differ by \(Int(roofLengthDifference.rounded())) mm. Courses are based on the longest rafter so the maximum gauge is not exceeded.", systemImage: "arrow.left.and.right").font(.callout).foregroundStyle(.secondary)
                     }
                 }.padding(18).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-                setOutDiagram(courses: courses, gauge: actualGauge)
-                if roofIsNotSquare { nonSquareCourseSchedule(courses: courses) }
+                if roofIsNotSquare {
+                    nonSquareCourseSchedule(courses: courses)
+                }
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Site sequence").font(.headline)
-                    instruction(1, "Confirm the first batten position", "Set the tile tail to \(tile.fasciaProjection ?? "the manufacturer’s stated projection") beyond the fascia, finishing just short of the gutter centre unless the system detail says otherwise.")
-                    instruction(2, ridgeType == .dry ? "Set the dry-ridge top course" : "Set the ridge top course", ridgeAdvice)
-                    instruction(3, "Set the top tiling batten", "Mark it \(Int(ridgeSetback ?? 0)) mm down the rafter from the apex. Its position is \(Int(gaugeableLength)) mm from the first-batten line. \(hasVerifiedRidgeSetback ? "Manufacturer figure." : "Typical dry-ridge figure—check the kit.")")
-                    instruction(4, "Mark the roof", roofIsNotSquare ? "Start from the longest rafter at \(String(format: "%.1f", actualGauge)) mm. Keep every batten line straight and level, then verify the left, centre and right gauges before fixing." : "Mark every course at \(String(format: "%.1f", actualGauge)) mm, then check several marks before battening.")
-                    instruction(5, "Fit the battens and ridge", "Use \(tilingBattenAdvice). For Marley RidgeFast, form the ridge support from one or two tiling battens to achieve at least 20 mm screw penetration. \(fixingAdvice)")
+                    instruction(1, "First batten", "Set the tile tail to \(tile.fasciaProjection ?? "the manufacturer’s stated projection") beyond the fascia.")
+                    instruction(2, "Top batten", "Mark it \(Int(ridgeSetback ?? 0)) mm down from the apex for the \(ridgeType.rawValue.lowercased()) detail.")
+                    instruction(3, "Gauge the roof", roofIsNotSquare ? "Use \(courses) courses and keep the batten lines level. The calculated range is \(gaugeRangeText(courses: courses))." : "Mark \(courses) equal courses at \(String(format: "%.1f", actualGauge)) mm.")
                 }.padding(18).background(.background, in: RoundedRectangle(cornerRadius: 14)).overlay(RoundedRectangle(cornerRadius: 14).stroke(.quaternary))
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Key settings").font(.headline)
-                    HStack { Text("Maximum gauge").foregroundStyle(.secondary); Spacer(); Text("\(String(format: "%.1f", tile.maxGauge)) mm").fontWeight(.semibold) }
-                    Divider()
-                    HStack { Text("Tile headlap").foregroundStyle(.secondary); Spacer(); Text(tile.headlap).fontWeight(.semibold) }
-                    Divider()
-                    HStack { Text("Ridge overlap").foregroundStyle(.secondary); Spacer(); Text("75 mm").fontWeight(.semibold) }
-                }.padding(18).background(.background, in: RoundedRectangle(cornerRadius: 14)).overlay(RoundedRectangle(cornerRadius: 14).stroke(.quaternary))
-                Label("Use this as a setting-out aid. Confirm the current tile, dry-ridge and fixing specifications before installation.", systemImage: "checkmark.shield").font(.caption).foregroundStyle(.secondary)
+                Label("Check the tile and \(ridgeType.rawValue.lowercased()) manufacturer details before fixing battens.", systemImage: "checkmark.shield").font(.caption).foregroundStyle(.secondary)
             } else { ToolEmpty(text: "Return to roof details and enter valid measurements.") }
             Button("Start another roof") { reset() }.buttonStyle(.bordered).frame(maxWidth: .infinity)
         }
     }
 
-    private var ridgeAdvice: String {
-        switch ridgeType {
-        case .dry: return "Position the top tiling batten to suit the selected dry-ridge kit, ridge tile and tile profile. Use the kit manufacturer's measured clearance."
-        case .mortar: return "Select the exact ridge tile and use its current detail. Mortar-bedded ridge tiles still require mechanical fixing."
-        case .dryHip: return "A hip is measured and set out differently from a ridge slope. Select the exact dry-hip system before relying on a calculated position."
-        case .other: return "Use the system manufacturer's top-course position and overlap; no universal setback is assumed."
-        }
+    private var ridgeSetbackHelp: String {
+        ridgeType == .mortar
+            ? "Use the setback required by the mortar ridge tile detail."
+            : "Use the top-batten position stated for the dry ridge system."
     }
-    private var tilingBattenAdvice: String { "38 × 25 mm graded tiling battens up to 450 mm rafter centres, or 50 × 25 mm up to 600 mm centres" }
+    private var ridgeAdvice: String {
+        ridgeType == .mortar
+            ? "Use the selected mortar ridge tile detail and its required mechanical fixing."
+            : "Use the dry ridge kit instructions and its required mechanical fixings."
+    }
     private var gaugeDescription: String { tile.minGauge == tile.maxGauge ? gaugeValue(tile.maxGauge) : "\(gaugeValue(tile.minGauge))–\(gaugeValue(tile.maxGauge))" }
     private func gaugeValue(_ value: Double) -> String { value.rounded() == value ? "\(Int(value)) mm" : String(format: "%.1f mm", value) }
     private func gaugeIsInvalid(_ gauge: Double) -> Bool { gauge < tile.minGauge || gauge > tile.maxGauge }
@@ -272,10 +280,7 @@ private struct TileGaugeFinder: View {
         guard let minimum = values.min(), let maximum = values.max() else { return "—" }
         return String(format: "%.1f–%.1f mm", minimum, maximum)
     }
-    private var fixingAdvice: String {
-        let exposureText = exposure == .exposed ? "The site is marked exposed/coastal, so obtain a manufacturer fixing specification; extra clips or fixings may be required." : "The site is marked \(exposure.rawValue.lowercased()); still confirm the manufacturer fixing specification for the location and roof zone."
-        return "\(exposureText) \(breathableUnderlay ? "Breathable underlay selected—check drape, support and ventilation details." : "Non-breathable underlay selected—check the required ventilation provision.")"
-    }
+    private func compactSpec(_ title: String, _ value: String) -> some View { VStack(alignment: .leading, spacing: 3) { Text(title).font(.caption2.bold()).foregroundStyle(.secondary); Text(value).font(.subheadline.bold()).lineLimit(2).minimumScaleFactor(0.75) }.frame(maxWidth: .infinity, alignment: .leading) }
     private func resultMetric(_ title: String, _ value: String, _ colour: Color) -> some View { VStack(alignment: .leading, spacing: 5) { Text(title).font(.caption2.bold()).foregroundStyle(.secondary); Text(value).font(.title2.bold()).foregroundStyle(colour).minimumScaleFactor(0.7) }.frame(maxWidth: .infinity, alignment: .leading) }
     private func instruction(_ number: Int, _ title: String, _ detail: String) -> some View { HStack(alignment: .top, spacing: 12) { Text("\(number)").font(.caption.bold()).foregroundStyle(.white).frame(width: 26, height: 26).background(.orange, in: Circle()); VStack(alignment: .leading, spacing: 3) { Text(title).fontWeight(.semibold); Text(detail).font(.callout).foregroundStyle(.secondary) } } }
     private func setOutDiagram(courses: Int, gauge: Double) -> some View {
@@ -371,7 +376,7 @@ private struct TileGaugeFinder: View {
         Text(title.uppercased()).font(.caption2.bold()).tracking(0.7).foregroundStyle(.secondary)
             .frame(width: width, alignment: alignment).padding(.vertical, 10)
     }
-    private func reset() { step = .tile; apexMeasurement = ""; roofIsNotSquare = false; leftApexMeasurement = ""; centreApexMeasurement = ""; rightApexMeasurement = ""; roofPitch = "" }
+    private func reset() { step = .tile; apexMeasurement = ""; roofIsNotSquare = false; leftApexMeasurement = ""; centreApexMeasurement = ""; rightApexMeasurement = ""; topBattenSetback = ""; roofPitch = "" }
 }
 
 private struct RoofBattenConstructionView: View {
@@ -456,7 +461,7 @@ private struct TileSpecCard: View { let title, value: String; var body: some Vie
 
 #if os(iOS)
 private enum RoofPhonePosition: String, CaseIterable, Identifiable {
-    case longEdge = "Long edge", shortEdge = "Short edge", back = "Back flat"
+    case longEdge = "Side", shortEdge = "End", back = "Flat"
     var id: String { rawValue }
 }
 
@@ -500,30 +505,56 @@ private struct LiveRoofLevel: View {
     @State private var heldReading: Double?
     private var degrees: Double { heldReading ?? level.degrees(for: position) }
     private var rounded: Int { Int(degrees.rounded()) }
-    private var colour: Color { rounded == 0 ? .green : .orange }
+    private var colour: Color { heldReading == nil ? .orange : .green }
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("How are you holding the phone?").font(.headline)
-            Picker("Phone position", selection: $position) { ForEach(RoofPhonePosition.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).onChange(of: position) { _, _ in heldReading = nil }
-            Text(positionHelp).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
             if level.available {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 20).fill(Color.black)
-                    Rectangle().fill(colour).frame(height: 3).rotationEffect(.degrees(degrees)).padding(.horizontal, 25)
-                    VStack(spacing: 5) {
-                        Text(level.receivingData ? String(format: "%.1f°", degrees) : "—").font(.system(size: 52, weight: .light, design: .rounded)).monospacedDigit().foregroundStyle(.white)
-                        Text(heldReading == nil ? "LIVE" : "HELD").font(.caption.bold()).foregroundStyle(.white.opacity(0.65))
+                VStack(spacing: 16) {
+                    HStack {
+                        Label(heldReading == nil ? "LIVE READING" : "READING HELD", systemImage: heldReading == nil ? "sensor.fill" : "checkmark.circle.fill")
+                            .font(.caption.bold()).foregroundStyle(colour)
+                        Spacer()
+                        Text(pitchBand).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     }
-                }.frame(height: 220)
-                HStack { Label(level.receivingData ? "Live roof angle" : "Waiting for motion sensor…", systemImage: "sensor.fill").foregroundStyle(.secondary); Spacer(); Button { heldReading = heldReading == nil ? level.degrees(for: position) : nil } label: { Label(heldReading == nil ? "Hold reading" : "Resume", systemImage: heldReading == nil ? "pause.fill" : "play.fill") }.buttonStyle(.borderedProminent).tint(.orange).disabled(!level.receivingData) }
+                    Text(level.receivingData ? String(format: "%.1f°", degrees) : "—")
+                        .font(.system(size: 76, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.7)
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.secondary.opacity(0.16)).frame(height: 8)
+                        Capsule().fill(colour).frame(width: max(8, CGFloat(degrees / 90) * 280), height: 8)
+                    }
+                        .frame(maxWidth: 280)
+                    Text(level.receivingData ? positionHelp : "Waiting for the motion sensor…")
+                        .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }
+                .padding(22)
+                .frame(maxWidth: .infinity)
+                .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 18))
+
+                Text("Phone position").font(.caption.bold()).foregroundStyle(.secondary)
+                Picker("Phone position", selection: $position) { ForEach(RoofPhonePosition.allCases) { Text($0.rawValue).tag($0) } }
+                    .pickerStyle(.segmented)
+                    .onChange(of: position) { _, _ in heldReading = nil }
+
+                Button { heldReading = heldReading == nil ? level.degrees(for: position) : nil } label: {
+                    Label(heldReading == nil ? "Hold this reading" : "Take another reading", systemImage: heldReading == nil ? "pause.fill" : "arrow.counterclockwise")
+                        .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 5)
+                }.buttonStyle(.borderedProminent).tint(heldReading == nil ? .orange : .green).controlSize(.large).disabled(!level.receivingData)
             } else { ContentUnavailableView("Motion sensor unavailable", systemImage: "sensor", description: Text("This feature needs a real iPhone. Use rise and run below instead.")) }
         }.onAppear { level.start() }.onDisappear { level.stop() }
     }
+    private var pitchBand: String {
+        if !level.receivingData { return "" }
+        if degrees < 15 { return "Very low pitch" }
+        if degrees < 22.5 { return "Low pitch" }
+        return "Pitched roof"
+    }
     private var positionHelp: String {
         switch position {
-        case .longEdge: return "Put either long side of the iPhone directly against a rafter, batten or tile slope."
-        case .shortEdge: return "Put the top or bottom edge of the iPhone directly against the slope."
-        case .back: return "Lay the back of the iPhone flat against the roof surface."
+        case .longEdge: return "Put the long side of the phone against the roof slope."
+        case .shortEdge: return "Put the top or bottom of the phone against the roof slope."
+        case .back: return "Lay the back of the phone flat on the roof surface."
         }
     }
 }
@@ -535,7 +566,7 @@ private struct ToolEmpty: View { let text: String; var body: some View { Label(t
 
 struct FinanceCentreView: View {
     @Environment(AppState.self) private var appState
-    private var liveJobs: [Lead] { appState.leads.filter { [.won, .scheduled, .inProgress, .completed, .paid].contains($0.stage) } }
+    private var liveJobs: [Lead] { appState.leads.filter { [.won, .scheduled, .inProgress, .completed, .waitingForPayment, .paid].contains($0.stage) } }
     private var depositsDue: [Lead] { liveJobs.filter { !$0.depositPaid && $0.deposit > 0 && $0.stage != .paid } }
     private var collected: Double { liveJobs.reduce(0) { $0 + max(0, $1.value - $1.balance) } }
     private var outstanding: Double { liveJobs.reduce(0) { $0 + max(0, $1.balance) } }
@@ -991,85 +1022,304 @@ struct DashboardView: View {
 #if os(iOS)
 private struct MobileDashboardView: View {
     @Environment(AppState.self) private var appState
-    @State private var showingRecentUpdates = false
+    @State private var showingBusinessSummary = false
+    @State private var editingGeneralTask: GeneralTask?
+    @State private var editingJobTask: JobChecklistItem?
     private var today:String { SupabaseService.today }
-    private var urgent:[Lead] { appState.leads.filter { $0.surveyDate == today || (($0.endDate ?? "9999") < today && ![.completed,.paid,.lost].contains($0.stage)) }.prefix(5).map{$0} }
+    private var urgent:[CompanyAction] { Array(attentionActions.prefix(4)) }
+    private var attentionActions: [CompanyAction] {
+        let ranked = appState.companyActions.filter { $0.priority >= .urgent }
+        var seen = Set<String>()
+        return ranked.filter { action in
+            let key = action.leadID.map { "lead-\($0)" } ?? action.generalTaskID.map { "task-\($0)" } ?? action.id
+            return seen.insert(key).inserted
+        }
+    }
+    private var dailyLeads:[Lead] {
+        Array(appState.leads.filter { $0.surveyDate == today || $0.startDate == today || ($0.stage == .inProgress && ($0.endDate ?? today) >= today) }
+            .sorted { ($0.surveyDate ?? $0.startDate ?? "9999") < ($1.surveyDate ?? $1.startDate ?? "9999") }.prefix(3))
+    }
     var body: some View {
         ScrollView {
-            VStack(alignment:.leading,spacing:20) {
+            VStack(alignment:.leading,spacing:18) {
                 HStack { VStack(alignment:.leading,spacing:3){Text(greeting).font(.largeTitle.bold());Text(Date.now.formatted(date:.complete,time:.omitted)).font(.subheadline).foregroundStyle(.secondary)};Spacer();Circle().fill(.orange.gradient).frame(width:46,height:46).overlay(Text(appState.currentUser?.name.prefix(1) ?? "P").font(.headline).foregroundStyle(.white)) }
-                LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:12) {
-                    mobileMetric("Open leads", count([.newLead,.surveyBooked,.quotePreparing,.quoteSent]), "person.2.fill", .blue)
-                    mobileMetric("Active jobs", count([.scheduled,.inProgress]), "hammer.fill", .orange)
-                    mobileMetric("Pipeline", appState.leads.filter{![.paid,.lost].contains($0.stage)}.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP").precision(.fractionLength(0))), "sterlingsign.circle.fill", .green)
-                    mobileMetric("Due tasks", "\(appState.visibleGeneralTasks.filter{!$0.completed && ($0.dueDate ?? "9999") <= today}.count)", "checkmark.circle.fill", .purple)
+                HStack {
+                    Text("Action required").font(.title3.bold())
+                    Spacer()
+                    Button("View all") { appState.selectedSection = .tasks }.font(.subheadline.bold())
+                    Text("\(urgent.count)").font(.caption.bold()).padding(.horizontal,8).padding(.vertical,4).background(.quaternary,in:Capsule())
                 }
-                HStack(spacing:10) { quick("Add lead","person.badge.plus",.orange){appState.showingGlobalAddLead=true};quick("Search","magnifyingglass",.blue){appState.showingGlobalSearch=true};quick("Assistant","sparkles",.purple){appState.showingAssistant=true} }
-                sectionTitle("Needs attention", count:urgent.count)
-                if urgent.isEmpty { ContentUnavailableView("You’re all caught up",systemImage:"checkmark.circle",description:Text("No overdue jobs or surveys today.")) }
-                ForEach(urgent){lead in NavigationLink{LeadDetailView(leadID:lead.id)}label:{HStack(spacing:12){Image(systemName:lead.surveyDate==today ? "calendar.badge.clock":"exclamationmark.triangle.fill").foregroundStyle(.orange).frame(width:38,height:38).background(Color.orange.opacity(0.12),in:RoundedRectangle(cornerRadius:10));VStack(alignment:.leading,spacing:3){Text(lead.name).fontWeight(.semibold);Text(lead.surveyDate==today ? "Survey today":"Job overdue").font(.caption).foregroundStyle(.secondary)};Spacer();Image(systemName:"chevron.right").foregroundStyle(.tertiary)}.padding(14).background(.background,in:RoundedRectangle(cornerRadius:14))}.buttonStyle(.plain)}
-                sectionTitle("Where the work is",count:nil)
-                DashboardJobsMap()
-                DisclosureGroup(isExpanded: $showingRecentUpdates) {
-                    VStack(spacing:0) {
-                        ForEach(appState.leads.sorted{$0.updatedAt>$1.updatedAt}.prefix(4)){lead in
-                            NavigationLink{LeadDetailView(leadID:lead.id)}label:{CompactRecentUpdate(lead:lead)}
-                                .buttonStyle(.plain)
-                            if lead.id != appState.leads.sorted(by: {$0.updatedAt>$1.updatedAt}).prefix(4).last?.id { Divider().padding(.leading,34) }
+                if urgent.isEmpty { ContentUnavailableView("You’re all caught up",systemImage:"checkmark.circle",description:Text("No operational actions need attention right now.")) }
+                else {
+                    VStack(spacing: 0) {
+                        ForEach(urgent) { action in
+                            MobileCompanyActionRow(action:action, complete: { complete(action) }, open: { open(action) })
+                            if action.id != urgent.last?.id { Divider().padding(.leading, 60) }
                         }
                     }
-                    .padding(.horizontal,12)
-                    .background(.background,in:RoundedRectangle(cornerRadius:12))
+                    .background(.background, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(.quaternary))
+                }
+                HStack { Text("Today").font(.title3.bold()); Spacer(); Text("\(dailyLeads.count) scheduled").font(.caption).foregroundStyle(.secondary) }
+                if dailyLeads.isEmpty {
+                    Label("No surveys or job starts today", systemImage: "calendar")
+                        .foregroundStyle(.secondary).padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(dailyLeads) { lead in
+                            NavigationLink { LeadDetailView(leadID: lead.id) } label: { mobileScheduleRow(lead) }.buttonStyle(.plain)
+                            if lead.id != dailyLeads.last?.id { Divider().padding(.leading, 54) }
+                        }
+                    }
+                    .background(.background, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(.quaternary))
+                }
+                DisclosureGroup(isExpanded: $showingBusinessSummary) {
+                    LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:10) {
+                        mobileMetric("Open leads", count([.newLead,.surveyBooked,.quotePreparing,.quoteSent]), "person.2.fill", .blue)
+                        mobileMetric("Active jobs", count([.scheduled,.inProgress]), "hammer.fill", .orange)
+                        mobileMetric("Awaiting payment", count([.waitingForPayment]), "clock.fill", .indigo)
+                        mobileMetric("Due tasks", "\(appState.taskActions.filter{($0.dueDate ?? "9999") <= today}.count)", "checkmark.circle.fill", .purple)
+                    }.padding(.top, 12)
+                    VStack(spacing:0) {
+                        ForEach(appState.leads.sorted{$0.updatedAt>$1.updatedAt}.prefix(3)){lead in
+                            NavigationLink{LeadDetailView(leadID:lead.id)}label:{CompactRecentUpdate(lead:lead)}.buttonStyle(.plain)
+                            if lead.id != appState.leads.sorted(by: {$0.updatedAt>$1.updatedAt}).prefix(3).last?.id { Divider().padding(.leading,34) }
+                        }
+                    }.padding(.horizontal, 12).background(.background, in: RoundedRectangle(cornerRadius: 12))
                 } label: {
                     HStack(spacing:8) {
-                        Image(systemName:"clock.arrow.circlepath").foregroundStyle(.secondary)
-                        Text("Recent changes").font(.subheadline.weight(.semibold))
+                        Image(systemName:"chart.line.uptrend.xyaxis").foregroundStyle(.orange)
+                        Text("Business summary").font(.subheadline.weight(.semibold))
                         Spacer()
-                        Text("(min(4,appState.leads.count))").font(.caption).foregroundStyle(.secondary)
+                        Text("Metrics and recent changes").font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                .tint(.secondary)
+                .padding(14).background(.background, in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(.quaternary)).tint(.secondary)
             }.padding()
-        }.background(Color(.systemGroupedBackground)).navigationBarTitleDisplayMode(.inline)
+        }
+        .background(Color(.systemGroupedBackground)).navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $editingGeneralTask) { AddTaskView(task: $0) }
+        .sheet(item: $editingJobTask) { EditJobTaskView(item: $0) }
     }
     private var greeting:String { let first=appState.currentUser?.name.split(separator:" ").first.map(String.init) ?? "team";return "Hello, \(first)" }
     private func count(_ stages:Set<LeadStage>)->String{"\(appState.leads.filter{stages.contains($0.stage)}.count)"}
     private func mobileMetric(_ title:String,_ value:String,_ icon:String,_ color:Color)->some View{VStack(alignment:.leading,spacing:10){Image(systemName:icon).foregroundStyle(color).font(.title3);Text(value).font(.title2.bold()).minimumScaleFactor(0.7);Text(title).font(.caption).foregroundStyle(.secondary)}.frame(maxWidth:.infinity,alignment:.leading).padding(15).background(.background,in:RoundedRectangle(cornerRadius:16)).overlay(RoundedRectangle(cornerRadius:16).stroke(color.opacity(0.12)))}
-    private func quick(_ title:String,_ icon:String,_ color:Color,action:@escaping()->Void)->some View{Button(action:action){VStack(spacing:7){Image(systemName:icon).font(.title3);Text(title).font(.caption.bold())}.frame(maxWidth:.infinity).padding(.vertical,12).foregroundStyle(color).background(color.opacity(0.09),in:RoundedRectangle(cornerRadius:13))}.buttonStyle(.plain)}
-    private func sectionTitle(_ title:String,count:Int?)->some View{HStack{Text(title).font(.title3.bold());Spacer();if let count{Text("\(count)").font(.caption.bold()).padding(.horizontal,8).padding(.vertical,4).background(.quaternary,in:Capsule())}}}
+    private func mobileScheduleRow(_ lead: Lead) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: lead.surveyDate == today ? "ruler" : "hammer.fill").foregroundStyle(lead.surveyDate == today ? .blue : .orange)
+                .frame(width: 38, height: 38).background((lead.surveyDate == today ? Color.blue : Color.orange).opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 3) { Text(lead.name).fontWeight(.semibold); Text("\(lead.jobType) · \(lead.surveyDate == today ? "Survey" : lead.stage.displayName)").font(.caption).foregroundStyle(.secondary) }
+            Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+        }.padding(13)
+    }
+    private func complete(_ action: CompanyAction) {
+        if let taskID = action.generalTaskID, let task = appState.generalTasks.first(where: { $0.id == taskID }) {
+            Task { await appState.toggleGeneralTask(task) }
+        } else if let leadID = action.leadID, let taskID = action.leadTaskID {
+            Task { await appState.toggleLeadTask(leadID: leadID, taskID: taskID) }
+        }
+    }
+    private func open(_ action: CompanyAction) {
+        if let taskID = action.generalTaskID, let task = appState.generalTasks.first(where: { $0.id == taskID }) {
+            editingGeneralTask = task
+        } else if let leadID = action.leadID,
+                  let lead = appState.leads.first(where: { $0.id == leadID }),
+                  let taskID = action.leadTaskID,
+                  let task = lead.tasks.first(where: { $0.id == taskID }) {
+            editingJobTask = JobChecklistItem(lead: lead, task: task)
+        } else if let leadID = action.leadID {
+            appState.selectedLeadID = leadID
+            appState.showingGlobalSearch = true
+        } else if action.kind == .timesheet {
+            appState.selectedSection = .tasks
+        }
+    }
 }
 
 private struct CompactRecentUpdate:View{let lead:Lead;var body:some View{HStack(spacing:9){Circle().fill(Color.secondary.opacity(0.1)).frame(width:25,height:25).overlay(Text(lead.name.prefix(1)).font(.caption2.bold()).foregroundStyle(.secondary));VStack(alignment:.leading,spacing:1){Text(lead.name).font(.subheadline.weight(.medium));Text(lead.stage.displayName).font(.caption2).foregroundStyle(.secondary)};Spacer();Text(lead.jobRef).font(.caption2).foregroundStyle(.tertiary);Image(systemName:"chevron.right").font(.caption2).foregroundStyle(.tertiary)}.frame(height:43)}}
+private struct MobileCompanyActionRow: View {
+    let action: CompanyAction
+    let complete: () -> Void
+    let open: () -> Void
+    private var canComplete: Bool { action.kind == .generalTask || action.kind == .jobTask }
+    var body: some View {
+        HStack(spacing: 12) {
+            if canComplete {
+                Button(action: complete) {
+                    Image(systemName: "circle").font(.title2).foregroundStyle(action.priority.tint)
+                        .frame(width: 38, height: 38).background(action.priority.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+                }.buttonStyle(.plain).accessibilityLabel("Complete \(action.title)")
+            } else {
+                Image(systemName: actionIcon).font(.headline).foregroundStyle(action.priority.tint)
+                    .frame(width: 38, height: 38).background(action.priority.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+            }
+            Button(action: open) {
+                HStack(spacing: 10) {
+                    VStack(alignment:.leading,spacing:3){Text(action.title).fontWeight(.semibold).foregroundStyle(.primary);Text(action.detail).font(.caption).foregroundStyle(.secondary);Text(action.reason).font(.caption2.weight(.medium)).foregroundStyle(action.priority.tint)}
+                    Spacer()
+                    Image(systemName:"chevron.right").foregroundStyle(.tertiary)
+                }.contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityLabel("Open \(action.title)")
+        }.padding(13)
+    }
+    private var actionIcon: String { switch action.kind { case .survey: "calendar"; case .jobStart, .overdueJob: "hammer.fill"; case .quoteFollowUp: "phone.fill"; case .deposit, .balance: "sterlingsign.circle.fill"; case .timesheet: "clock.badge.exclamationmark"; case .generalTask: "checklist"; case .jobTask: "hammer" } }
+}
 #endif
 
 #if os(macOS)
-private struct MacDashboardView:View{
-    @Environment(AppState.self)private var appState
-    private var today:String{SupabaseService.today}
-    private var tomorrow:String{SupabaseService.localDay(for:Calendar.current.date(byAdding:.day,value:1,to:.now)!)}
-    private var openLeads:[Lead]{appState.leads.filter{[.newLead,.surveyBooked,.quotePreparing,.quoteSent].contains($0.stage)}}
-    private var actionLeads:[Lead]{appState.leads.filter{lead in lead.surveyDate==today || lead.startDate==today || ((lead.endDate ?? "9999")<today && ![.completed,.paid,.lost].contains(lead.stage)) || (!lead.depositPaid && lead.deposit > 0 && [.won,.scheduled,.inProgress].contains(lead.stage))}}
-    var body:some View{ScrollView{VStack(alignment:.leading,spacing:18){
-        HStack{VStack(alignment:.leading,spacing:3){Text(greeting).font(.system(size:29,weight:.bold));Text("Here’s what needs attention across ProLine today.").foregroundStyle(.secondary)};Spacer();Label(Date.now.formatted(date:.long,time:.omitted),systemImage:"calendar").foregroundStyle(.secondary)}
-        HStack(spacing:12){DashboardMetric("Open leads","\(openLeads.count)","person.2",.blue);DashboardMetric("Active jobs","\(appState.leads.filter{$0.stage == .inProgress}.count)","hammer",.orange);DashboardMetric("Paid revenue",appState.leads.filter{$0.stage == .paid}.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP").precision(.fractionLength(0))),"sterlingsign.circle",.green);DashboardMetric("Conversion",conversion,"chart.line.uptrend.xyaxis",.purple)}
-        HStack(alignment:.top,spacing:16){
-            VStack(alignment:.leading,spacing:0){PanelHeader("Action required","\(actionLeads.count)","exclamationmark.triangle.fill",.orange);if actionLeads.isEmpty{DashboardEmpty("Nothing urgent","You’re all caught up for today.","checkmark.seal")};ForEach(actionLeads.prefix(8)){lead in NavigationLink{LeadDetailView(leadID:lead.id)}label:{HStack(spacing:11){Circle().fill(actionTint(lead).opacity(0.12)).frame(width:36,height:36).overlay(Image(systemName:actionIcon(lead)).foregroundStyle(actionTint(lead)));VStack(alignment:.leading,spacing:2){Text(actionTitle(lead)).fontWeight(.semibold);Text("\(lead.name) · \(lead.jobRef)").font(.caption).foregroundStyle(.secondary)};Spacer();Text(actionAmount(lead),format:.currency(code:"GBP").precision(.fractionLength(0))).font(.caption.bold());Image(systemName:"chevron.right").foregroundStyle(.tertiary)}.padding(.horizontal,15).frame(height:58).overlay(alignment:.bottom){Divider()}}.buttonStyle(.plain)}}.background(.background,in:RoundedRectangle(cornerRadius:11)).overlay(RoundedRectangle(cornerRadius:11).stroke(.quaternary)).frame(maxWidth:.infinity)
-            VStack(alignment:.leading,spacing:0){PanelHeader("Coming up","","calendar",.blue);ForEach(upcoming.prefix(7)){lead in NavigationLink{LeadDetailView(leadID:lead.id)}label:{HStack{VStack(alignment:.leading,spacing:2){Text(lead.name).fontWeight(.medium);Text(lead.jobType).font(.caption).foregroundStyle(.secondary)};Spacer();VStack(alignment:.trailing){Text(lead.surveyDate ?? lead.startDate ?? "").font(.caption.bold());Text(lead.surveyDate != nil ? "Survey":"Job starts").font(.caption2).foregroundStyle(.secondary)}}.padding(.horizontal,15).frame(height:54).overlay(alignment:.bottom){Divider()}}.buttonStyle(.plain)};if upcoming.isEmpty{DashboardEmpty("No upcoming work","Add survey and start dates to see them here.","calendar.badge.plus")}}.background(.background,in:RoundedRectangle(cornerRadius:11)).overlay(RoundedRectangle(cornerRadius:11).stroke(.quaternary)).frame(width:360)
-        }
-        VStack(alignment:.leading,spacing:12){Text("Pipeline health").font(.headline);HStack(spacing:10){ForEach([LeadStage.newLead,.surveyBooked,.quotePreparing,.quoteSent,.won,.scheduled,.inProgress]){stage in let rows=appState.leads.filter{$0.stage==stage};VStack(alignment:.leading,spacing:7){HStack{Circle().fill(stageColor(stage)).frame(width:8,height:8);Text(stage.displayName).font(.caption).lineLimit(1);Spacer();Text("\(rows.count)").font(.caption.bold())};Text(rows.reduce(0){$0+$1.value},format:.currency(code:"GBP").precision(.fractionLength(0))).font(.subheadline.bold());ProgressView(value:Double(rows.count),total:Double(max(1,appState.leads.count))).tint(stageColor(stage))}.padding(12).frame(maxWidth:.infinity).background(Color.secondary.opacity(0.035),in:RoundedRectangle(cornerRadius:8))}}.padding(14).background(.background,in:RoundedRectangle(cornerRadius:11)).overlay(RoundedRectangle(cornerRadius:11).stroke(.quaternary))
-        }
-        DashboardJobsMap()
-    }.padding(24)}.background(Color(nsColor:.windowBackgroundColor)).navigationTitle("Dashboard")}
-    private var greeting:String{let hour=Calendar.current.component(.hour,from:.now);let word=hour<12 ? "Good morning":hour<18 ? "Good afternoon":"Good evening";return "\(word), \(appState.currentUser?.name.split(separator:" ").first.map(String.init) ?? "team")"}
-    private var conversion:String{let decided=appState.leads.filter{[.won,.scheduled,.inProgress,.completed,.paid,.lost].contains($0.stage)};guard !decided.isEmpty else{return "0%"};return "\(Int((Double(decided.filter{$0.stage != .lost}.count)/Double(decided.count)*100).rounded()))%"}
-    private var upcoming:[Lead]{appState.leads.filter{($0.surveyDate ?? $0.startDate ?? "")>=today}.sorted{($0.surveyDate ?? $0.startDate ?? "9999")<($1.surveyDate ?? $1.startDate ?? "9999")}}
-    private func actionTitle(_ l:Lead)->String{if l.surveyDate==today{return "Survey today"};if l.startDate==today{return "Job starts today"};if (l.endDate ?? "9999")<today{return "Job overdue"};return "Deposit outstanding"}
-    private func actionAmount(_ lead:Lead)->Double{actionTitle(lead)=="Deposit outstanding" ? lead.deposit:lead.value}
-    private func actionIcon(_ l:Lead)->String{l.surveyDate==today ? "calendar":"exclamationmark.triangle.fill"}
-    private func actionTint(_ l:Lead)->Color{(l.endDate ?? "9999")<today ? .red:.orange}
-    private func stageColor(_ s:LeadStage)->Color{switch s{case .newLead:.blue;case .surveyBooked:.orange;case .quotePreparing,.quoteSent:.purple;case .won:.green;case .scheduled:.teal;case .inProgress:.cyan;default:.gray}}
+private struct MacDashboardView: View {
+    @Environment(AppState.self) private var appState
+    @State private var showingBusinessSummary = false
+    private var today: String { SupabaseService.today }
+    private var openLeads: [Lead] { appState.leads.filter { [.newLead, .surveyBooked, .quotePreparing, .quoteSent].contains($0.stage) } }
+    private var upcoming: [Lead] { appState.leads.filter { ($0.surveyDate ?? $0.startDate ?? "") >= today }.sorted { ($0.surveyDate ?? $0.startDate ?? "9999") < ($1.surveyDate ?? $1.startDate ?? "9999") } }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(greeting).font(.system(size: 29, weight: .bold))
+                        Text("Your highest-priority work is ready.").foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Label(Date.now.formatted(date: .long, time: .omitted), systemImage: "calendar").foregroundStyle(.secondary)
+                }
+                HStack(spacing: 0) {
+                    DashboardMetric("Open leads", "\(openLeads.count)", "person.2", .blue)
+                    Divider().frame(height: 48)
+                    DashboardMetric("Live jobs", "\(appState.leads.filter { $0.stage == .inProgress }.count)", "hammer", .orange)
+                    Divider().frame(height: 48)
+                    DashboardMetric("Awaiting payment", "\(appState.leads.filter { $0.stage == .waitingForPayment }.count)", "clock", .indigo)
+                    Divider().frame(height: 48)
+                    DashboardMetric("Due to collect", appState.leads.filter { ![.paid, .lost].contains($0.stage) }.reduce(0) { $0 + $1.balance }.formatted(.currency(code: "GBP").precision(.fractionLength(0))), "sterlingsign.circle", .green)
+                }
+                .background(.background, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
+                HStack(alignment: .top, spacing: 16) {
+                    MacAICommandCenter().frame(maxWidth: .infinity)
+                    VStack(alignment: .leading, spacing: 0) {
+                        PanelHeader("Coming up", "", "calendar", .blue)
+                        ForEach(upcoming.prefix(6)) { lead in
+                            NavigationLink { LeadDetailView(leadID: lead.id) } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) { Text(lead.name).fontWeight(.medium); Text(lead.jobType).font(.caption).foregroundStyle(.secondary) }
+                                    Spacer()
+                                    VStack(alignment: .trailing) { Text(lead.surveyDate ?? lead.startDate ?? "").font(.caption.bold()); Text(lead.surveyDate != nil ? "Survey" : "Job starts").font(.caption2).foregroundStyle(.secondary) }
+                                }.padding(.horizontal, 15).frame(height: 54).overlay(alignment: .bottom) { Divider() }
+                            }.buttonStyle(.plain)
+                        }
+                        if upcoming.isEmpty { DashboardEmpty("No upcoming work", "Add survey and start dates to see them here.", "calendar.badge.plus") }
+                    }
+                    .background(.background, in: RoundedRectangle(cornerRadius: 11))
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(.quaternary)).frame(width: 350)
+                }
+                DisclosureGroup(isExpanded: $showingBusinessSummary) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(spacing: 10) {
+                            ForEach([LeadStage.newLead, .surveyBooked, .quotePreparing, .quoteSent, .won, .scheduled, .inProgress]) { stage in
+                                let rows = appState.leads.filter { $0.stage == stage }
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack { Circle().fill(stageColor(stage)).frame(width: 8, height: 8); Text(stage.displayName).font(.caption).lineLimit(1); Spacer(); Text("\(rows.count)").font(.caption.bold()) }
+                                    Text(rows.reduce(0) { $0 + $1.value }, format: .currency(code: "GBP").precision(.fractionLength(0))).font(.subheadline.bold())
+                                }.padding(10).frame(maxWidth: .infinity).background(Color.secondary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+                            }
+                        }
+                        DashboardJobsMap()
+                    }.padding(.top, 14)
+                } label: {
+                    HStack { Label("Business summary", systemImage: "chart.line.uptrend.xyaxis").font(.headline); Spacer(); Text("Pipeline health, map and recent context").font(.caption).foregroundStyle(.secondary) }
+                }
+                .padding(16).background(.background, in: RoundedRectangle(cornerRadius: 11))
+                .overlay(RoundedRectangle(cornerRadius: 11).stroke(.quaternary)).tint(.secondary)
+            }.padding(24)
+        }.background(Color(nsColor: .windowBackgroundColor)).navigationTitle("Today")
+    }
+    private var greeting: String { let hour = Calendar.current.component(.hour, from: .now); let word = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"; return "\(word), \(appState.currentUser?.name.split(separator: " ").first.map(String.init) ?? "team")" }
+    private func stageColor(_ s: LeadStage) -> Color { switch s { case .newLead: .blue; case .surveyBooked: .orange; case .quotePreparing, .quoteSent: .purple; case .won: .green; case .scheduled: .teal; case .inProgress: .cyan; default: .gray } }
 }
-private struct DashboardMetric:View{let title,value,icon:String;let tint:Color;init(_ title:String,_ value:String,_ icon:String,_ tint:Color){self.title=title;self.value=value;self.icon=icon;self.tint=tint};var body:some View{HStack(spacing:13){Image(systemName:icon).font(.title2).foregroundStyle(tint).frame(width:43,height:43).background(tint.opacity(0.1),in:RoundedRectangle(cornerRadius:9));VStack(alignment:.leading){Text(value).font(.title2.bold());Text(title).font(.caption).foregroundStyle(.secondary)}}.padding(15).frame(maxWidth:.infinity,alignment:.leading).background(.background,in:RoundedRectangle(cornerRadius:10)).overlay(RoundedRectangle(cornerRadius:10).stroke(.quaternary))}}
+private struct DashboardMetric:View{let title,value,icon:String;let tint:Color;init(_ title:String,_ value:String,_ icon:String,_ tint:Color){self.title=title;self.value=value;self.icon=icon;self.tint=tint};var body:some View{HStack(spacing:13){Image(systemName:icon).font(.title2).foregroundStyle(tint).frame(width:43,height:43).background(tint.opacity(0.1),in:RoundedRectangle(cornerRadius:9));VStack(alignment:.leading){Text(value).font(.title2.bold());Text(title).font(.caption).foregroundStyle(.secondary)}}.padding(15).frame(maxWidth:.infinity,alignment:.leading)}}
+private struct MacAICommandCenter: View {
+    @Environment(AppState.self) private var appState
+    @State private var editingGeneralTask: GeneralTask?
+    @State private var editingJobTask: JobChecklistItem?
+    private var actions: [CompanyAction] {
+        let ranked = appState.companyActions.filter { $0.priority >= .urgent }
+        var seen = Set<String>()
+        return Array(ranked.filter { action in
+            let key = action.leadID.map { "lead-\($0)" } ?? action.generalTaskID.map { "task-\($0)" } ?? action.id
+            return seen.insert(key).inserted
+        }.prefix(6))
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 11) {
+                Image(systemName: "bolt.fill").font(.title3).foregroundStyle(.orange).frame(width: 38, height: 38).background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 2) { Text("Needs attention").font(.headline); Text("The most important work is ranked first.").font(.caption).foregroundStyle(.secondary) }
+                Spacer()
+                Text("\(actions.count)").font(.caption.bold()).padding(.horizontal, 8).padding(.vertical, 4).background(.quaternary, in: Capsule())
+                Button { appState.openAssistant(with: "Create my daily company plan. Rank what I need to do first, identify risks, and suggest the next best actions.") } label: { Label("Ask ProLine", systemImage: "sparkles") }.buttonStyle(.bordered)
+            }.padding(16).overlay(alignment: .bottom) { Divider() }
+            if actions.isEmpty { DashboardEmpty("You’re clear for now", "New priorities will appear here as work changes.", "checkmark.seal") }
+            ForEach(actions) { action in
+                HStack(spacing: 12) {
+                    Image(systemName: icon(action.kind)).foregroundStyle(action.priority.tint).frame(width: 34, height: 34).background(action.priority.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
+                    VStack(alignment: .leading, spacing: 3) { Text(action.title).fontWeight(.semibold); Text(action.detail).font(.caption).foregroundStyle(.secondary); Text(action.reason).font(.caption2.weight(.medium)).foregroundStyle(action.priority.tint) }
+                    Spacer()
+                    actionControl(action)
+                }.padding(.horizontal, 16).padding(.vertical, 10).overlay(alignment: .bottom) { Divider().padding(.leading, 62) }
+            }
+        }.background(.background, in: RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.25)))
+            .sheet(item: $editingGeneralTask) { AddTaskView(task: $0) }
+            .sheet(item: $editingJobTask) { EditJobTaskView(item: $0) }
+    }
+    @ViewBuilder private func actionControl(_ action: CompanyAction) -> some View {
+        if let taskID = action.generalTaskID, let task = appState.generalTasks.first(where: { $0.id == taskID }) {
+            HStack { Button("Complete") { Task { await appState.toggleGeneralTask(task) } }; Button("Open") { editingGeneralTask = task } }.buttonStyle(.bordered)
+        } else if let leadID = action.leadID, let taskID = action.leadTaskID,
+                  let lead = appState.leads.first(where: { $0.id == leadID }),
+                  let task = lead.tasks.first(where: { $0.id == taskID }) {
+            HStack { Button("Complete") { Task { await appState.toggleLeadTask(leadID: leadID, taskID: taskID) } }; Button("Open") { editingJobTask = JobChecklistItem(lead: lead, task: task) } }.buttonStyle(.bordered)
+        } else if let leadID = action.leadID {
+            NavigationLink { LeadDetailView(leadID: leadID) } label: { Label("Open", systemImage: "arrow.right") }.buttonStyle(.bordered)
+        } else {
+            Button("Ask AI") { appState.openAssistant(with: "Help me resolve this operational issue: \(action.title) — \(action.detail).") }.buttonStyle(.bordered)
+        }
+    }
+    private func icon(_ kind: CompanyActionKind) -> String { switch kind { case .generalTask: "checklist"; case .jobTask: "hammer"; case .survey: "calendar"; case .jobStart: "hammer.fill"; case .overdueJob: "exclamationmark.triangle.fill"; case .quoteFollowUp: "doc.text"; case .deposit, .balance: "sterlingsign.circle"; case .timesheet: "clock.badge.exclamationmark" } }
+}
+private struct MacBotControlDeck: View {
+    @Environment(AppState.self) private var appState
+    private var actions: [CompanyAction] { appState.companyActions }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack { VStack(alignment: .leading, spacing: 3) { Text("Your AI operators").font(.headline); Text("Each operator watches a part of Proline and prepares work for approval.").font(.caption).foregroundStyle(.secondary) }; Spacer(); Text("All working from one queue").font(.caption2.bold()).foregroundStyle(.secondary) }
+            HStack(spacing: 12) {
+                bot("Daily operations", count: actions.filter { $0.priority >= .urgent }.count, detail: "Urgent work and blockers", icon: "sun.max.fill", tint: .orange, prompt: "Create my daily company plan. Identify the work that must happen today, risks, and the best next action for each.")
+                bot("Sales & quotes", count: actions.filter { $0.kind == .quoteFollowUp }.count, detail: "Quotes waiting to be won", icon: "chart.line.uptrend.xyaxis", tint: .purple, prompt: "Act as my Sales and Quotes Bot. Review all open quotes, rank the best opportunities, and prepare follow-up actions.")
+                bot("Live jobs", count: actions.filter { [.jobTask, .jobStart, .overdueJob, .survey].contains($0.kind) }.count, detail: "Site work needing attention", icon: "hammer.fill", tint: .blue, prompt: "Act as my Live Jobs Bot. Find delivery risks, overdue work, missing job steps and the most useful next actions for each live job.")
+                bot("Growth advisor", count: appState.leads.filter { [.newLead, .surveyBooked, .quotePreparing, .quoteSent].contains($0.stage) }.count, detail: "Live opportunities to improve", icon: "arrow.up.right.circle.fill", tint: .green, prompt: "Act as my Growth Advisor. Use current CRM data to identify practical ways to win more profitable work, improve conversion, and remove recurring business bottlenecks.")
+            }
+            if !appState.aiAuditEntries.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack { Label("Recent AI activity", systemImage: "clock.arrow.circlepath").font(.subheadline.bold()); Spacer() }.padding(.bottom, 8)
+                    ForEach(appState.aiAuditEntries.sorted { $0.createdAt > $1.createdAt }.prefix(3)) { entry in
+                        HStack(spacing: 9) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green); VStack(alignment: .leading, spacing: 1) { Text(entry.actionTitle).font(.caption.weight(.medium)); Text("\(entry.userName) · \(String(entry.createdAt.prefix(10)))").font(.caption2).foregroundStyle(.secondary) }; Spacer(); Text(entry.outcome.capitalized).font(.caption2.bold()).foregroundStyle(.green) }.padding(.vertical, 7).overlay(alignment: .bottom) { Divider() }
+                    }
+                }.padding(14).background(.background, in: RoundedRectangle(cornerRadius: 11)).overlay(RoundedRectangle(cornerRadius: 11).stroke(.quaternary))
+            }
+        }
+    }
+    private func bot(_ title: String, count: Int, detail: String, icon: String, tint: Color, prompt: String) -> some View {
+        Button { appState.openAssistant(with: prompt) } label: {
+            VStack(alignment: .leading, spacing: 9) { HStack { Image(systemName: icon).foregroundStyle(tint); Spacer(); Text("\(count)").font(.headline.bold()).foregroundStyle(.primary) }; Text(title).font(.subheadline.bold()).foregroundStyle(.primary); Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2); Label("Review", systemImage: "arrow.right").font(.caption.bold()).foregroundStyle(tint) }
+                .frame(maxWidth: .infinity, minHeight: 122, alignment: .leading).padding(14).background(.background, in: RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(tint.opacity(0.18)))
+        }.buttonStyle(.plain)
+    }
+}
 private struct PanelHeader:View{let title,count,icon:String;let tint:Color;init(_ title:String,_ count:String,_ icon:String,_ tint:Color){self.title=title;self.count=count;self.icon=icon;self.tint=tint};var body:some View{HStack{Label(title,systemImage:icon).font(.headline).foregroundStyle(tint);Spacer();if !count.isEmpty{Text(count).font(.caption.bold()).padding(.horizontal,7).padding(.vertical,3).background(.quaternary,in:Capsule())}}.padding(15).overlay(alignment:.bottom){Divider()}}}
 struct DashboardEmpty:View{let title,detail,icon:String;init(_ title:String,_ detail:String,_ icon:String){self.title=title;self.detail=detail;self.icon=icon};var body:some View{VStack(spacing:6){Image(systemName:icon).font(.title).foregroundStyle(.secondary);Text(title).fontWeight(.semibold);Text(detail).font(.caption).foregroundStyle(.secondary)}.frame(maxWidth:.infinity).padding(28)}}
 #endif
@@ -1147,7 +1397,7 @@ private struct MacLeadsView: View {
         let weekStart = Calendar.current.date(byAdding:.day,value:-7,to:.now)!
         let weekly = baseLeads.filter { (SupabaseService.date(from:$0.createdAt) ?? .distantPast) >= weekStart }.count
         let uncontacted = baseLeads.filter { $0.tasks.isEmpty && $0.notes.isEmpty }.count
-        let decided = appState.leads.filter { [.won,.scheduled,.inProgress,.completed,.paid,.lost].contains($0.stage) }
+        let decided = appState.leads.filter { [.won,.scheduled,.inProgress,.completed,.waitingForPayment,.paid,.lost].contains($0.stage) }
         let conversion = decided.isEmpty ? 0 : Int((Double(decided.filter{$0.stage != .lost}.count)/Double(decided.count)*100).rounded())
         return HStack(spacing:0){LeadMetric(icon:"person.2",title:"All leads",value:"\(baseLeads.count)",accent:.blue);Divider().frame(height:50);LeadMetric(icon:"chart.line.uptrend.xyaxis",title:"New this week",value:"\(weekly)",accent:.blue);Divider().frame(height:50);LeadMetric(icon:"envelope",title:"Uncontacted",value:"\(uncontacted)",accent:.orange);Divider().frame(height:50);LeadMetric(icon:"arrow.up.right",title:"Conversion rate",value:"\(conversion)%",accent:.green)}.frame(height:82).background(.background,in:RoundedRectangle(cornerRadius:9)).overlay(RoundedRectangle(cornerRadius:9).stroke(.quaternary))
     }
@@ -1162,7 +1412,7 @@ private struct MacLeadsView: View {
 
 private struct LeadMetric:View{let icon,title,value:String;let accent:Color;var body:some View{HStack(spacing:14){Image(systemName:icon).font(.title2).foregroundStyle(accent);VStack(alignment:.leading){Text(title).font(.caption).foregroundStyle(.secondary);Text(value).font(.title2.bold())}}.padding(.horizontal,28).frame(maxWidth:.infinity,alignment:.leading)}}
 private struct LeadTableHeader:View{var body:some View{HStack(spacing:10){Text("Lead").frame(maxWidth:.infinity,alignment:.leading);Text("Job").frame(width:115,alignment:.leading);Text("Stage").frame(width:105,alignment:.leading);Text("Value").frame(width:80,alignment:.leading);Text("Next action").frame(width:140,alignment:.leading);Text("Source").frame(width:80,alignment:.leading);Text("Owner").frame(width:95,alignment:.leading)}.font(.caption.bold()).foregroundStyle(.secondary).padding(.horizontal,24).frame(height:42).background(.background).overlay(alignment:.bottom){Divider()}}}
-private struct LeadTableRow:View{let lead:Lead;let selected:Bool;var body:some View{HStack(spacing:10){HStack(spacing:9){Circle().fill(stageTint.opacity(0.15)).frame(width:36,height:36).overlay(Text(initials).font(.caption.bold()).foregroundStyle(stageTint));VStack(alignment:.leading){Text(lead.name).fontWeight(.semibold);Text(lead.address.isEmpty ? lead.phone:lead.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)}}.frame(maxWidth:.infinity,alignment:.leading);Text(lead.jobType).frame(width:115,alignment:.leading).lineLimit(1);Text(lead.stage.displayName).font(.caption).padding(.horizontal,7).padding(.vertical,4).background(stageTint.opacity(0.12),in:Capsule()).foregroundStyle(stageTint).frame(width:105,alignment:.leading);Text(lead.value,format:.currency(code:"GBP").precision(.fractionLength(0))).frame(width:80,alignment:.leading);Label(nextAction,systemImage:nextIcon).foregroundStyle(stageTint).frame(width:140,alignment:.leading).lineLimit(1);Text(lead.source).frame(width:80,alignment:.leading).lineLimit(1);Text(lead.assignedTo.isEmpty ? "Unassigned":lead.assignedTo).frame(width:95,alignment:.leading).lineLimit(1)}.font(.subheadline).padding(.horizontal,24).frame(height:64).background(selected ? Color.orange.opacity(0.07):Color.clear).overlay(alignment:.bottom){Divider()}};private var initials:String{lead.name.split(separator:" ").prefix(2).compactMap{$0.first}.map(String.init).joined()};private var stageTint:Color{switch lead.stage{case .newLead:.blue;case .surveyBooked:.green;case .quotePreparing,.quoteSent:.purple;case .won,.scheduled,.inProgress,.completed,.paid:.green;case .lost:.gray}};private var nextAction:String{if let survey=lead.surveyDate{return survey};return switch lead.stage{case .newLead:"Call customer";case .surveyBooked:"Complete survey";case .quotePreparing:"Finish estimate";case .quoteSent:"Follow up";default:"Review lead"}};private var nextIcon:String{lead.surveyDate == nil ? "phone":"calendar"}}
+private struct LeadTableRow:View{let lead:Lead;let selected:Bool;var body:some View{HStack(spacing:10){HStack(spacing:9){Circle().fill(stageTint.opacity(0.15)).frame(width:36,height:36).overlay(Text(initials).font(.caption.bold()).foregroundStyle(stageTint));VStack(alignment:.leading){Text(lead.name).fontWeight(.semibold);Text(lead.address.isEmpty ? lead.phone:lead.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)}}.frame(maxWidth:.infinity,alignment:.leading);Text(lead.jobType).frame(width:115,alignment:.leading).lineLimit(1);Text(lead.stage.displayName).font(.caption).padding(.horizontal,7).padding(.vertical,4).background(stageTint.opacity(0.12),in:Capsule()).foregroundStyle(stageTint).frame(width:105,alignment:.leading);Text(lead.value,format:.currency(code:"GBP").precision(.fractionLength(0))).frame(width:80,alignment:.leading);Label(nextAction,systemImage:nextIcon).foregroundStyle(stageTint).frame(width:140,alignment:.leading).lineLimit(1);Text(lead.source).frame(width:80,alignment:.leading).lineLimit(1);Text(lead.assignedTo.isEmpty ? "Unassigned":lead.assignedTo).frame(width:95,alignment:.leading).lineLimit(1)}.font(.subheadline).padding(.horizontal,24).frame(height:64).background(selected ? Color.orange.opacity(0.07):Color.clear).overlay(alignment:.bottom){Divider()}};private var initials:String{lead.name.split(separator:" ").prefix(2).compactMap{$0.first}.map(String.init).joined()};private var stageTint:Color{switch lead.stage{case .newLead:.blue;case .surveyBooked:.green;case .quotePreparing,.quoteSent:.purple;case .waitingForPayment:.indigo;case .won,.scheduled,.inProgress,.completed,.paid:.green;case .lost:.gray}};private var nextAction:String{if let survey=lead.surveyDate{return survey};return switch lead.stage{case .newLead:"Call customer";case .surveyBooked:"Complete survey";case .quotePreparing:"Finish estimate";case .quoteSent:"Follow up";case .waitingForPayment:"Collect balance";default:"Review lead"}};private var nextIcon:String{lead.surveyDate == nil ? "phone":"calendar"}}
 
 private struct LeadInspector:View{
     @Environment(AppState.self) private var appState
@@ -1178,7 +1428,7 @@ private struct InspectorPanel<Content:View>:View{let title:String;@ViewBuilder l
 private struct TimelineItem:View{let icon,title,detail:String;var body:some View{HStack(alignment:.top,spacing:10){Image(systemName:icon).foregroundStyle(.blue).frame(width:24,height:24).background(Color.blue.opacity(0.08),in:Circle());VStack(alignment:.leading){Text(title).font(.subheadline);Text(detail).font(.caption).foregroundStyle(.secondary)}}}}
 #endif
 
-private struct JobChecklistItem: Identifiable {
+struct JobChecklistItem: Identifiable {
     let lead: Lead
     let task: CRMTask
     var id: String { "\(lead.id)-\(task.id)" }
@@ -1188,6 +1438,7 @@ struct TasksView: View {
     @Environment(AppState.self) private var appState
     @State private var showingAdd = false
     @State private var editingTask: GeneralTask?
+    @State private var editingJobTask: JobChecklistItem?
     @State private var search = ""
     @State private var scope = "Open"
     @State private var priority = "All priorities"
@@ -1211,7 +1462,11 @@ struct TasksView: View {
     private var jobTaskGroups:[JobTaskGroup]{appState.leads.compactMap{lead in
         let items=checklistRows.filter{$0.lead.id==lead.id}
         return items.isEmpty ? nil:JobTaskGroup(lead:lead,items:items)
-    }.sorted { $0.lead.name.localizedCaseInsensitiveCompare($1.lead.name) == .orderedAscending }}
+    }.sorted {
+        let left = $0.items.first(where: { !$0.task.completed })?.task.dueDate ?? "9999-12-31"
+        let right = $1.items.first(where: { !$0.task.completed })?.task.dueDate ?? "9999-12-31"
+        return left == right ? $0.lead.name.localizedCaseInsensitiveCompare($1.lead.name) == .orderedAscending : left < right
+    }}
     var body: some View {
         #if os(macOS)
         VStack(alignment:.leading,spacing:0){
@@ -1222,7 +1477,7 @@ struct TasksView: View {
                 LazyVStack(alignment:.leading,spacing:14) {
                     if !rows.isEmpty {
                         VStack(spacing:0) {
-                            HStack{Label("General tasks",systemImage:"checklist").font(.headline);Spacer();Text("\(rows.count)").font(.caption.bold()).foregroundStyle(.secondary)}.padding(16)
+                            HStack{Label("All general tasks",systemImage:"checklist").font(.headline);Spacer();Text("\(rows.count)").font(.caption.bold()).foregroundStyle(.secondary)}.padding(16)
                             Divider()
                             ForEach(rows) { task in
                                 MacGeneralTaskCardRow(task:task,userName:owner(task),action:{Task{await appState.toggleGeneralTask(task)}},onEdit:{editingTask=task},onDelete:{Task{await appState.deleteGeneralTask(task)}})
@@ -1231,11 +1486,11 @@ struct TasksView: View {
                         }.background(.background,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.quaternary))
                     }
                     ForEach(jobTaskGroups) { group in
-                        MacJobTaskCard(group:group,isExpanded:expandedJobIDs.contains(group.id),toggleExpanded:{withAnimation(.easeInOut(duration:0.2)){if expandedJobIDs.contains(group.id){expandedJobIDs.remove(group.id)}else{expandedJobIDs.insert(group.id)}}},toggleTask:{taskID in Task{await appState.toggleLeadTask(leadID:group.lead.id,taskID:taskID)}})
+                        MacJobTaskCard(group:group,isExpanded:expandedJobIDs.contains(group.id),toggleExpanded:{withAnimation(.easeInOut(duration:0.2)){if expandedJobIDs.contains(group.id){expandedJobIDs.remove(group.id)}else{expandedJobIDs.insert(group.id)}}},toggleTask:{taskID in Task{await appState.toggleLeadTask(leadID:group.lead.id,taskID:taskID)}},editTask:{task in editingJobTask=JobChecklistItem(lead:group.lead,task:task)})
                     }
                 }.padding(.horizontal,24).padding(.bottom,24)
             }.overlay { if visibleCount == 0 { ContentUnavailableView("No tasks here",systemImage:"checkmark.circle",description:Text("Try another filter or create a new task.")) } }
-        }.background(Color(nsColor:.windowBackgroundColor)).navigationTitle("Tasks").onAppear{if expandedJobIDs.isEmpty{expandedJobIDs=Set(jobTaskGroups.prefix(3).map(\.id))}}.sheet(isPresented:$showingAdd){AddTaskView()}.sheet(item:$editingTask){AddTaskView(task:$0)}
+        }.background(Color(nsColor:.windowBackgroundColor)).navigationTitle("Tasks").onAppear{if expandedJobIDs.isEmpty{expandedJobIDs=Set(jobTaskGroups.prefix(3).map(\.id))}}.sheet(isPresented:$showingAdd){AddTaskView()}.sheet(item:$editingTask){AddTaskView(task:$0)}.sheet(item:$editingJobTask){EditJobTaskView(item:$0)}
         #else
         ScrollView {
             LazyVStack(alignment:.leading,spacing:14) {
@@ -1267,7 +1522,7 @@ struct TasksView: View {
                 ForEach(jobTaskGroups) { group in
                     MobileJobTaskCard(group:group,isExpanded:expandedJobIDs.contains(group.id),toggleExpanded:{
                         withAnimation(.easeInOut(duration:0.2)){if expandedJobIDs.contains(group.id){expandedJobIDs.remove(group.id)}else{expandedJobIDs.insert(group.id)}}
-                    },toggleTask:{taskID in Task{await appState.toggleLeadTask(leadID:group.lead.id,taskID:taskID)}})
+                    },toggleTask:{taskID in Task{await appState.toggleLeadTask(leadID:group.lead.id,taskID:taskID)}},editTask:{task in editingJobTask=JobChecklistItem(lead:group.lead,task:task)})
                 }
                 if visibleCount == 0 { ContentUnavailableView("No tasks here",systemImage:"checkmark.circle",description:Text("Try another view or add a general task.")) .padding(.top,60) }
             }.padding(16)
@@ -1280,7 +1535,7 @@ struct TasksView: View {
             }
         }
         .onAppear { if expandedJobIDs.isEmpty { expandedJobIDs = Set(jobTaskGroups.prefix(2).map(\.id)) } }
-        .sheet(isPresented:$showingAdd){AddTaskView()}.sheet(item:$editingTask){AddTaskView(task:$0)}
+        .sheet(isPresented:$showingAdd){AddTaskView()}.sheet(item:$editingTask){AddTaskView(task:$0)}.sheet(item:$editingJobTask){EditJobTaskView(item:$0)}
         #endif
     }
     private func isMyTask(_ task:GeneralTask)->Bool{guard let user=appState.currentUser else{return false};return task.assignedTo.contains(user.id)}
@@ -1290,26 +1545,164 @@ struct TasksView: View {
 private struct JobTaskGroup:Identifiable{let lead:Lead;let items:[JobChecklistItem];var id:String{lead.id}}
 
 #if os(iOS)
+private struct MobileTaskActionRequiredList: View {
+    @Environment(AppState.self) private var appState
+    private var actions: [CompanyAction] { Array(appState.taskActions.prefix(8)) }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("Action required", systemImage: "exclamationmark.circle.fill").font(.headline).foregroundStyle(.orange)
+                    Text("Why it matters and where to deal with it.").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(); Text("\(actions.count)").font(.caption.bold()).padding(.horizontal, 8).padding(.vertical, 4).background(.quaternary, in: Capsule())
+            }.padding(15)
+            if actions.isEmpty { Text("Nothing needs attention right now.").font(.subheadline).foregroundStyle(.secondary).padding(15) }
+            ForEach(actions) { action in
+                Divider()
+                HStack(spacing: 12) {
+                    Image(systemName: icon(action.kind)).foregroundStyle(action.priority.tint).frame(width: 36, height: 36).background(action.priority.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(action.title).fontWeight(.semibold)
+                        Text(action.detail).font(.caption).foregroundStyle(.secondary)
+                        Text(action.reason).font(.caption2.weight(.medium)).foregroundStyle(action.priority.tint)
+                    }
+                    Spacer(); control(action)
+                }.padding(.horizontal, 15).padding(.vertical, 11)
+            }
+        }.background(Color.orange.opacity(0.04), in: RoundedRectangle(cornerRadius: 18)).overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.orange.opacity(0.22)))
+    }
+    @ViewBuilder private func control(_ action: CompanyAction) -> some View {
+        if let taskID = action.generalTaskID, let task = appState.generalTasks.first(where: { $0.id == taskID }) {
+            Button("Done") { Task { await appState.toggleGeneralTask(task) } }.buttonStyle(.bordered).tint(.orange)
+        } else if let leadID = action.leadID {
+            NavigationLink { LeadDetailView(leadID: leadID) } label: { Image(systemName: "arrow.right.circle.fill").font(.title2) }.foregroundStyle(.orange).accessibilityLabel("Open related job")
+        } else if action.kind == .timesheet {
+            Button { appState.selectedSection = .timesheet } label: { Image(systemName: "arrow.right.circle.fill").font(.title2) }.buttonStyle(.plain).foregroundStyle(.orange).accessibilityLabel("Open timesheets")
+        }
+    }
+    private func icon(_ kind: CompanyActionKind) -> String { switch kind { case .generalTask: "checklist"; case .jobTask: "hammer"; case .survey: "calendar"; case .jobStart: "hammer.fill"; case .overdueJob: "exclamationmark.triangle.fill"; case .quoteFollowUp: "doc.text"; case .deposit, .balance: "sterlingsign.circle"; case .timesheet: "clock.badge.exclamationmark" } }
+}
+
 private struct MobileGeneralTaskRow:View{
     let task:GeneralTask;let owner:String;let toggle:()->Void;let edit:()->Void
     var body:some View{HStack(spacing:12){Button(action:toggle){Image(systemName:task.completed ? "checkmark.circle.fill":"circle").font(.title2).foregroundStyle(task.completed ? .green:.secondary)}.buttonStyle(.plain);Button(action:edit){VStack(alignment:.leading,spacing:3){Text(task.title).fontWeight(.medium).foregroundStyle(.primary).strikethrough(task.completed);Text([task.category,task.dueDate,owner].compactMap{$0}.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain)}.padding(.horizontal,15).padding(.vertical,12)}
 }
 
 private struct MobileJobTaskCard:View{
-    let group:JobTaskGroup;let isExpanded:Bool;let toggleExpanded:()->Void;let toggleTask:(String)->Void
+    @Environment(AppState.self) private var appState
+    let group:JobTaskGroup;let isExpanded:Bool;let toggleExpanded:()->Void;let toggleTask:(String)->Void;let editTask:(CRMTask)->Void
     private var completed:Int{group.items.filter(\.task.completed).count}
     private var progress:Double{group.items.isEmpty ? 0:Double(completed)/Double(group.items.count)}
-    var body:some View{VStack(spacing:0){Button(action:toggleExpanded){HStack(spacing:12){Text(group.lead.name.prefix(1)).font(.headline).foregroundStyle(.orange).frame(width:42,height:42).background(Color.orange.opacity(0.13),in:RoundedRectangle(cornerRadius:12));VStack(alignment:.leading,spacing:6){HStack(spacing:7){Text(group.lead.name).font(.headline).foregroundStyle(.primary).lineLimit(1);Text(group.lead.jobType).font(.caption).foregroundStyle(.secondary).padding(.horizontal,7).padding(.vertical,3).background(Color.secondary.opacity(0.09),in:Capsule()).lineLimit(1)};HStack(spacing:9){ProgressView(value:progress).tint(.orange).frame(maxWidth:125);Text("\(completed)/\(group.items.count) done").font(.caption).foregroundStyle(.secondary)}};Spacer();Text(isExpanded ? "Close":"Open").font(.subheadline.bold()).foregroundStyle(.orange);Image(systemName:isExpanded ? "chevron.up":"chevron.down").font(.caption.bold()).foregroundStyle(.secondary)}.padding(15).contentShape(Rectangle())}.buttonStyle(.plain);if isExpanded{Divider();ForEach(group.items){item in HStack(spacing:12){Button{toggleTask(item.task.id)}label:{Image(systemName:item.task.completed ? "checkmark.circle.fill":"circle").font(.title2).foregroundStyle(item.task.completed ? .green:.secondary)}.buttonStyle(.plain);VStack(alignment:.leading,spacing:3){Text(item.task.title).foregroundStyle(.primary).strikethrough(item.task.completed);if let due=item.task.dueDate{Label(due,systemImage:"calendar").font(.caption2).foregroundStyle(!item.task.completed && due<SupabaseService.today ? .red:.secondary)}};Spacer()}.padding(.horizontal,17).padding(.vertical,12);if item.id != group.items.last?.id{Divider().padding(.leading,52)}};Divider();NavigationLink{LeadDetailView(leadID:group.lead.id)}label:{Label("Open job",systemImage:"arrow.right.circle").font(.subheadline.bold()).foregroundStyle(.orange).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,17).padding(.vertical,12)}}}.background(.background,in:RoundedRectangle(cornerRadius:18)).overlay(RoundedRectangle(cornerRadius:18).stroke(.quaternary)).shadow(color:.black.opacity(0.035),radius:8,y:3)}
+    var body:some View{VStack(spacing:0){Button(action:toggleExpanded){HStack(spacing:12){Text(group.lead.name.prefix(1)).font(.headline).foregroundStyle(.orange).frame(width:42,height:42).background(Color.orange.opacity(0.13),in:RoundedRectangle(cornerRadius:12));VStack(alignment:.leading,spacing:6){HStack(spacing:7){Text(group.lead.name).font(.headline).foregroundStyle(.primary).lineLimit(1);Text(group.lead.jobType).font(.caption).foregroundStyle(.secondary).padding(.horizontal,7).padding(.vertical,3).background(Color.secondary.opacity(0.09),in:Capsule()).lineLimit(1)};HStack(spacing:9){ProgressView(value:progress).tint(.orange).frame(maxWidth:125);Text("\(completed)/\(group.items.count) done").font(.caption).foregroundStyle(.secondary)}};Spacer();Text(isExpanded ? "Close":"Open").font(.subheadline.bold()).foregroundStyle(.orange);Image(systemName:isExpanded ? "chevron.up":"chevron.down").font(.caption.bold()).foregroundStyle(.secondary)}.padding(15).contentShape(Rectangle())}.buttonStyle(.plain);if isExpanded{Divider();ForEach(group.items){item in VStack(spacing:0){HStack(spacing:12){Button{toggleTask(item.task.id)}label:{Image(systemName:item.task.completed ? "checkmark.circle.fill":"circle").font(.title2).foregroundStyle(item.task.completed ? .green:.secondary)}.buttonStyle(.plain);Button{editTask(item.task)}label:{VStack(alignment:.leading,spacing:4){Text(item.task.title).foregroundStyle(.primary).strikethrough(item.task.completed);HStack(spacing:8){if let due=item.task.dueDate{Label(due,systemImage:"calendar").foregroundStyle(!item.task.completed && due<SupabaseService.today ? .red:.secondary)};Text((item.task.priority ?? "medium").capitalized).foregroundStyle(item.task.priority == "high" ? .red:.secondary);if let steps=item.task.subtasks,!steps.isEmpty{Text("\(steps.filter(\.completed).count)/\(steps.count) steps").foregroundStyle(.orange)}}.font(.caption2);if let notes=item.task.notes,!notes.isEmpty{Text(notes).font(.caption).foregroundStyle(.secondary).lineLimit(2)}}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain);Button{editTask(item.task)}label:{Image(systemName:"pencil.circle").font(.title3)}.buttonStyle(.plain).foregroundStyle(.orange).accessibilityLabel("Edit task")}.padding(.horizontal,17).padding(.vertical,12);if let steps=item.task.subtasks,!steps.isEmpty{VStack(spacing:0){ForEach(steps){step in Button{Task{await appState.toggleLeadSubtask(leadID:group.lead.id,taskID:item.task.id,subtaskID:step.id)}}label:{HStack{Image(systemName:step.completed ? "checkmark.circle.fill":"circle").foregroundStyle(step.completed ? .green:.orange);Text(step.title).font(.subheadline).foregroundStyle(.primary).strikethrough(step.completed);Spacer()}.padding(.leading,52).padding(.trailing,17).frame(minHeight:40)}.buttonStyle(.plain)}}};if item.id != group.items.last?.id{Divider().padding(.leading,52)}}};Divider();NavigationLink{if appState.isAdmin{LeadDetailView(leadID:group.lead.id)}else{WorkerJobDetailView(leadID:group.lead.id)}}label:{Label("Open job",systemImage:"arrow.right.circle").font(.subheadline.bold()).foregroundStyle(.orange).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,17).padding(.vertical,12)}}}.background(.background,in:RoundedRectangle(cornerRadius:18)).overlay(RoundedRectangle(cornerRadius:18).stroke(.quaternary)).shadow(color:.black.opacity(0.035),radius:8,y:3)}
 }
 #endif
 
 #if os(macOS)
+private struct MacTaskFocusList: View {
+    @Environment(AppState.self) private var appState
+    private var actions: [CompanyAction] { Array(appState.taskActions.prefix(8)) }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack { VStack(alignment: .leading, spacing: 2) { Label("Action required", systemImage: "exclamationmark.circle.fill").font(.headline).foregroundStyle(.orange); Text("Why it matters and where to deal with it.").font(.caption).foregroundStyle(.secondary) }; Spacer(); Text("Priority order").font(.caption2.bold()).foregroundStyle(.orange).padding(.horizontal, 8).padding(.vertical, 4).background(Color.orange.opacity(0.1), in: Capsule()) }.padding(16)
+            if actions.isEmpty { Text("Nothing needs attention right now.").font(.subheadline).foregroundStyle(.secondary).padding(16) }
+            ForEach(actions) { action in
+                HStack(spacing: 12) {
+                    Image(systemName: icon(action.kind)).foregroundStyle(action.priority.tint).frame(width: 34, height: 34).background(action.priority.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
+                    VStack(alignment: .leading, spacing: 3) { Text(action.title).fontWeight(.semibold); Text(action.detail).font(.caption).foregroundStyle(.secondary); Text(action.reason).font(.caption2.weight(.medium)).foregroundStyle(action.priority.tint) }
+                    Spacer()
+                    if let taskID = action.generalTaskID, let task = appState.generalTasks.first(where: { $0.id == taskID }) {
+                        Button("Complete") { Task { await appState.toggleGeneralTask(task) } }.buttonStyle(.bordered)
+                    } else if let leadID = action.leadID {
+                        NavigationLink { LeadDetailView(leadID: leadID) } label: { Label("Open job", systemImage: "arrow.right") }.buttonStyle(.bordered)
+                    } else if action.kind == .timesheet {
+                        Button("Open timesheets") { appState.selectedSection = .timesheet }.buttonStyle(.bordered)
+                    }
+                }.padding(.horizontal, 16).padding(.vertical, 10).overlay(alignment: .bottom) { Divider().padding(.leading, 62) }
+            }
+        }.background(Color.orange.opacity(0.035), in: RoundedRectangle(cornerRadius: 14)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.orange.opacity(0.20)))
+    }
+    private func icon(_ kind: CompanyActionKind) -> String { switch kind { case .generalTask: "checklist"; case .jobTask: "hammer"; case .survey: "calendar"; case .jobStart: "hammer.fill"; case .overdueJob: "exclamationmark.triangle.fill"; case .quoteFollowUp: "doc.text"; case .deposit, .balance: "sterlingsign.circle"; case .timesheet: "clock.badge.exclamationmark" } }
+}
 private struct TaskMetric:View{let title:String;let value:Int;let icon:String;let tint:Color;var body:some View{HStack(spacing:13){Image(systemName:icon).font(.title2).foregroundStyle(tint).frame(width:42,height:42).background(tint.opacity(0.1),in:RoundedRectangle(cornerRadius:9));VStack(alignment:.leading){Text("\(value)").font(.title2.bold());Text(title).font(.caption).foregroundStyle(.secondary)}}.padding(14).frame(maxWidth:.infinity,alignment:.leading).background(.background,in:RoundedRectangle(cornerRadius:10)).overlay(RoundedRectangle(cornerRadius:10).stroke(.quaternary))}}
 private struct MacGeneralTaskCardRow:View{let task:GeneralTask;let userName:String;let action:()->Void;let onEdit:()->Void;let onDelete:()->Void;@State private var confirmingDelete=false;private var tint:Color{task.priority=="high" ? .red:task.priority=="low" ? .green:.orange};var body:some View{HStack(spacing:13){Button(action:action){Image(systemName:task.completed ? "checkmark.circle.fill":"circle").font(.title2).foregroundStyle(task.completed ? .green:.secondary)}.buttonStyle(.plain);Button(action:onEdit){VStack(alignment:.leading,spacing:3){Text(task.title).fontWeight(.medium).foregroundStyle(.primary).strikethrough(task.completed);Text([task.category,task.dueDate,userName].compactMap{$0}.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary)}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain);Text(task.priority.capitalized).font(.caption.bold()).foregroundStyle(tint).padding(.horizontal,8).padding(.vertical,4).background(tint.opacity(0.1),in:Capsule());Menu{Button("Edit",action:onEdit);Button(task.completed ? "Mark incomplete":"Mark complete",action:action);Divider();Button("Delete",role:.destructive){confirmingDelete=true}}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton)}.padding(.horizontal,16).frame(minHeight:62).confirmationDialog("Delete this task?",isPresented:$confirmingDelete){Button("Delete",role:.destructive,action:onDelete)}}}
-private struct MacJobTaskCard:View{let group:JobTaskGroup;let isExpanded:Bool;let toggleExpanded:()->Void;let toggleTask:(String)->Void;private var completed:Int{group.items.filter(\.task.completed).count};private var progress:Double{group.items.isEmpty ? 0:Double(completed)/Double(group.items.count)};var body:some View{VStack(spacing:0){Button(action:toggleExpanded){HStack(spacing:14){Text(group.lead.name.prefix(1)).font(.title3.bold()).foregroundStyle(.orange).frame(width:46,height:46).background(Color.orange.opacity(0.13),in:RoundedRectangle(cornerRadius:11));VStack(alignment:.leading,spacing:7){HStack{Text(group.lead.name).font(.headline).foregroundStyle(.primary);Text(group.lead.jobType).font(.caption).foregroundStyle(.secondary).padding(.horizontal,8).padding(.vertical,3).background(Color.secondary.opacity(0.09),in:Capsule());Text(group.lead.jobRef).font(.caption).foregroundStyle(.secondary)};HStack(spacing:10){ProgressView(value:progress).tint(.orange).frame(width:180);Text("\(completed)/\(group.items.count) done").font(.caption).foregroundStyle(.secondary)}};Spacer();Text(isExpanded ? "Close":"Open").font(.subheadline.bold()).foregroundStyle(.orange);Image(systemName:isExpanded ? "chevron.up":"chevron.down").font(.caption.bold()).foregroundStyle(.secondary)}.padding(16).contentShape(Rectangle())}.buttonStyle(.plain);if isExpanded{Divider();ForEach(group.items){item in HStack(spacing:13){Button{toggleTask(item.task.id)}label:{Image(systemName:item.task.completed ? "checkmark.circle.fill":"circle").font(.title2).foregroundStyle(item.task.completed ? .green:.secondary)}.buttonStyle(.plain);VStack(alignment:.leading,spacing:3){Text(item.task.title).fontWeight(.medium).strikethrough(item.task.completed);if let due=item.task.dueDate{Label(due,systemImage:"calendar").font(.caption).foregroundStyle(!item.task.completed && due<SupabaseService.today ? .red:.secondary)}};Spacer()}.padding(.horizontal,18).frame(minHeight:58);if item.id != group.items.last?.id{Divider().padding(.leading,56)}};Divider();NavigationLink{LeadDetailView(leadID:group.lead.id)}label:{Label("Open job",systemImage:"arrow.right.circle").font(.subheadline.bold()).foregroundStyle(.orange).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,18).padding(.vertical,12)}}}.background(.background,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.quaternary)).shadow(color:.black.opacity(0.025),radius:6,y:2)}}
+private struct MacJobTaskCard:View{@Environment(AppState.self) private var appState;let group:JobTaskGroup;let isExpanded:Bool;let toggleExpanded:()->Void;let toggleTask:(String)->Void;let editTask:(CRMTask)->Void;private var completed:Int{group.items.filter(\.task.completed).count};private var progress:Double{group.items.isEmpty ? 0:Double(completed)/Double(group.items.count)};var body:some View{VStack(spacing:0){Button(action:toggleExpanded){HStack(spacing:14){Text(group.lead.name.prefix(1)).font(.title3.bold()).foregroundStyle(.orange).frame(width:46,height:46).background(Color.orange.opacity(0.13),in:RoundedRectangle(cornerRadius:11));VStack(alignment:.leading,spacing:7){HStack{Text(group.lead.name).font(.headline).foregroundStyle(.primary);Text(group.lead.jobType).font(.caption).foregroundStyle(.secondary).padding(.horizontal,8).padding(.vertical,3).background(Color.secondary.opacity(0.09),in:Capsule());Text(group.lead.jobRef).font(.caption).foregroundStyle(.secondary)};HStack(spacing:10){ProgressView(value:progress).tint(.orange).frame(width:180);Text("\(completed)/\(group.items.count) done").font(.caption).foregroundStyle(.secondary)}};Spacer();Text(isExpanded ? "Close":"Open").font(.subheadline.bold()).foregroundStyle(.orange);Image(systemName:isExpanded ? "chevron.up":"chevron.down").font(.caption.bold()).foregroundStyle(.secondary)}.padding(16).contentShape(Rectangle())}.buttonStyle(.plain);if isExpanded{Divider();ForEach(group.items){item in VStack(spacing:0){HStack(spacing:13){Button{toggleTask(item.task.id)}label:{Image(systemName:item.task.completed ? "checkmark.circle.fill":"circle").font(.title2).foregroundStyle(item.task.completed ? .green:.secondary)}.buttonStyle(.plain);Button{editTask(item.task)}label:{VStack(alignment:.leading,spacing:3){Text(item.task.title).fontWeight(.medium).foregroundStyle(.primary).strikethrough(item.task.completed);HStack{if let due=item.task.dueDate{Label(due,systemImage:"calendar").foregroundStyle(!item.task.completed && due<SupabaseService.today ? .red:.secondary)};Text((item.task.priority ?? "medium").capitalized);if let steps=item.task.subtasks,!steps.isEmpty{Text("\(steps.filter(\.completed).count)/\(steps.count) steps").foregroundStyle(.orange)}}.font(.caption).foregroundStyle(.secondary);if let notes=item.task.notes,!notes.isEmpty{Text(notes).font(.caption).foregroundStyle(.secondary).lineLimit(1)}}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain);Button("Edit"){editTask(item.task)}.buttonStyle(.bordered)}.padding(.horizontal,18).frame(minHeight:68);if let steps=item.task.subtasks,!steps.isEmpty{ForEach(steps){step in Button{Task{await appState.toggleLeadSubtask(leadID:group.lead.id,taskID:item.task.id,subtaskID:step.id)}}label:{HStack{Image(systemName:step.completed ? "checkmark.circle.fill":"circle").foregroundStyle(step.completed ? .green:.orange);Text(step.title).foregroundStyle(.primary).strikethrough(step.completed);Spacer()}.padding(.leading,58).padding(.trailing,18).frame(height:38)}.buttonStyle(.plain)}};if item.id != group.items.last?.id{Divider().padding(.leading,56)}}};Divider();NavigationLink{if appState.isAdmin{LeadDetailView(leadID:group.lead.id)}else{WorkerJobDetailView(leadID:group.lead.id)}}label:{Label("Open job",systemImage:"arrow.right.circle").font(.subheadline.bold()).foregroundStyle(.orange).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,18).padding(.vertical,12)}}}.background(.background,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.quaternary)).shadow(color:.black.opacity(0.025),radius:6,y:2)}}
 private struct TaskTableRow:View{let task:GeneralTask;let userName:String;let action:()->Void;let onEdit:()->Void;let onDelete:()->Void;@State private var confirmingDelete=false;private var tint:Color{switch task.priority{case "high":.red;case "low":.green;default:.orange}};private var due:String{guard let d=task.dueDate else{return "No date"};if d==SupabaseService.today{return "Today"};return d};var body:some View{HStack(spacing:0){Button(action:action){Image(systemName:task.completed ? "checkmark.circle.fill":"circle").font(.title3).foregroundStyle(task.completed ? .green:.secondary)}.buttonStyle(.plain).frame(width:36);Button(action:onEdit){VStack(alignment:.leading,spacing:3){Text(task.title).fontWeight(.medium).strikethrough(task.completed);if let notes=task.notes,!notes.isEmpty{Text(notes).font(.caption).foregroundStyle(.secondary).lineLimit(1)}}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain);Text(task.category).frame(width:130,alignment:.leading);Label(due,systemImage:"calendar").foregroundStyle(!task.completed && (task.dueDate ?? "9999")<SupabaseService.today ? .red:.secondary).frame(width:120,alignment:.leading);Text(task.priority.capitalized).font(.caption.bold()).foregroundStyle(tint).padding(.horizontal,8).padding(.vertical,4).background(tint.opacity(0.1),in:Capsule()).frame(width:100,alignment:.leading);Text(userName).frame(width:130,alignment:.leading)}.font(.subheadline).padding(.horizontal,24).frame(height:64).background(task.completed ? Color.secondary.opacity(0.025):.clear).overlay(alignment:.bottom){Divider()}.contextMenu{Button("Edit",action:onEdit);Button(task.completed ? "Mark incomplete":"Mark complete",action:action);Divider();Button("Delete task",role:.destructive){confirmingDelete=true}}.confirmationDialog("Delete this task?",isPresented:$confirmingDelete,titleVisibility:.visible){Button("Delete",role:.destructive,action:onDelete)}}}
-private struct JobChecklistTableRow:View{let item:JobChecklistItem;let action:()->Void;private var due:String{guard let d=item.task.dueDate else{return "No date"};return d==SupabaseService.today ? "Today":d};var body:some View{HStack(spacing:0){Button(action:action){Image(systemName:item.task.completed ? "checkmark.circle.fill":"circle").font(.title3).foregroundStyle(item.task.completed ? .green:.purple)}.buttonStyle(.plain).frame(width:36).help(item.task.completed ? "Mark incomplete":"Mark complete");NavigationLink{LeadDetailView(leadID:item.lead.id)}label:{VStack(alignment:.leading,spacing:3){Text(item.task.title).fontWeight(.medium).strikethrough(item.task.completed);Text("\(item.lead.name) · \(item.lead.jobRef)").font(.caption).foregroundStyle(.secondary)}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain);Text("Job checklist").foregroundStyle(.purple).frame(width:130,alignment:.leading);Label(due,systemImage:"calendar").foregroundStyle(!item.task.completed && (item.task.dueDate ?? "9999")<SupabaseService.today ? .red:.secondary).frame(width:120,alignment:.leading);Text("Medium").font(.caption.bold()).foregroundStyle(.purple).padding(.horizontal,8).padding(.vertical,4).background(Color.purple.opacity(0.1),in:Capsule()).frame(width:100,alignment:.leading);Text(item.lead.assignedTo.isEmpty ? "Unassigned":item.lead.assignedTo).frame(width:130,alignment:.leading)}.font(.subheadline).padding(.horizontal,24).frame(height:64).background(item.task.completed ? Color.secondary.opacity(0.025):.clear).overlay(alignment:.bottom){Divider()}.contextMenu{Button(item.task.completed ? "Mark incomplete":"Mark complete",action:action)}}}
+private struct JobChecklistTableRow:View{@Environment(AppState.self) private var appState;let item:JobChecklistItem;let action:()->Void;private var due:String{guard let d=item.task.dueDate else{return "No date"};return d==SupabaseService.today ? "Today":d};var body:some View{HStack(spacing:0){Button(action:action){Image(systemName:item.task.completed ? "checkmark.circle.fill":"circle").font(.title3).foregroundStyle(item.task.completed ? .green:.purple)}.buttonStyle(.plain).frame(width:36).help(item.task.completed ? "Mark incomplete":"Mark complete");NavigationLink{if appState.isAdmin{LeadDetailView(leadID:item.lead.id)}else{WorkerJobDetailView(leadID:item.lead.id)}}label:{VStack(alignment:.leading,spacing:3){Text(item.task.title).fontWeight(.medium).strikethrough(item.task.completed);Text("\(item.lead.name) · \(item.lead.jobRef)").font(.caption).foregroundStyle(.secondary)}.frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain);Text("Job checklist").foregroundStyle(.purple).frame(width:130,alignment:.leading);Label(due,systemImage:"calendar").foregroundStyle(!item.task.completed && (item.task.dueDate ?? "9999")<SupabaseService.today ? .red:.secondary).frame(width:120,alignment:.leading);Text("Medium").font(.caption.bold()).foregroundStyle(.purple).padding(.horizontal,8).padding(.vertical,4).background(Color.purple.opacity(0.1),in:Capsule()).frame(width:100,alignment:.leading);Text(item.lead.assignedTo.isEmpty ? "Unassigned":item.lead.assignedTo).frame(width:130,alignment:.leading)}.font(.subheadline).padding(.horizontal,24).frame(height:64).background(item.task.completed ? Color.secondary.opacity(0.025):.clear).overlay(alignment:.bottom){Divider()}.contextMenu{Button(item.task.completed ? "Mark incomplete":"Mark complete",action:action)}}}
 #endif
+
+private struct EditJobTaskView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    let item: JobChecklistItem
+    @State private var title: String
+    @State private var notes: String
+    @State private var priority: String
+    @State private var hasDueDate: Bool
+    @State private var dueDate: Date
+    @State private var subtasks: [CRMSubtask]
+    @State private var newSubtask = ""
+    @State private var isSaving = false
+
+    init(item: JobChecklistItem) {
+        self.item = item
+        _title = State(initialValue: item.task.title)
+        _notes = State(initialValue: item.task.notes ?? "")
+        _priority = State(initialValue: item.task.priority ?? "medium")
+        _hasDueDate = State(initialValue: item.task.dueDate != nil)
+        _dueDate = State(initialValue: item.task.dueDate.flatMap { SupabaseService.date(from: $0) } ?? .now)
+        _subtasks = State(initialValue: item.task.subtasks ?? [])
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Action required") {
+                    TextField("What needs doing?", text: $title)
+                    TextField("Details, access or expected result", text: $notes, axis: .vertical).lineLimit(3...7)
+                }
+                Section("Planning") {
+                    Picker("Priority", selection: $priority) { Text("Low").tag("low"); Text("Medium").tag("medium"); Text("High").tag("high") }
+                    Toggle("Due date", isOn: $hasDueDate)
+                    if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }
+                }
+                Section("Subtasks") {
+                    ForEach($subtasks) { $subtask in
+                        HStack {
+                            Button { subtask.completed.toggle() } label: { Image(systemName: subtask.completed ? "checkmark.circle.fill" : "circle").foregroundStyle(subtask.completed ? .green : .orange) }.buttonStyle(.plain)
+                            TextField("Step", text: $subtask.title)
+                            Button(role: .destructive) { subtasks.removeAll { $0.id == subtask.id } } label: { Image(systemName: "trash") }.buttonStyle(.plain)
+                        }
+                    }
+                    HStack {
+                        TextField("Add a step", text: $newSubtask).onSubmit { addSubtask() }
+                        Button("Add") { addSubtask() }.disabled(newSubtask.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                Section("Related job") { LabeledContent("Customer", value: item.lead.name); LabeledContent("Reference", value: item.lead.jobRef) }
+            }
+            .disabled(isSaving)
+            .navigationTitle("Edit job task")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(isSaving) }
+                ToolbarItem(placement: .confirmationAction) { Button { save() } label: { if isSaving { ProgressView() } else { Text("Save") } }.disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving) }
+            }
+        }.frame(minWidth: 420, minHeight: 450)
+    }
+
+    private func save() {
+        let due = hasDueDate ? SupabaseService.localDay(for: dueDate) : nil
+        Task {
+            isSaving = true; defer { isSaving = false }
+            if await appState.updateLeadTask(leadID: item.lead.id, taskID: item.task.id, title: title, dueDate: due, priority: priority, notes: notes, subtasks: subtasks) { dismiss() }
+        }
+    }
+    private func addSubtask() {
+        let clean = newSubtask.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        subtasks.append(CRMSubtask(id: UUID().uuidString, title: clean, completed: false)); newSubtask = ""
+    }
+}
 
 private struct AddTaskView: View {
     @Environment(AppState.self) private var appState; @Environment(\.dismiss) private var dismiss
@@ -1559,7 +1952,7 @@ struct ReportsView: View {
         #if os(macOS)
         MacReportsView()
         #else
-        List { Section("Financial") { LabeledContent("Total won", value: appState.leads.filter { [.won,.scheduled,.inProgress,.completed,.paid].contains($0.stage) }.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP"))); LabeledContent("Paid revenue", value: appState.leads.filter{$0.stage == .paid}.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP"))); LabeledContent("Outstanding", value: appState.leads.filter{$0.stage != .lost}.reduce(0){$0+$1.balance}.formatted(.currency(code:"GBP"))) }; Section("Pipeline") { ForEach(LeadStage.allCases) { stage in let rows = appState.leads.filter{$0.stage == stage}; LabeledContent(stage.rawValue, value: "\(rows.count) · \(rows.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP")))") } }; Section("Lead Sources") { ForEach(Dictionary(grouping: appState.leads, by: \.source).keys.sorted(), id: \.self) { source in LabeledContent(source.isEmpty ? "Unknown" : source, value: "\(appState.leads.filter{$0.source == source}.count)") } } }.navigationTitle("Reports").toolbar { Button { prepareExport() } label: { Label("Export", systemImage: "square.and.arrow.up") }.disabled(appState.leads.isEmpty) }.fileExporter(isPresented: $exporting, document: exportDocument, contentType: .commaSeparatedText, defaultFilename: "ProLine-Job-Report-\(SupabaseService.today)") { result in if case .failure = result { appState.errorMessage = "The report could not be exported." } }
+        List { Section("Financial") { LabeledContent("Total won", value: appState.leads.filter { [.won,.scheduled,.inProgress,.completed,.waitingForPayment,.paid].contains($0.stage) }.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP"))); LabeledContent("Paid revenue", value: appState.leads.filter{$0.stage == .paid}.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP"))); LabeledContent("Outstanding", value: appState.leads.filter{$0.stage != .lost}.reduce(0){$0+$1.balance}.formatted(.currency(code:"GBP"))) }; Section("Pipeline") { ForEach(LeadStage.allCases) { stage in let rows = appState.leads.filter{$0.stage == stage}; LabeledContent(stage.rawValue, value: "\(rows.count) · \(rows.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP")))") } }; Section("Lead Sources") { ForEach(Dictionary(grouping: appState.leads, by: \.source).keys.sorted(), id: \.self) { source in LabeledContent(source.isEmpty ? "Unknown" : source, value: "\(appState.leads.filter{$0.source == source}.count)") } } }.navigationTitle("Reports").toolbar { Button { prepareExport() } label: { Label("Export", systemImage: "square.and.arrow.up") }.disabled(appState.leads.isEmpty) }.fileExporter(isPresented: $exporting, document: exportDocument, contentType: .commaSeparatedText, defaultFilename: "ProLine-Job-Report-\(SupabaseService.today)") { result in if case .failure = result { appState.errorMessage = "The report could not be exported." } }
         #endif
     }
     private func prepareExport() { exportDocument = CRMCSVDocument(text: CRMReportExport.csv(leads: appState.leads)); exporting = true }
@@ -1577,9 +1970,9 @@ struct TimesheetView: View {
     @Environment(AppState.self) private var appState
     var body: some View {
         #if os(macOS)
-        if appState.isAdmin { MacPayrollView() } else { WorkerWeeklyPayView() }
+        if appState.usesAdminInterface { MacPayrollView() } else { WorkerWeeklyPayView() }
         #else
-        if appState.isAdmin { MobileAdminPayReview() } else { WorkerWeeklyPayView() }
+        if appState.usesAdminInterface { MobileAdminPayReview() } else { WorkerWeeklyPayView() }
         #endif
     }
 }

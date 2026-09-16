@@ -21,26 +21,18 @@ private struct MobilePipelineBoard: View {
     @Binding var stage: LeadStage
     @Binding var showingAdd: Bool
     @State private var search = ""
-    private let stages:[LeadStage] = [.newLead,.surveyBooked,.quotePreparing,.quoteSent,.won,.scheduled,.inProgress]
-    private var open:[Lead] { appState.leads.filter { ![.completed,.paid,.lost].contains($0.stage) } }
+    @State private var workflow = "Sales"
+    private var stages:[LeadStage] { workflow == "Sales" ? [.newLead,.surveyBooked,.quotePreparing,.quoteSent] : [.won,.scheduled,.inProgress,.waitingForPayment] }
+    private let moveStages:[LeadStage] = [.newLead,.surveyBooked,.quotePreparing,.quoteSent,.won,.scheduled,.inProgress,.completed,.waitingForPayment,.paid,.lost]
     private var filtered:[Lead] { appState.leads.filter { search.isEmpty || [$0.name,$0.jobRef,$0.address,$0.jobType].contains { $0.localizedCaseInsensitiveContains(search) } } }
-    private var pipeline:Double { open.reduce(0){$0+$1.value} }
-    private var today:String { SupabaseService.today }
-    private var surveys:Int { appState.leads.filter{$0.surveyDate==today}.count }
-    private var followUps:Int { appState.leads.filter{$0.stage == .quoteSent}.count }
 
     var body: some View {
         VStack(spacing:0) {
             ScrollView {
                 VStack(spacing:14) {
-                    hero
+                    Picker("Pipeline", selection: $workflow) { Text("Sales").tag("Sales"); Text("Jobs").tag("Jobs") }
+                        .pickerStyle(.segmented)
                     searchBar
-                    HStack(spacing:8) {
-                        Label("\(surveys) surveys",systemImage:"calendar").foregroundStyle(.blue)
-                        Circle().frame(width:3,height:3).foregroundStyle(.tertiary)
-                        Label("\(followUps) quotes to chase",systemImage:"paperplane").foregroundStyle(.purple)
-                        Spacer()
-                    }.font(.caption.bold()).padding(.horizontal,14).frame(height:42).background(.background,in:RoundedRectangle(cornerRadius:13)).overlay(RoundedRectangle(cornerRadius:13).stroke(.quaternary))
                     stageRail
                     stageColumn(stage)
                 }.padding(.horizontal,14).padding(.bottom,24)
@@ -48,19 +40,12 @@ private struct MobilePipelineBoard: View {
         }
         .background(Color(.systemGroupedBackground)).navigationTitle("Pipeline").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItemGroup(placement:.topBarTrailing){NavigationLink{CompletedJobsArchiveView()}label:{Image(systemName:"archivebox")};Button{showingAdd=true}label:{Image(systemName:"plus").fontWeight(.bold)}} }
+        .onChange(of: workflow) { _, _ in withAnimation(.snappy) { stage = stages[0] } }
     }
 
-    private var hero:some View {
-        VStack(alignment:.leading,spacing:14) {
-            HStack(alignment:.top){VStack(alignment:.leading,spacing:3){Text("Sales pipeline").font(.title2.bold());Text("Live opportunity value").font(.caption).foregroundStyle(.white.opacity(0.72))};Spacer();Image(systemName:"house.lodge.fill").font(.title).foregroundStyle(.white.opacity(0.28))}
-            Text(pipeline,format:.currency(code:"GBP").precision(.fractionLength(0))).font(.system(size:34,weight:.bold,design:.rounded))
-            HStack { heroStat("\(open.count)","Open");Divider().overlay(.white.opacity(0.25));heroStat("\(appState.leads.filter{$0.stage == .won}.count)","Won");Divider().overlay(.white.opacity(0.25));heroStat("\(appState.visibleGeneralTasks.filter{!$0.completed && ($0.dueDate ?? "9999") < today}.count)","Overdue") }.frame(height:38)
-        }.foregroundStyle(.white).padding(18).background(LinearGradient(colors:[Color(red:0.03,green:0.12,blue:0.18),Color(red:0.04,green:0.23,blue:0.31)],startPoint:.topLeading,endPoint:.bottomTrailing),in:RoundedRectangle(cornerRadius:20)).overlay(alignment:.topTrailing){RoundedRectangle(cornerRadius:40).stroke(Color.orange.opacity(0.45),lineWidth:2).frame(width:150,height:100).rotationEffect(.degrees(-18)).offset(x:55,y:-35).clipped()}
-    }
-    private func heroStat(_ value:String,_ title:String)->some View{VStack(alignment:.leading,spacing:2){Text(value).font(.headline);Text(title).font(.caption2).foregroundStyle(.white.opacity(0.68))}.frame(maxWidth:.infinity,alignment:.leading)}
     private var searchBar:some View{HStack{Image(systemName:"magnifyingglass").foregroundStyle(.secondary);TextField("Search customer, postcode or job",text:$search);if !search.isEmpty{Button{search=""}label:{Image(systemName:"xmark.circle.fill").foregroundStyle(.secondary)}}}.padding(.horizontal,13).frame(height:46).background(.background,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.quaternary))}
     private var stageRail:some View{ScrollView(.horizontal,showsIndicators:false){HStack(spacing:9){ForEach(stages){item in let count=filtered.filter{$0.stage==item}.count;Button{withAnimation(.snappy){stage=item}}label:{VStack(alignment:.leading,spacing:7){HStack{Image(systemName:stageIconMobile(item));Spacer();Text("\(count)").font(.caption.bold())};Text(item.displayName).font(.caption.bold()).lineLimit(1);Capsule().fill(stageColorMobile(item)).frame(height:3)}.foregroundStyle(stage==item ? Color.white:Color.primary).padding(11).frame(width:118,height:78,alignment:.leading).background(stage==item ? stageColorMobile(item):Color(.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:14))}.buttonStyle(.plain)}}.contentMargins(.horizontal,1)}}
-    private func stageColumn(_ item:LeadStage)->some View{let rows=filtered.filter{$0.stage==item};return VStack(alignment:.leading,spacing:11){HStack{Button{previousStage()}label:{Image(systemName:"chevron.left").frame(width:28,height:28)}.buttonStyle(.plain).disabled(stage==stages.first);VStack(alignment:.leading,spacing:2){Text(item.displayName).font(.title3.bold());Text("\(rows.count) opportunities · \(rows.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP").precision(.fractionLength(0))))").font(.caption).foregroundStyle(.secondary)};Spacer();Button{nextStage()}label:{Image(systemName:"chevron.right").frame(width:28,height:28)}.buttonStyle(.plain).disabled(stage==stages.last);Button{showingAdd=true}label:{Label("Add",systemImage:"plus").font(.caption.bold())}.buttonStyle(.bordered).tint(stageColorMobile(item))};ForEach(rows){lead in MobilePipelineOpportunity(lead:lead,tint:stageColorMobile(item),stages:stages)};if rows.isEmpty{ContentUnavailableView("Nothing in \(item.displayName)",systemImage:"rectangle.stack",description:Text(search.isEmpty ? "Add a lead or move one into this stage.":"No matching customers in this stage." )).frame(maxWidth:.infinity).padding(.vertical,35)}}.padding(14).background(Color(.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:18))}
+    private func stageColumn(_ item:LeadStage)->some View{let rows=filtered.filter{$0.stage==item};return VStack(alignment:.leading,spacing:11){HStack{Button{previousStage()}label:{Image(systemName:"chevron.left").frame(width:28,height:28)}.buttonStyle(.plain).disabled(stage==stages.first);VStack(alignment:.leading,spacing:2){Text(item.displayName).font(.title3.bold());Text("\(rows.count) \(workflow == "Sales" ? "opportunities" : "jobs") · \(rows.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP").precision(.fractionLength(0))))").font(.caption).foregroundStyle(.secondary)};Spacer();Button{nextStage()}label:{Image(systemName:"chevron.right").frame(width:28,height:28)}.buttonStyle(.plain).disabled(stage==stages.last);Button{showingAdd=true}label:{Label("Add",systemImage:"plus").font(.caption.bold())}.buttonStyle(.bordered).tint(stageColorMobile(item))};ForEach(rows){lead in MobilePipelineOpportunity(lead:lead,tint:stageColorMobile(item),stages:moveStages)};if rows.isEmpty{ContentUnavailableView("Nothing in \(item.displayName)",systemImage:"rectangle.stack",description:Text(search.isEmpty ? "Add a lead or move one into this stage.":"No matching customers in this stage." )).frame(maxWidth:.infinity).padding(.vertical,35)}}.padding(14).background(Color(.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:18))}
     private func previousStage(){guard let index=stages.firstIndex(of:stage),index>0 else{return};withAnimation(.snappy){stage=stages[index-1]}}
     private func nextStage(){guard let index=stages.firstIndex(of:stage),index<stages.count-1 else{return};withAnimation(.snappy){stage=stages[index+1]}}
 }
@@ -75,7 +60,7 @@ private struct MobilePipelineOpportunity:View {
     var body:some View{VStack(spacing:0){NavigationLink{LeadDetailView(leadID:lead.id)}label:{MobilePipelineCard(lead:lead,tint:tint)}.buttonStyle(.plain);HStack(spacing:4){if !lead.phone.isEmpty,let url=URL(string:"tel:\(lead.phone.filter{!$0.isWhitespace})"){Link(destination:url){Label("Call",systemImage:"phone.fill").frame(maxWidth:.infinity)}}else{Label("No phone",systemImage:"phone.slash").frame(maxWidth:.infinity).foregroundStyle(.secondary)};Divider().frame(height:20);Button{completeNext()}label:{if completing{ProgressView().frame(maxWidth:.infinity)}else{Label(next == nil ? "No task":"Complete",systemImage:next == nil ? "checklist.unchecked":"checkmark.circle").frame(maxWidth:.infinity)}}.disabled(next == nil || completing);Divider().frame(height:20);Menu{ForEach(stages){destination in Button{Task{await appState.move(lead,to:destination)}}label:{Label(destination.displayName,systemImage:stageIconMobile(destination))}};Divider();Button{showingSchedule=true}label:{Label(lead.startDate == nil ? "Schedule job":"Edit schedule",systemImage:"calendar.badge.clock")};Button{confirmingJobCompletion=true}label:{Label("Complete job",systemImage:"archivebox")}}label:{Label("Move",systemImage:"arrow.right.circle").frame(maxWidth:.infinity)}}.font(.caption.bold()).buttonStyle(.plain).foregroundStyle(tint).padding(.horizontal,8).frame(height:42).background(.background).overlay(alignment:.top){Divider()}}
         .clipShape(RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.quaternary)).shadow(color:.black.opacity(0.035),radius:3,y:1)
         .sheet(isPresented:$showingSchedule){ScheduleJobSheet(lead:lead)}
-        .confirmationDialog("Complete and archive this job?",isPresented:$confirmingJobCompletion,titleVisibility:.visible){Button("Complete job"){Task{await appState.move(lead,to:.completed)}};Button("Cancel",role:.cancel){}}message:{Text("\(lead.name) will leave the live pipeline and move into Completed Jobs.")}
+        .confirmationDialog("Complete this job?",isPresented:$confirmingJobCompletion,titleVisibility:.visible){Button("Complete job"){Task{await appState.move(lead,to:.completed)}};Button("Cancel",role:.cancel){}}message:{Text("\(lead.name) will move to Completed. Move it to Waiting for Payment when the final invoice is due.")}
     }
     private func completeNext(){guard let next else{return};completing=true;Task{await appState.toggleLeadTask(leadID:lead.id,taskID:next.id);completing=false}}
 }
@@ -85,14 +70,14 @@ private struct MobilePipelineCard:View {
     private var next:CRMTask?{lead.tasks.first{!$0.completed}}
     var body:some View{VStack(alignment:.leading,spacing:12){HStack(alignment:.top,spacing:11){Circle().fill(tint.opacity(0.14)).frame(width:46,height:46).overlay(Text(lead.name.prefix(1)).font(.headline).foregroundStyle(tint));VStack(alignment:.leading,spacing:3){Text(lead.name).font(.headline);Text(lead.address.isEmpty ? "Address not added":lead.address).font(.caption).foregroundStyle(.secondary).lineLimit(1);Text(lead.jobType).font(.subheadline)};Spacer();VStack(alignment:.trailing,spacing:5){Text(lead.value,format:.currency(code:"GBP").precision(.fractionLength(0))).font(.headline);Image(systemName:"chevron.right").font(.caption).foregroundStyle(.tertiary)}};HStack(spacing:7){Text(lead.source.isEmpty ? "Direct":lead.source).font(.caption2).padding(.horizontal,7).padding(.vertical,4).background(tint.opacity(0.1),in:Capsule()).foregroundStyle(tint);if let next{Label(next.title,systemImage:"circle").font(.caption).foregroundStyle(.secondary).lineLimit(1)}else{Text("No next action").font(.caption).foregroundStyle(.orange)};Spacer();Text(lead.jobRef).font(.caption2).foregroundStyle(.tertiary)}}.padding(14).background(.background)}
 }
-private func stageColorMobile(_ s:LeadStage)->Color{switch s{case .newLead:.blue;case .surveyBooked:.orange;case .quotePreparing,.quoteSent:.purple;case .won,.paid:.green;case .scheduled:.teal;case .inProgress:.cyan;case .completed:.mint;case .lost:.gray}}
-private func stageIconMobile(_ s:LeadStage)->String{switch s{case .newLead:"message.fill";case .surveyBooked:"calendar";case .quotePreparing:"doc.text.fill";case .quoteSent:"paperplane.fill";case .won:"checkmark.circle.fill";case .scheduled:"calendar.badge.clock";case .inProgress:"hammer.fill";case .completed:"flag.checkered";case .paid:"sterlingsign.circle.fill";case .lost:"archivebox.fill"}}
+private func stageColorMobile(_ s:LeadStage)->Color{switch s{case .newLead:.blue;case .surveyBooked:.orange;case .quotePreparing,.quoteSent:.purple;case .won,.paid:.green;case .scheduled:.teal;case .inProgress:.cyan;case .completed:.mint;case .waitingForPayment:.indigo;case .lost:.gray}}
+private func stageIconMobile(_ s:LeadStage)->String{switch s{case .newLead:"message.fill";case .surveyBooked:"calendar";case .quotePreparing:"doc.text.fill";case .quoteSent:"paperplane.fill";case .won:"checkmark.circle.fill";case .scheduled:"calendar.badge.clock";case .inProgress:"hammer.fill";case .completed:"flag.checkered";case .waitingForPayment:"clock.fill";case .paid:"sterlingsign.circle.fill";case .lost:"archivebox.fill"}}
 #endif
 
 struct CompletedJobsArchiveView:View {
     @Environment(AppState.self) private var appState
     @State private var search=""
-    private var archived:[Lead]{appState.leads.filter{[LeadStage.completed,.paid].contains($0.stage)}.filter{search.isEmpty || [$0.name,$0.jobRef,$0.address,$0.jobType].contains{$0.localizedCaseInsensitiveContains(search)}}}
+    private var archived:[Lead]{appState.leads.filter{[LeadStage.completed,.paid,.lost].contains($0.stage)}.filter{search.isEmpty || [$0.name,$0.jobRef,$0.address,$0.jobType].contains{$0.localizedCaseInsensitiveContains(search)}}}
     private func archiveDate(_ lead:Lead)->String{lead.completedDate ?? lead.paidDate ?? String(lead.updatedAt.prefix(10))}
     private var years:[String]{Array(Set(archived.map{String(archiveDate($0).prefix(4))})).sorted(by:>)}
     private func months(in year:String)->[String]{Array(Set(archived.map{String(archiveDate($0).prefix(7))}.filter{$0.hasPrefix(year)})).sorted(by:>)}
@@ -118,8 +103,8 @@ struct CompletedJobsArchiveView:View {
                     }
                 }
             }
-            if archived.isEmpty { ContentUnavailableView("No completed jobs",systemImage:"archivebox",description:Text("Jobs appear here after you confirm completion from the pipeline.")) }
-        }.navigationTitle("Completed Jobs").searchable(text:$search,prompt:"Search completed jobs")
+            if archived.isEmpty { ContentUnavailableView("Archive is empty",systemImage:"archivebox",description:Text("Completed, paid and lost work appears here.")) }
+        }.navigationTitle("Archive").searchable(text:$search,prompt:"Search archive")
     }
 }
 
@@ -192,6 +177,7 @@ struct ScheduleJobSheet: View {
 private struct MacPipelineView: View {
     @Environment(AppState.self) private var appState
     @Binding var showingAdd: Bool
+    @State private var workflow = "Sales"
     @State private var mode = "Board"
     @State private var search = ""
     @State private var ownership = "All leads"
@@ -200,8 +186,14 @@ private struct MacPipelineView: View {
     @State private var sourceFilter = "All sources"
     @State private var minimumValue = 0.0
 
-    private var visibleStages: [LeadStage] { [.newLead,.surveyBooked,.quotePreparing,.quoteSent,.won,.scheduled,.inProgress] }
-    private var openLeads: [Lead] { filtered.filter { ![.completed,.paid,.lost].contains($0.stage) } }
+    private var visibleStages: [LeadStage] {
+        switch workflow {
+        case "Jobs": [.won, .scheduled, .inProgress, .waitingForPayment]
+        case "Archive": [.completed, .paid, .lost]
+        default: [.newLead, .surveyBooked, .quotePreparing, .quoteSent]
+        }
+    }
+    private var openLeads: [Lead] { filtered.filter { ![.paid,.lost].contains($0.stage) } }
     private var filtered: [Lead] {
         appState.leads.filter { lead in
             let textMatch = search.isEmpty || [lead.name,lead.jobRef,lead.address,lead.jobType].contains { $0.localizedCaseInsensitiveContains(search) }
@@ -211,17 +203,23 @@ private struct MacPipelineView: View {
             return textMatch && ownerMatch && periodMatch && sourceMatch && lead.value >= minimumValue
         }
     }
+    private var scopedLeads: [Lead] { filtered.filter { visibleStages.contains($0.stage) } }
     private var totalPipeline: Double { openLeads.reduce(0) { $0 + $1.value } }
     private var forecast: Double { openLeads.reduce(0) { $0 + $1.value * probability($1.stage) } }
-    private var winRate: Int { let decided=appState.leads.filter{[.won,.scheduled,.inProgress,.completed,.paid,.lost].contains($0.stage)}; guard !decided.isEmpty else{return 0}; return Int((Double(decided.filter{$0.stage != .lost}.count)/Double(decided.count)*100).rounded()) }
-    private var overdue: Int { let today=SupabaseService.today; return appState.visibleGeneralTasks.filter{!$0.completed && ($0.dueDate ?? "9999") < today}.count + appState.leads.filter{($0.endDate ?? "9999") < today && ![.completed,.paid,.lost].contains($0.stage)}.count }
+    private var winRate: Int { let decided=appState.leads.filter{[.won,.scheduled,.inProgress,.completed,.waitingForPayment,.paid,.lost].contains($0.stage)}; guard !decided.isEmpty else{return 0}; return Int((Double(decided.filter{$0.stage != .lost}.count)/Double(decided.count)*100).rounded()) }
+    private var overdue: Int { let today=SupabaseService.today; return appState.visibleGeneralTasks.filter{!$0.completed && ($0.dueDate ?? "9999") < today}.count + appState.leads.filter{($0.endDate ?? "9999") < today && ![.completed,.waitingForPayment,.paid,.lost].contains($0.stage)}.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Pipeline").font(.system(size: 29, weight: .bold)).padding(.horizontal, 26).padding(.top, 20).padding(.bottom, 14)
-            metrics.padding(.horizontal, 26)
-            toolbar.padding(.horizontal, 26).padding(.vertical, 14)
-            todayStrip.padding(.horizontal, 26).padding(.bottom, 12)
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Pipeline").font(.system(size: 29, weight: .bold))
+                    Text(workflow == "Sales" ? "Turn enquiries into won work." : workflow == "Jobs" ? "Schedule, deliver and collect payment." : "Paid and lost work kept out of the way.").foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button { showingAdd = true } label: { Label("Add lead", systemImage: "plus").fontWeight(.semibold).foregroundStyle(.white).padding(.horizontal, 14).frame(height: 36).background(Color(red: 1, green: 0.29, blue: 0.04), in: RoundedRectangle(cornerRadius: 7)) }.buttonStyle(.plain)
+            }.padding(.horizontal, 26).padding(.top, 20).padding(.bottom, 14)
+            toolbar.padding(.horizontal, 26).padding(.bottom, 14)
             if mode == "Board" { board } else { list }
         }.background(Color(nsColor: .windowBackgroundColor)).navigationTitle("Pipeline")
     }
@@ -242,15 +240,11 @@ private struct MacPipelineView: View {
 
     private var toolbar: some View {
         HStack(spacing:10) {
-            Picker("View",selection:$mode){Label("Board",systemImage:"square.grid.2x2").tag("Board");Label("List",systemImage:"list.bullet").tag("List")}.pickerStyle(.segmented).frame(width:170)
-            HStack { Image(systemName:"magnifyingglass").foregroundStyle(.secondary); TextField("Search leads, customers, jobs…",text:$search); Text("⌘K").font(.caption).foregroundStyle(.secondary).padding(4).background(.quaternary,in:RoundedRectangle(cornerRadius:4)) }.padding(.horizontal,10).frame(width:300,height:36).background(.background,in:RoundedRectangle(cornerRadius:7)).overlay(RoundedRectangle(cornerRadius:7).stroke(.quaternary))
+            Picker("Workflow", selection: $workflow) { ForEach(["Sales", "Jobs", "Archive"], id: \.self) { Text($0).tag($0) } }.pickerStyle(.segmented).frame(width: 310)
+            HStack { Image(systemName:"magnifyingglass").foregroundStyle(.secondary); TextField("Search this pipeline…",text:$search) }.padding(.horizontal,10).frame(width:280,height:36).background(.background,in:RoundedRectangle(cornerRadius:7)).overlay(RoundedRectangle(cornerRadius:7).stroke(.quaternary))
             Spacer()
-            Menu(ownership){Button("All leads"){ownership="All leads"};Button("My leads"){ownership="My leads"}}.frame(minWidth:95)
-            Menu(period){Button("All time"){period="All time"};Button("This month"){period="This month"}}.frame(minWidth:95)
             Button { showFilters.toggle() } label:{Label("Filters",systemImage:"line.3.horizontal.decrease")}
-                .popover(isPresented:$showFilters){VStack(alignment:.leading,spacing:14){Text("Pipeline filters").font(.headline);Picker("Source",selection:$sourceFilter){Text("All sources").tag("All sources");ForEach(Array(Set(appState.leads.map(\.source))).filter{!$0.isEmpty}.sorted(),id:\.self){Text($0).tag($0)}};TextField("Minimum value",value:$minimumValue,format:.number);Button("Clear filters"){sourceFilter="All sources";minimumValue=0;showFilters=false}.frame(maxWidth:.infinity,alignment:.trailing)}.padding().frame(width:280)}
-            NavigationLink { CompletedJobsArchiveView() } label:{Label("Archive",systemImage:"archivebox")}.buttonStyle(.bordered)
-            Button { showingAdd=true } label:{Label("Add lead",systemImage:"plus").fontWeight(.semibold).foregroundStyle(.white).padding(.horizontal,14).frame(height:36).background(Color(red:1,green:0.29,blue:0.04),in:RoundedRectangle(cornerRadius:7))}.buttonStyle(.plain)
+                .popover(isPresented:$showFilters){VStack(alignment:.leading,spacing:14){Text("Pipeline options").font(.headline);Picker("View",selection:$mode){Label("Board",systemImage:"square.grid.2x2").tag("Board");Label("List",systemImage:"list.bullet").tag("List")}.pickerStyle(.segmented);Picker("Ownership",selection:$ownership){Text("All leads").tag("All leads");Text("My leads").tag("My leads")};Picker("Period",selection:$period){Text("All time").tag("All time");Text("This month").tag("This month")};Picker("Source",selection:$sourceFilter){Text("All sources").tag("All sources");ForEach(Array(Set(appState.leads.map(\.source))).filter{!$0.isEmpty}.sorted(),id:\.self){Text($0).tag($0)}};TextField("Minimum value",value:$minimumValue,format:.number);Button("Clear filters"){ownership="All leads";period="All time";sourceFilter="All sources";minimumValue=0;showFilters=false}.frame(maxWidth:.infinity,alignment:.trailing)}.padding().frame(width:300)}
         }.controlSize(.large)
     }
 
@@ -262,18 +256,18 @@ private struct MacPipelineView: View {
         return HStack(spacing:9){Image(systemName:"flag.fill").foregroundStyle(.orange);Text("Today:").bold();Text("\(surveys) surveys").foregroundStyle(.blue);Text("•").foregroundStyle(.secondary);Text("\(quotes) quotes to chase").foregroundStyle(.purple);Text("•").foregroundStyle(.secondary);Text("\(deposits) deposits overdue").foregroundStyle(deposits > 0 ? .red:.secondary);Spacer()}.font(.subheadline).padding(.horizontal,14).frame(height:44).background(.background,in:RoundedRectangle(cornerRadius:8)).overlay(RoundedRectangle(cornerRadius:8).stroke(.quaternary))
     }
 
-    private var board: some View { ScrollView(.horizontal) { LazyHStack(alignment:.top,spacing:12) { ForEach(visibleStages) { stage in MacStageColumn(stage:stage,leads:filtered.filter{$0.stage==stage},onAdd:{showingAdd=true}) } }.padding(.horizontal,26).padding(.bottom,20) }.scrollIndicators(.visible) }
-    private var list: some View { List(filtered) { lead in NavigationLink { LeadDetailView(leadID:lead.id) } label:{HStack{StageDot(stage:lead.stage);LeadRow(lead:lead);Spacer();Text(lead.value,format:.currency(code:"GBP"));Text(lead.assignedTo).foregroundStyle(.secondary).frame(width:110,alignment:.leading)}} }.listStyle(.inset).padding(.horizontal,18) }
-    private func probability(_ stage:LeadStage)->Double { switch stage {case .newLead:0.15;case .surveyBooked:0.30;case .quotePreparing:0.45;case .quoteSent:0.60;case .won,.scheduled,.inProgress,.completed,.paid:1;case .lost:0} }
+    private var board: some View { ScrollView(.horizontal) { LazyHStack(alignment:.top,spacing:12) { ForEach(visibleStages) { stage in MacStageColumn(stage:stage,leads:scopedLeads.filter{$0.stage==stage},allowsAdd:workflow != "Archive",onAdd:{showingAdd=true}) } }.padding(.horizontal,26).padding(.bottom,20) }.scrollIndicators(.visible) }
+    private var list: some View { List(scopedLeads) { lead in NavigationLink { LeadDetailView(leadID:lead.id) } label:{HStack{StageDot(stage:lead.stage);LeadRow(lead:lead);Spacer();Text(lead.value,format:.currency(code:"GBP"));Text(lead.assignedTo).foregroundStyle(.secondary).frame(width:110,alignment:.leading)}} }.listStyle(.inset).padding(.horizontal,18) }
+    private func probability(_ stage:LeadStage)->Double { switch stage {case .newLead:0.15;case .surveyBooked:0.30;case .quotePreparing:0.45;case .quoteSent:0.60;case .won,.scheduled,.inProgress,.completed,.waitingForPayment,.paid:1;case .lost:0} }
 }
 
 private struct PipelineMetric: View { let icon,title,value:String;let color:Color;var body:some View{HStack(spacing:12){Image(systemName:icon).font(.title2).foregroundStyle(color);VStack(alignment:.leading,spacing:2){Text(title).font(.caption).foregroundStyle(.secondary);Text(value).font(.system(size:18,weight:.semibold,design:.rounded))}}.padding(.horizontal,24).frame(minWidth:180,alignment:.leading)} }
 
 private struct MacStageColumn: View {
     @Environment(AppState.self) private var appState
-    let stage:LeadStage;let leads:[Lead];let onAdd:()->Void
+    let stage:LeadStage;let leads:[Lead];let allowsAdd:Bool;let onAdd:()->Void
     private var tint:Color { stageColor(stage) }
-    var body:some View{VStack(spacing:0){HStack(spacing:10){RoundedRectangle(cornerRadius:6).fill(tint.gradient).frame(width:36,height:36).overlay(Image(systemName:stageIcon(stage)).foregroundStyle(.white));VStack(alignment:.leading,spacing:2){Text(stage.displayName).font(.headline);HStack{Text("\(leads.count)");Text(leads.reduce(0){$0+$1.value},format:.currency(code:"GBP").precision(.fractionLength(0)))}.font(.caption).foregroundStyle(.secondary)};Spacer()}.padding(10);GeometryReader{geo in Capsule().fill(.quaternary).overlay(alignment:.leading){Capsule().fill(tint).frame(width:max(12,geo.size.width*min(1,Double(leads.count)/8)))} }.frame(height:3).padding(.horizontal,10).padding(.bottom,8);ScrollView{LazyVStack(spacing:8){ForEach(leads){lead in MacLeadCard(lead:lead,tint:tint).draggable(lead.id)};Button(action:onAdd){Label("Add lead",systemImage:"plus").frame(maxWidth:.infinity).padding(.vertical,10)}.buttonStyle(.plain).foregroundStyle(tint).background(.background.opacity(0.55),in:RoundedRectangle(cornerRadius:8)).overlay(RoundedRectangle(cornerRadius:8).stroke(tint.opacity(0.25),style:StrokeStyle(lineWidth:1,dash:[4])))}.padding(8)} }.frame(width:260).background(Color(nsColor:.controlBackgroundColor).opacity(0.55),in:RoundedRectangle(cornerRadius:10)).overlay(RoundedRectangle(cornerRadius:10).stroke(.quaternary)).dropDestination(for:String.self){ids,_ in guard let id=ids.first,let lead=appState.leads.first(where:{$0.id==id}) else{return false};Task{await appState.move(lead,to:stage)};return true}}
+    var body:some View{VStack(spacing:0){HStack(spacing:10){RoundedRectangle(cornerRadius:6).fill(tint.gradient).frame(width:36,height:36).overlay(Image(systemName:stageIcon(stage)).foregroundStyle(.white));VStack(alignment:.leading,spacing:2){Text(stage.displayName).font(.headline);HStack{Text("\(leads.count)");Text(leads.reduce(0){$0+$1.value},format:.currency(code:"GBP").precision(.fractionLength(0)))}.font(.caption).foregroundStyle(.secondary)};Spacer()}.padding(10);GeometryReader{geo in Capsule().fill(.quaternary).overlay(alignment:.leading){Capsule().fill(tint).frame(width:max(12,geo.size.width*min(1,Double(leads.count)/8)))} }.frame(height:3).padding(.horizontal,10).padding(.bottom,8);ScrollView{LazyVStack(spacing:8){ForEach(leads){lead in MacLeadCard(lead:lead,tint:tint).draggable(lead.id)};if allowsAdd{Button(action:onAdd){Label("Add lead",systemImage:"plus").frame(maxWidth:.infinity).padding(.vertical,10)}.buttonStyle(.plain).foregroundStyle(tint).background(.background.opacity(0.55),in:RoundedRectangle(cornerRadius:8)).overlay(RoundedRectangle(cornerRadius:8).stroke(tint.opacity(0.25),style:StrokeStyle(lineWidth:1,dash:[4])))}}.padding(8)} }.frame(width:260).background(Color(nsColor:.controlBackgroundColor).opacity(0.55),in:RoundedRectangle(cornerRadius:10)).overlay(RoundedRectangle(cornerRadius:10).stroke(.quaternary)).dropDestination(for:String.self){ids,_ in guard let id=ids.first,let lead=appState.leads.first(where:{$0.id==id}) else{return false};Task{await appState.move(lead,to:stage)};return true}}
 }
 
 private struct MacLeadCard: View {
@@ -361,8 +355,8 @@ private struct MacLeadCard: View {
 }
 
 private struct StageDot:View{let stage:LeadStage;var body:some View{Circle().fill(stageColor(stage)).frame(width:9,height:9)}}
-private func stageColor(_ s:LeadStage)->Color{switch s{case .newLead:.blue;case .surveyBooked:.orange;case .quotePreparing:.purple;case .quoteSent:Color(red:0.45,green:0.2,blue:0.8);case .won:.green;case .scheduled:.teal;case .inProgress:.cyan;case .completed:.mint;case .paid:.green;case .lost:.gray}}
-private func stageIcon(_ s:LeadStage)->String{switch s{case .newLead:"message";case .surveyBooked:"calendar";case .quotePreparing:"doc.text";case .quoteSent:"paperplane";case .won:"checkmark.circle";case .scheduled:"calendar.badge.clock";case .inProgress:"hammer";case .completed:"flag.checkered";case .paid:"sterlingsign.circle";case .lost:"archivebox"}}
+private func stageColor(_ s:LeadStage)->Color{switch s{case .newLead:.blue;case .surveyBooked:.orange;case .quotePreparing:.purple;case .quoteSent:Color(red:0.45,green:0.2,blue:0.8);case .won:.green;case .scheduled:.teal;case .inProgress:.cyan;case .completed:.mint;case .waitingForPayment:.indigo;case .paid:.green;case .lost:.gray}}
+private func stageIcon(_ s:LeadStage)->String{switch s{case .newLead:"message";case .surveyBooked:"calendar";case .quotePreparing:"doc.text";case .quoteSent:"paperplane";case .won:"checkmark.circle";case .scheduled:"calendar.badge.clock";case .inProgress:"hammer";case .completed:"flag.checkered";case .waitingForPayment:"clock";case .paid:"sterlingsign.circle";case .lost:"archivebox"}}
 #endif
 
 struct LeadCard: View { let lead:Lead;var body:some View{VStack(alignment:.leading,spacing:7){HStack{Text(lead.name).font(.headline);Spacer();Text(lead.jobRef).font(.caption).foregroundStyle(.secondary)};Text(lead.jobType).font(.caption).foregroundStyle(.orange);Text(lead.address).font(.caption).foregroundStyle(.secondary).lineLimit(2);if lead.value>0{Text(lead.value,format:.currency(code:"GBP")).font(.subheadline.bold())}}.padding(12).frame(maxWidth:.infinity,alignment:.leading).background(.background,in:RoundedRectangle(cornerRadius:12)).shadow(color:.black.opacity(0.06),radius:3,y:1)} }

@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Observation
+import SwiftUI
 import UserNotifications
 import WidgetKit
 #if os(iOS)
@@ -9,6 +10,40 @@ import UIKit
 #elseif os(macOS)
 import AppKit
 #endif
+
+enum CompanyActionKind: String, Codable, Sendable {
+    case generalTask, jobTask, survey, jobStart, overdueJob, quoteFollowUp, deposit, balance, timesheet
+}
+
+enum CompanyActionPriority: Int, Comparable, Sendable {
+    case routine = 1
+    case soon = 2
+    case urgent = 3
+    case critical = 4
+
+    static func < (lhs: CompanyActionPriority, rhs: CompanyActionPriority) -> Bool { lhs.rawValue < rhs.rawValue }
+
+    var label: String {
+        switch self { case .routine: "Later"; case .soon: "This week"; case .urgent: "Today"; case .critical: "Overdue" }
+    }
+
+    var tint: Color {
+        switch self { case .routine: .secondary; case .soon: .blue; case .urgent: .orange; case .critical: .red }
+    }
+}
+
+struct CompanyAction: Identifiable, Sendable {
+    let id: String
+    let kind: CompanyActionKind
+    let priority: CompanyActionPriority
+    let title: String
+    let detail: String
+    let reason: String
+    let leadID: String?
+    let generalTaskID: String?
+    let leadTaskID: String?
+    let dueDate: String?
+}
 
 @MainActor @Observable
 final class AppState {
@@ -20,7 +55,7 @@ final class AppState {
         .won: ["Collect deposit", "Confirm start date with customer", "Order materials", "Brief the team on job details"],
         .scheduled: ["Confirm installation date", "Confirm access and scaffold", "Check materials and team availability"],
         .inProgress: ["Confirm materials delivered", "Daily progress check", "Take before & during photos", "Keep customer updated"],
-        .completed: ["Final inspection with customer", "Take completion photos", "Send final invoice", "Collect outstanding balance"],
+        .completed: ["Final inspection with customer", "Take completion photos", "Send final invoice"],
         .paid: ["File all job paperwork", "Request customer review / referral", "Update job records"]
     ]
     var leads: [Lead] = []
@@ -43,7 +78,7 @@ final class AppState {
     var teamDayPlans: [TeamDayPlan] = []
     var currentUser: CRMUser?
     var selectedLeadID: String?
-    var selectedSection: AppSection = .pipeline
+    var selectedSection: AppSection = .dashboard
     var navigationResetID = UUID()
     var isLoading = false
     var isRefreshing = false
@@ -53,8 +88,10 @@ final class AppState {
     var showingGlobalSearch = false
     var showingGlobalAddLead = false
     var showingAssistant = false
+    var assistantDraftPrompt: String?
     var pendingWorkerInviteToken: String?
     var assistantErrorMessage: String?
+    var isAdminUsingSimpleView = UserDefaults.standard.bool(forKey: "adminUsesSimpleView")
     var gmailConnectionStatus: GmailConnectionStatus?
     var aiAuditEntries: [AIAuditEntry] = {
         guard let data = UserDefaults.standard.data(forKey: "aiActionAudit") else { return [] }
@@ -64,9 +101,119 @@ final class AppState {
     var selectedLead: Lead? { leads.first { $0.id == selectedLeadID } }
     var isAuthenticated: Bool { currentUser != nil }
     var isAdmin: Bool { currentUser?.role == "admin" }
+    var usesWorkerInterface: Bool {
+        #if os(iOS)
+        !isAdmin || isAdminUsingSimpleView
+        #else
+        !isAdmin
+        #endif
+    }
+    var usesAdminInterface: Bool { isAdmin && !usesWorkerInterface }
+    var isWorkerPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--worker-preview")
+        #else
+        false
+        #endif
+    }
     var unreadTeamCount: Int {
         let seen = UserDefaults.standard.string(forKey: "teamLastRead.\(currentUser?.id ?? "signed-out")") ?? ""
         return teamMessages.filter { $0.authorID != currentUser?.id && $0.createdAt > seen }.count
+    }
+
+    func openAssistant(with prompt: String) {
+        assistantDraftPrompt = prompt
+        showingAssistant = true
+    }
+
+    func toggleMobileInterface() {
+        setMobileInterface(simple: !isAdminUsingSimpleView)
+    }
+
+    func setMobileInterface(simple: Bool) {
+        #if os(iOS)
+        guard isAdmin else { return }
+        guard isAdminUsingSimpleView != simple else { return }
+        isAdminUsingSimpleView = simple
+        UserDefaults.standard.set(isAdminUsingSimpleView, forKey: "adminUsesSimpleView")
+        selectedSection = .dashboard
+        navigationResetID = UUID()
+        showingGlobalSearch = false
+        showingGlobalAddLead = false
+        showingAssistant = false
+        #endif
+    }
+
+    /// One ranked operating queue for every surface.  Views should consume this
+    /// rather than independently deciding what "needs attention" means.
+    var companyActions: [CompanyAction] {
+        let today = SupabaseService.today
+        var actions: [CompanyAction] = []
+        let visibleTasks = visibleGeneralTasks.filter { NotificationScope.includes($0, for: currentUser) && !$0.completed }
+
+        for task in visibleTasks {
+            let priority: CompanyActionPriority
+            let reason: String
+            if let due = task.dueDate, due < today { priority = .critical; reason = "Overdue since \(due)" }
+            else if task.dueDate == today { priority = .urgent; reason = "Due today" }
+            else if let due = task.dueDate { priority = .soon; reason = "Due \(due)" }
+            else { priority = .routine; reason = "No date set" }
+            actions.append(CompanyAction(id: "task-\(task.id)", kind: .generalTask, priority: priority, title: task.title, detail: task.category, reason: reason, leadID: nil, generalTaskID: task.id, leadTaskID: nil, dueDate: task.dueDate))
+        }
+
+        for lead in leads where ![.paid, .lost].contains(lead.stage) {
+            if lead.surveyDate == today {
+                actions.append(CompanyAction(id: "survey-\(lead.id)", kind: .survey, priority: .urgent, title: "Survey today", detail: "\(lead.name) · \(lead.jobRef)", reason: "Survey booked for today", leadID: lead.id, generalTaskID: nil, leadTaskID: nil, dueDate: today))
+            }
+            if lead.startDate == today {
+                actions.append(CompanyAction(id: "start-\(lead.id)", kind: .jobStart, priority: .urgent, title: "Job starts today", detail: "\(lead.name) · \(lead.jobRef)", reason: "Scheduled to start today", leadID: lead.id, generalTaskID: nil, leadTaskID: nil, dueDate: today))
+            }
+            if let end = lead.endDate, end < today, ![.completed, .waitingForPayment].contains(lead.stage) {
+                actions.append(CompanyAction(id: "overdue-job-\(lead.id)", kind: .overdueJob, priority: .critical, title: "Job is overdue", detail: "\(lead.name) · \(lead.jobRef)", reason: "Expected finish was \(end)", leadID: lead.id, generalTaskID: nil, leadTaskID: nil, dueDate: end))
+            }
+            if lead.stage == .quoteSent {
+                let date = String(lead.updatedAt.prefix(10))
+                let priority: CompanyActionPriority = date < today ? .soon : .routine
+                actions.append(CompanyAction(id: "quote-\(lead.id)", kind: .quoteFollowUp, priority: priority, title: "Follow up quote", detail: "\(lead.name) · \(lead.value.formatted(.currency(code: "GBP").precision(.fractionLength(0))))", reason: "Quote is waiting for a decision", leadID: lead.id, generalTaskID: nil, leadTaskID: nil, dueDate: date))
+            }
+            if !lead.depositPaid && lead.deposit > 0 && [.won, .scheduled, .inProgress].contains(lead.stage) {
+                actions.append(CompanyAction(id: "deposit-\(lead.id)", kind: .deposit, priority: .urgent, title: "Collect deposit", detail: "\(lead.name) · \(lead.deposit.formatted(.currency(code: "GBP").precision(.fractionLength(0))))", reason: "Deposit is still outstanding", leadID: lead.id, generalTaskID: nil, leadTaskID: nil, dueDate: nil))
+            }
+            if [.completed, .waitingForPayment].contains(lead.stage) && lead.balance > 0 {
+                actions.append(CompanyAction(id: "balance-\(lead.id)", kind: .balance, priority: .urgent, title: "Collect final balance", detail: "\(lead.name) · \(lead.balance.formatted(.currency(code: "GBP").precision(.fractionLength(0))))", reason: "Job is complete and payment is due", leadID: lead.id, generalTaskID: nil, leadTaskID: nil, dueDate: nil))
+            }
+            for task in lead.tasks where !task.completed {
+                let priority: CompanyActionPriority
+                let reason: String
+                if let due = task.dueDate, due < today { priority = .critical; reason = "Overdue since \(due)" }
+                else if task.dueDate == today { priority = .urgent; reason = "Due today" }
+                else if let due = task.dueDate { priority = task.priority == "high" ? .urgent : .soon; reason = "Due \(due)" }
+                else if task.priority == "high" { priority = .urgent; reason = "High-priority job action" }
+                else if task.priority == "low" { priority = .routine; reason = "Low-priority job action" }
+                else { priority = .soon; reason = "Next checklist item for this job" }
+                actions.append(CompanyAction(id: "job-task-\(lead.id)-\(task.id)", kind: .jobTask, priority: priority, title: task.title, detail: "\(lead.name) · \(lead.jobRef)", reason: reason, leadID: lead.id, generalTaskID: nil, leadTaskID: task.id, dueDate: task.dueDate))
+            }
+        }
+        if isAdmin {
+            let workers = users.filter { $0.role != "admin" && $0.dayRate != nil }
+            for worker in workers where !timesheets.contains(where: { $0.userID == worker.id && $0.date == today }) {
+                actions.append(CompanyAction(id: "timesheet-\(worker.id)-\(today)", kind: .timesheet, priority: .soon, title: "Timesheet missing", detail: worker.name, reason: "No work day recorded for today", leadID: nil, generalTaskID: nil, leadTaskID: nil, dueDate: today))
+            }
+        }
+        return actions.sorted {
+            if $0.priority != $1.priority { return $0.priority > $1.priority }
+            let left = $0.dueDate ?? "9999-12-31", right = $1.dueDate ?? "9999-12-31"
+            return left == right ? $0.title.localizedStandardCompare($1.title) == .orderedAscending : left < right
+        }
+    }
+
+    /// One exact queue shared by Dashboard → Action Required and Tasks.
+    var taskActions: [CompanyAction] {
+        companyActions.filter { $0.kind == .generalTask || $0.kind == .jobTask }
+    }
+
+    var operationalAlerts: [CompanyAction] {
+        companyActions.filter { $0.kind != .generalTask && $0.kind != .jobTask }
     }
 
     func canAccess(_ section: AppSection) -> Bool {
@@ -76,10 +223,16 @@ final class AppState {
     nonisolated static func canAccess(_ section: AppSection, role: String?) -> Bool {
         if role == "admin" { return true }
         guard role != nil else { return false }
-        return [.pipeline, .jobs, .tasks, .calendar, .team, .timesheet, .tools, .settings].contains(section)
+        return [.dashboard, .calendar, .jobs, .tasks, .timesheet, .tools].contains(section)
     }
 
     func restoreSession() async {
+        #if DEBUG
+        if isWorkerPreview {
+            loadWorkerPreview()
+            return
+        }
+        #endif
         if KeychainStore.get("supabaseRefreshToken") != nil {
             do {
                 if let user = try await SupabaseService.shared.restoreAuthenticatedSession() {
@@ -111,6 +264,31 @@ final class AppState {
             if currentUser != nil { await refresh(showErrors: false) }
         } catch { errorMessage = "Could not restore your session." }
     }
+
+    #if DEBUG
+    private func loadWorkerPreview() {
+        let worker = CRMUser(id: "worker-preview", name: "Sam Worker", username: "worker-preview", passwordHash: "", role: "user", dayRate: nil, cisRate: nil, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil)
+        let today = SupabaseService.today
+        currentUser = worker
+        users = [worker]
+        leads = [
+            Lead(id: "preview-job-1", jobRef: "JOB-104", name: "Mr Taylor", phone: "07000 000000", email: "", address: "12 Sample Close, Bristol", jobType: "Re-roof", stage: .inProgress, value: 0, deposit: 0, depositPaid: false, balance: 0, source: "Preview", assignedTo: worker.name, surveyDate: nil, surveyTime: nil, startDate: today, endDate: nil, completedDate: nil, paidDate: nil, progress: 45, tasks: [CRMTask(id: "preview-task-1", title: "Finish front elevation", completed: false, completedDate: nil, dueDate: today, isTemplate: false), CRMTask(id: "preview-task-2", title: "Photograph completed work", completed: false, completedDate: nil, dueDate: today, isTemplate: false)], photos: [], notes: [], files: [], materials: [], wonDate: today, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: today, updatedAt: today),
+            Lead(id: "preview-job-2", jobRef: "JOB-108", name: "Mrs Green", phone: "07000 000000", email: "", address: "8 Example Road, Bath", jobType: "Flat roof", stage: .scheduled, value: 0, deposit: 0, depositPaid: false, balance: 0, source: "Preview", assignedTo: worker.name, surveyDate: nil, surveyTime: nil, startDate: today, endDate: nil, completedDate: nil, paidDate: nil, progress: 0, tasks: [CRMTask(id: "preview-task-3", title: "Check materials before leaving", completed: false, completedDate: nil, dueDate: today, isTemplate: false)], photos: [], notes: [], files: [], materials: [], wonDate: today, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: today, updatedAt: today)
+        ]
+        generalTasks = [
+            GeneralTask(id: "preview-general-1", title: "Send site photos to the office", completed: false, completedDate: nil, dueDate: today, priority: "medium", category: "General", notes: nil, createdAt: today, assignedTo: [worker.id])
+        ]
+        timesheets = []
+        if ProcessInfo.processInfo.arguments.contains("--worker-preview-tools") {
+            selectedSection = .tools
+        } else if ProcessInfo.processInfo.arguments.contains("--worker-preview-calendar") {
+            selectedSection = .calendar
+        } else {
+            selectedSection = .dashboard
+        }
+        syncIssues = []
+    }
+    #endif
 
     func signIn(username: String, password: String) async -> Bool {
         isLoading = true; defer { isLoading = false }
@@ -288,7 +466,7 @@ final class AppState {
         changed.stage = stage; changed.updatedAt = SupabaseService.now
         if stage == .won { changed.wonDate = today }
         if stage == .inProgress && changed.startDate == nil { changed.startDate = today }
-        if stage == .completed { changed.completedDate = today }
+        if [.completed, .waitingForPayment].contains(stage) { changed.completedDate = changed.completedDate ?? today }
         if stage == .paid { changed.paidDate = today; changed.balance = 0 }
         let custom = changed.tasks.filter { $0.isTemplate != true }
         changed.tasks = (Self.stageTasks[stage] ?? []).map { CRMTask(id: UUID().uuidString, title: $0, completed: false, completedDate: nil, dueDate: nil, isTemplate: true) } + custom
@@ -313,7 +491,7 @@ final class AppState {
             leadNotes.append(CRMNote(id: UUID().uuidString, content: "Lead priority: \(priority)", date: today, author: currentUser?.name ?? ""))
         }
         let leadID = UUID().uuidString
-        let lead = Lead(id: leadID, jobRef: JobReference.make(date: .now, nonce: leadID), name: name, phone: phone, email: email, address: address, jobType: jobType, stage: stage, value: value, deposit: min(max(0, deposit), value), depositPaid: false, balance: value, source: source, assignedTo: currentUser?.name ?? "", surveyDate: nil, surveyTime: nil, startDate: stage == .inProgress ? today : nil, endDate: nil, completedDate: stage == .completed ? today : nil, paidDate: stage == .paid ? today : nil, progress: 0, tasks: tasks, photos: [], notes: leadNotes, files: [], materials: [], wonDate: [.won,.scheduled,.inProgress,.completed,.paid].contains(stage) ? today : nil, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: today, updatedAt: today)
+        let lead = Lead(id: leadID, jobRef: JobReference.make(date: .now, nonce: leadID), name: name, phone: phone, email: email, address: address, jobType: jobType, stage: stage, value: value, deposit: min(max(0, deposit), value), depositPaid: false, balance: value, source: source, assignedTo: currentUser?.name ?? "", surveyDate: nil, surveyTime: nil, startDate: stage == .inProgress ? today : nil, endDate: nil, completedDate: [.completed, .waitingForPayment].contains(stage) ? today : nil, paidDate: stage == .paid ? today : nil, progress: 0, tasks: tasks, photos: [], notes: leadNotes, files: [], materials: [], wonDate: [.won,.scheduled,.inProgress,.completed,.waitingForPayment,.paid].contains(stage) ? today : nil, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: today, updatedAt: today)
         do {
             try await SupabaseService.shared.insertLead(lead)
             leads.insert(lead, at: 0)
@@ -371,6 +549,29 @@ final class AppState {
         catch { leads[index] = old; reportLeadWrite(error, fallback: "Changes could not be saved."); return false }
     }
 
+    @discardableResult
+    func addJobNote(leadID: String, content: String) async -> Bool {
+        let noteContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !noteContent.isEmpty else {
+            errorMessage = "Enter a note before saving."
+            return false
+        }
+        guard var lead = leads.first(where: { $0.id == leadID }) else {
+            errorMessage = "This job could not be found. Refresh and try again."
+            return false
+        }
+        lead.notes.insert(
+            CRMNote(
+                id: UUID().uuidString,
+                content: noteContent,
+                date: SupabaseService.today,
+                author: currentUser?.name ?? "Team member"
+            ),
+            at: 0
+        )
+        return await saveLead(lead)
+    }
+
     func analyseJobNote(leadID: String, note: String) async -> JobNoteAnalysis? {
         guard let lead = leads.first(where: { $0.id == leadID }) else { return nil }
         guard KeychainStore.get("supabaseAccessToken") != nil else {
@@ -386,10 +587,10 @@ final class AppState {
     }
 
     func applyJobTaskSuggestions(leadID: String, suggestions: [JobTaskSuggestion]) async -> Bool {
-        await applyJobUpdate(leadID: leadID, progressNote: nil, suggestions: suggestions)
+        await applyJobUpdate(leadID: leadID, progressNote: nil, suggestions: suggestions, materials: [])
     }
 
-    func applyJobUpdate(leadID: String, progressNote: String?, suggestions: [JobTaskSuggestion]) async -> Bool {
+    func applyJobUpdate(leadID: String, progressNote: String?, suggestions: [JobTaskSuggestion], materials: [JobMaterialSuggestion] = []) async -> Bool {
         guard var lead = leads.first(where: { $0.id == leadID }) else { return false }
         if let progressNote {
             let cleanNote = progressNote.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -422,8 +623,18 @@ final class AppState {
             case .add:
                 let cleanTitle = suggestion.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !cleanTitle.isEmpty && !isDuplicate(cleanTitle) {
-                    lead.tasks.append(CRMTask(id: UUID().uuidString, title: cleanTitle, completed: false, completedDate: nil, dueDate: suggestion.dueDate, isTemplate: false))
+                    lead.tasks.append(CRMTask(id: UUID().uuidString, title: cleanTitle, completed: false, completedDate: nil, dueDate: suggestion.dueDate, isTemplate: false, priority: "medium", notes: suggestion.reason))
                 }
+            }
+        }
+        for material in materials where material.quantity.isFinite && material.quantity > 0 {
+            let name = material.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let unit = material.unit.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, !unit.isEmpty else { continue }
+            if let index = lead.materials.firstIndex(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame && $0.unit.caseInsensitiveCompare(unit) == .orderedSame }) {
+                lead.materials[index].quantity += material.quantity
+            } else {
+                lead.materials.append(CRMMaterial(id: UUID().uuidString, name: name, quantity: material.quantity, unit: unit, cost: nil, supplier: nil, ordered: false, delivered: false))
             }
         }
         let completed = lead.tasks.filter(\.completed).count
@@ -438,7 +649,7 @@ final class AppState {
             assistantErrorMessage = "Sign out, then sign in again as willconway9 to activate the secure Gemini connection."
             return nil
         }
-        do { return try await SupabaseService.shared.askOperationsAssistant(prompt: prompt, history: history, attachment: attachment, leads: LeadAccessScope.visible(leads, for: user), tasks: TaskAccessScope.visible(visibleGeneralTasks, for: user), user: user) }
+        do { return try await SupabaseService.shared.askOperationsAssistant(prompt: prompt, history: history, attachment: attachment, leads: LeadAccessScope.visible(leads, for: user), tasks: TaskAccessScope.visible(visibleGeneralTasks, for: user), actions: companyActions, user: user) }
         catch { assistantErrorMessage = error.localizedDescription; return nil }
     }
 
@@ -565,6 +776,7 @@ final class AppState {
     }
 
     func toggleGeneralTask(_ task: GeneralTask) async {
+        guard !isWorkerPreview else { return }
         var changed = task; changed.completed.toggle(); changed.completedDate = changed.completed ? SupabaseService.today : nil
         guard let index = generalTasks.firstIndex(where: { $0.id == task.id }) else { return }
         generalTasks[index] = changed
@@ -590,6 +802,7 @@ final class AppState {
     }
 
     func toggleLeadTask(leadID: String, taskID: String) async {
+        guard !isWorkerPreview else { return }
         guard let leadIndex = leads.firstIndex(where: { $0.id == leadID }), let taskIndex = leads[leadIndex].tasks.firstIndex(where: { $0.id == taskID }) else { return }
         let old = leads[leadIndex]
         leads[leadIndex].tasks[taskIndex].completed.toggle()
@@ -600,15 +813,42 @@ final class AppState {
     }
 
     @discardableResult
-    func addLeadTask(leadID: String, title: String, dueDate: String?) async -> Bool {
+    func addLeadTask(leadID: String, title: String, dueDate: String?, priority: String = "medium", notes: String? = nil) async -> Bool {
         guard let leadIndex = leads.firstIndex(where: { $0.id == leadID }) else { return false }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else { return false }
         let old = leads[leadIndex]
-        leads[leadIndex].tasks.append(CRMTask(id: UUID().uuidString, title: cleanTitle, completed: false, completedDate: nil, dueDate: dueDate, isTemplate: false))
+        leads[leadIndex].tasks.append(CRMTask(id: UUID().uuidString, title: cleanTitle, completed: false, completedDate: nil, dueDate: dueDate, isTemplate: false, priority: priority, notes: notes))
         recalculateProgress(at: leadIndex)
         do { try await SupabaseService.shared.updateLead(leads[leadIndex], expectedUpdatedAt: old.updatedAt); updateWidget(); return true }
         catch { leads[leadIndex] = old; reportLeadWrite(error, fallback: "The task could not be added."); return false }
+    }
+
+    @discardableResult
+    func updateLeadTask(leadID: String, taskID: String, title: String, dueDate: String?, priority: String, notes: String?, subtasks: [CRMSubtask]) async -> Bool {
+        guard let leadIndex = leads.firstIndex(where: { $0.id == leadID }), let taskIndex = leads[leadIndex].tasks.firstIndex(where: { $0.id == taskID }) else { return false }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty else { return false }
+        let old = leads[leadIndex]
+        leads[leadIndex].tasks[taskIndex].title = cleanTitle
+        leads[leadIndex].tasks[taskIndex].dueDate = dueDate
+        leads[leadIndex].tasks[taskIndex].priority = ["low", "medium", "high"].contains(priority) ? priority : "medium"
+        let cleanNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        leads[leadIndex].tasks[taskIndex].notes = cleanNotes?.isEmpty == true ? nil : cleanNotes
+        leads[leadIndex].tasks[taskIndex].subtasks = subtasks.compactMap { subtask in
+            let clean = subtask.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return clean.isEmpty ? nil : CRMSubtask(id: subtask.id, title: clean, completed: subtask.completed)
+        }
+        do { try await SupabaseService.shared.updateLead(leads[leadIndex], expectedUpdatedAt: old.updatedAt); updateWidget(); await scheduleNotifications(); return true }
+        catch { leads[leadIndex] = old; reportLeadWrite(error, fallback: "The task changes could not be saved."); return false }
+    }
+
+    func toggleLeadSubtask(leadID: String, taskID: String, subtaskID: String) async {
+        guard let leadIndex = leads.firstIndex(where: { $0.id == leadID }), let taskIndex = leads[leadIndex].tasks.firstIndex(where: { $0.id == taskID }), let subtaskIndex = leads[leadIndex].tasks[taskIndex].subtasks?.firstIndex(where: { $0.id == subtaskID }) else { return }
+        let old = leads[leadIndex]
+        leads[leadIndex].tasks[taskIndex].subtasks?[subtaskIndex].completed.toggle()
+        do { try await SupabaseService.shared.updateLead(leads[leadIndex], expectedUpdatedAt: old.updatedAt); updateWidget() }
+        catch { leads[leadIndex] = old; reportLeadWrite(error, fallback: "The subtask could not be updated.") }
     }
 
     func completeNextLeadTask(leadID: String, fallbackTitle: String) async {
@@ -752,6 +992,7 @@ final class AppState {
 
     @discardableResult
     func addTimesheet(userID: String, leadID: String, date: String, halfDay: Bool) async -> Bool {
+        guard !isWorkerPreview else { return false }
         guard isAdmin || currentUser?.id == userID else { errorMessage = "Team members can only record their own work days."; return false }
         guard !isTimesheetWeekLocked(userID: userID, date: date) else { errorMessage = "This pay week is approved or paid. Reopen it before changing timesheets."; return false }
         let rate = users.first { $0.id == userID }?.dayRate ?? 0
@@ -766,6 +1007,7 @@ final class AppState {
 
     @discardableResult
     func setTimesheetDay(userID: String, leadID: String, date: String, kind: String) async -> Bool {
+        guard !isWorkerPreview else { return false }
         guard ["full", "half", "off"].contains(kind) else { return false }
         guard kind == "off" || !leadID.isEmpty else { errorMessage = "Choose the job worked on."; return false }
         guard isAdmin || currentUser?.id == userID else { errorMessage = "Team members can only record their own work days."; return false }
@@ -783,6 +1025,7 @@ final class AppState {
 
     @discardableResult
     func saveTimesheet(_ entry: TimesheetEntry) async -> Bool {
+        guard !isWorkerPreview else { return false }
         guard let index = timesheets.firstIndex(where: { $0.id == entry.id }) else { errorMessage = "Timesheet entry could not be found. Refresh and try again."; return false }
         let old = timesheets[index]
         guard isAdmin || (currentUser?.id == old.userID && entry.userID == old.userID) else { errorMessage = "Team members can only edit their own work days."; return false }
@@ -793,6 +1036,7 @@ final class AppState {
     }
 
     func deleteTimesheet(_ entry: TimesheetEntry) async {
+        guard !isWorkerPreview else { return }
         guard isAdmin || currentUser?.id == entry.userID else { errorMessage = "Team members can only delete their own work days."; return }
         guard !isTimesheetWeekLocked(userID: entry.userID, date: entry.date) else { errorMessage = "This pay week is approved or paid. Reopen it before changing timesheets."; return }
         guard let index = timesheets.firstIndex(where: { $0.id == entry.id }) else { return }
@@ -1122,7 +1366,7 @@ final class AppState {
             syncIssues.removeAll { $0 == "Notifications" }
         }
         let overdueTasks = notificationTasks.filter { !$0.completed && ($0.dueDate ?? "9999-12-31") <= SupabaseService.today }.count
-        let overdueJobs = notificationLeads.filter { ($0.endDate ?? "9999-12-31") < SupabaseService.today && ![.completed, .paid, .lost].contains($0.stage) }.count
+        let overdueJobs = notificationLeads.filter { ($0.endDate ?? "9999-12-31") < SupabaseService.today && ![.completed, .waitingForPayment, .paid, .lost].contains($0.stage) }.count
         let payments = PaymentReminderPolicy.summary(leads: notificationLeads, isAdmin: isAdmin, enabled: preference("notifyPayments")).count
         try? await UNUserNotificationCenter.current().setBadgeCount(overdueTasks + overdueJobs + payments + unreadTeamCount)
     }
@@ -1233,7 +1477,7 @@ final class AppState {
             .map { WidgetSnapshot.TaskItem(id: $0.id, title: $0.title, dueDate: $0.dueDate, priority: $0.priority) }
         WidgetSnapshot(
             surveysToday: notificationLeads.filter { $0.surveyDate == today }.count,
-            overdueJobs: notificationLeads.filter { ($0.endDate ?? today) < today && ![.completed, .paid, .lost].contains($0.stage) }.count,
+            overdueJobs: notificationLeads.filter { ($0.endDate ?? today) < today && ![.completed, .waitingForPayment, .paid, .lost].contains($0.stage) }.count,
             activeJobs: notificationLeads.filter { $0.stage == .inProgress }.count,
             tasks: widgetTasks,
             updatedAt: .now
@@ -1424,7 +1668,7 @@ enum NotificationPolicy {
                 result.append(.init(id: "task-\(task.id)", title: "Task due", body: task.title, date: date))
             }
             if let date = nextDailyReminder(hour: 9, now: now, calendar: calendar) {
-                for lead in leads where ![LeadStage.completed, .paid, .lost].contains(lead.stage) {
+                for lead in leads where ![LeadStage.completed, .waitingForPayment, .paid, .lost].contains(lead.stage) {
                     guard let updated = SupabaseService.date(from: String(lead.updatedAt.prefix(10))),
                           let staleCutoff = calendar.date(byAdding: .day, value: -3, to: now), updated < staleCutoff else { continue }
                     let days = max(3, calendar.dateComponents([.day], from: updated, to: now).day ?? 3)
@@ -1483,9 +1727,9 @@ enum PaymentReminderPolicy {
         guard isAdmin, enabled else { return (0, 0) }
         let actionable = leads.filter { lead in
             guard ![LeadStage.paid, .lost].contains(lead.stage), lead.balance > 0 else { return false }
-            return lead.stage == .completed || (!lead.depositPaid && lead.deposit > 0 && [.won, .scheduled, .inProgress].contains(lead.stage))
+            return [.completed, .waitingForPayment].contains(lead.stage) || (!lead.depositPaid && lead.deposit > 0 && [.won, .scheduled, .inProgress].contains(lead.stage))
         }
-        return (actionable.count, actionable.reduce(0) { total, lead in total + (lead.stage == .completed ? lead.balance : lead.deposit) })
+        return (actionable.count, actionable.reduce(0) { total, lead in total + ([.completed, .waitingForPayment].contains(lead.stage) ? lead.balance : lead.deposit) })
     }
 }
 

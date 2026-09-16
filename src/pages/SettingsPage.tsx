@@ -348,7 +348,7 @@ export default function SettingsPage() {
           <h2 className="font-bold text-gray-800">Pipeline Stages</h2>
         </div>
         <div className="p-5 space-y-2">
-          {['New Lead', 'Survey Booked', 'Quote Sent', 'Won', 'In Progress', 'Completed', 'Paid'].map((stage, i) => (
+          {['New Lead', 'Survey Booked', 'Quote Sent', 'Won', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid'].map((stage, i) => (
             <div key={stage} className="flex items-center gap-3 p-2 rounded-lg border border-gray-100">
               <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
               <span className="text-sm text-gray-700 flex-1">{stage}</span>

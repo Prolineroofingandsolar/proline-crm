@@ -141,6 +141,16 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
           </div>
         )}
 
+        {lead.stage === 'Waiting for Payment' && (
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs text-indigo-600 font-medium">Completed {formatDateShort(lead.completedDate)}</p>
+              {isAdmin && <p className="text-sm font-bold text-gray-800">{formatCurrency(lead.balance)} due</p>}
+            </div>
+            <Clock size={16} className="text-indigo-500" />
+          </div>
+        )}
+
         {lead.stage === 'Paid' && (
           <div className="flex items-center justify-between">
             <div>
@@ -226,6 +236,12 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
               </button>
             )}
             {lead.stage === 'Completed' && (
+              <button onClick={stopProp(() => moveToStage(lead.id, 'Waiting for Payment'))}
+                className="flex-1 flex items-center justify-center gap-1 text-xs bg-indigo-600 text-white hover:bg-indigo-700 py-1 rounded-lg font-medium transition-colors">
+                <Clock size={11} /> Await Payment
+              </button>
+            )}
+            {lead.stage === 'Waiting for Payment' && (
               <button onClick={stopProp(() => moveToStage(lead.id, 'Paid'))}
                 className="flex-1 flex items-center justify-center gap-1 text-xs bg-green-600 text-white hover:bg-green-700 py-1 rounded-lg font-medium transition-colors">
                 <CreditCard size={11} /> Mark Paid

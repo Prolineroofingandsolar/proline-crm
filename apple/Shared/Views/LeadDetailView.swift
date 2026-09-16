@@ -411,7 +411,7 @@ struct LeadDetailView: View {
     private func money(_ value: Double) -> String { value.formatted(.currency(code: "GBP")) }
     private func nonEmpty(_ value: String) -> String? { value.isEmpty ? nil : value }
     private func displayDate(_ raw: String) -> String { raw.isEmpty ? "Not set" : String(raw.prefix(10)) }
-    private func stageColor(_ stage: LeadStage) -> Color { switch stage { case .newLead: .orange; case .surveyBooked: .green; case .quotePreparing, .quoteSent: .purple; case .won, .completed, .paid: .green; case .lost: .red; default: .teal } }
+    private func stageColor(_ stage: LeadStage) -> Color { switch stage { case .newLead: .orange; case .surveyBooked: .green; case .quotePreparing, .quoteSent: .purple; case .won, .completed, .paid: .green; case .waitingForPayment: .indigo; case .lost: .red; default: .teal } }
     #endif
 
     private func info(_ lead: Lead) -> some View { Form { Section("Customer") { LabeledContent("Name", value: lead.name); if !lead.phone.isEmpty { PhoneActionMenu(number: lead.phone, label: lead.phone) }; if !lead.email.isEmpty { Link(destination: URL(string:"mailto:\(lead.email)")!) { LabeledContent("Email", value:lead.email) } }; LabeledContent("Address", value:lead.address) }; jobHealth(lead); Section("Job") { LabeledContent("Reference", value:lead.jobRef); LabeledContent("Type", value:lead.jobType); LabeledContent("Stage", value:lead.stage.rawValue); LabeledContent("Value", value:lead.value.formatted(.currency(code:"GBP"))); LabeledContent("Deposit", value:lead.deposit.formatted(.currency(code:"GBP")));LabeledContent("Balance", value:lead.balance.formatted(.currency(code:"GBP"))); LabeledContent("Source", value:lead.source);if !lead.depositPaid && lead.deposit > 0{Button("Record deposit paid"){confirmingDeposit=true}};if lead.balance > 0 && [.won,.scheduled,.inProgress,.completed].contains(lead.stage){Button("Mark balance paid"){confirmingFinalPayment=true}} }; Section("Dates") { if let value=lead.surveyDate { LabeledContent("Survey", value:[value,lead.surveyTime].compactMap{$0}.joined(separator:" · ")) }; if let value=lead.startDate { LabeledContent("Starts", value:value) }; if let value=lead.endDate { LabeledContent("Ends", value:value) } } }.formStyle(.grouped) }
@@ -550,7 +550,7 @@ private final class JobUpdateSpeechRecognizer: ObservableObject {
     #endif
 }
 
-private struct JobUpdateSheet: View {
+struct JobUpdateSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     let leadID: String
@@ -558,6 +558,7 @@ private struct JobUpdateSheet: View {
     @State private var analysis: JobNoteAnalysis?
     @State private var progressNote = ""
     @State private var selectedSuggestionIDs: Set<String> = []
+    @State private var selectedMaterialIDs: Set<String> = []
     @State private var includeProgressNote = true
     @State private var isAnalysing = false
     @State private var isSaving = false
@@ -577,7 +578,7 @@ private struct JobUpdateSheet: View {
                         }
                         transcriptCard
                         if isAnalysing {
-                            HStack(spacing: 12) { ProgressView(); Text("Comparing this update with the job tasks…").foregroundStyle(.secondary) }.padding().frame(maxWidth: .infinity, alignment: .leading)
+                            HStack(spacing: 12) { ProgressView(); Text("Comparing this update with the job tasks and materials…").foregroundStyle(.secondary) }.padding().frame(maxWidth: .infinity, alignment: .leading)
                         } else if let analysis { reviewCard(analysis, lead: lead) }
                     } else { ContentUnavailableView("Job not found", systemImage: "exclamationmark.triangle") }
                 }.padding(20)
@@ -590,7 +591,7 @@ private struct JobUpdateSheet: View {
                     if let analysis {
                         Button { apply(analysis) } label: {
                             if isSaving { ProgressView().frame(maxWidth: .infinity) } else { Label("Confirm and save update", systemImage: "checkmark.circle.fill").frame(maxWidth: .infinity) }
-                        }.buttonStyle(.borderedProminent).tint(.orange).controlSize(.large).disabled(isSaving || (!includeProgressNote && selectedSuggestionIDs.isEmpty))
+                        }.buttonStyle(.borderedProminent).tint(.orange).controlSize(.large).disabled(isSaving || (!includeProgressNote && selectedSuggestionIDs.isEmpty && selectedMaterialIDs.isEmpty))
                     } else {
                         Button { analyse() } label: { Label("Review proposed changes", systemImage: "sparkles").frame(maxWidth: .infinity) }
                             .buttonStyle(.borderedProminent).tint(.orange).controlSize(.large).disabled(cleanTranscript.isEmpty || isAnalysing)
@@ -602,7 +603,7 @@ private struct JobUpdateSheet: View {
         .frame(minWidth: 600, minHeight: 700)
         #endif
         .onDisappear { speech.stopRecording() }
-        .onChange(of: speech.transcript) { _, _ in if analysis != nil { analysis = nil; selectedSuggestionIDs = [] } }
+        .onChange(of: speech.transcript) { _, _ in if analysis != nil { analysis = nil; selectedSuggestionIDs = []; selectedMaterialIDs = [] } }
     }
 
     private var transcriptCard: some View {
@@ -628,11 +629,16 @@ private struct JobUpdateSheet: View {
     private func reviewCard(_ analysis: JobNoteAnalysis, lead: Lead) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             Label("Review before saving", systemImage: "checkmark.shield").font(.headline)
+            if analysis.analysisMode == "note_only" {
+                Label("AI suggestions are temporarily unavailable. Your spoken update is still ready to save as a progress note.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange).padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
+            }
             Toggle(isOn: $includeProgressNote) {
                 VStack(alignment: .leading, spacing: 3) { Text("Add progress note").fontWeight(.semibold); Text("Saved in this job’s Notes timeline").font(.caption).foregroundStyle(.secondary) }
             }
             if includeProgressNote { TextEditor(text: $progressNote).frame(minHeight: 86).padding(8).background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 9)) }
-            Divider(); Text("Proposed task changes").font(.headline)
+            Divider(); Text("Tasks for \(lead.name)").font(.headline)
             if analysis.suggestions.isEmpty {
                 Text("No task changes were confidently identified. You can save the progress note only.").font(.callout).foregroundStyle(.secondary)
             } else {
@@ -651,6 +657,25 @@ private struct JobUpdateSheet: View {
                     }.buttonStyle(.plain)
                     if suggestion.id != analysis.suggestions.last?.id { Divider().padding(.leading, 34) }
                 }
+                Text("Selected tasks will be saved inside \(lead.name)’s job—not as general tasks.").font(.caption).foregroundStyle(.secondary)
+            }
+            if let materials = analysis.materials, !materials.isEmpty {
+                Divider(); Text("Proposed materials").font(.headline)
+                ForEach(materials) { material in
+                    let selected = selectedMaterialIDs.contains(material.id)
+                    Button { toggleMaterialSuggestion(material.id) } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: selected ? "checkmark.circle.fill" : "circle").font(.title3).foregroundStyle(selected ? .orange : .secondary)
+                            Image(systemName: "shippingbox").foregroundStyle(.orange)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(material.name).fontWeight(.semibold).foregroundStyle(.primary)
+                                Text("\(material.quantity.formatted()) \(material.unit)").font(.callout.bold()).foregroundStyle(.orange)
+                                Text(material.reason).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading)
+                            }; Spacer()
+                        }.contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                }
+                Text("Selected items will be added to this job’s Materials list.").font(.caption).foregroundStyle(.secondary)
             }
             Text("Existing job: \(lead.tasks.filter { !$0.completed }.count) open tasks · \(lead.tasks.filter(\.completed).count) completed").font(.caption).foregroundStyle(.secondary)
         }.padding(16).background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 14)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.orange.opacity(0.25)))
@@ -661,20 +686,22 @@ private struct JobUpdateSheet: View {
         Task {
             isAnalysing = true; defer { isAnalysing = false }
             if let result = await appState.analyseJobNote(leadID: leadID, note: transcript) {
-                analysis = result; progressNote = result.summary; selectedSuggestionIDs = Set(result.suggestions.map(\.id))
+                analysis = result; progressNote = result.summary; selectedSuggestionIDs = Set(result.suggestions.map(\.id)); selectedMaterialIDs = Set((result.materials ?? []).map(\.id))
             }
         }
     }
 
     private func apply(_ analysis: JobNoteAnalysis) {
         let selected = analysis.suggestions.filter { selectedSuggestionIDs.contains($0.id) }
+        let selectedMaterials = (analysis.materials ?? []).filter { selectedMaterialIDs.contains($0.id) }
         Task {
             isSaving = true; defer { isSaving = false }
-            if await appState.applyJobUpdate(leadID: leadID, progressNote: includeProgressNote ? progressNote : nil, suggestions: selected) { dismiss() }
+            if await appState.applyJobUpdate(leadID: leadID, progressNote: includeProgressNote ? progressNote : nil, suggestions: selected, materials: selectedMaterials) { dismiss() }
         }
     }
 
     private func toggle(_ id: String) { if selectedSuggestionIDs.contains(id) { selectedSuggestionIDs.remove(id) } else { selectedSuggestionIDs.insert(id) } }
+    private func toggleMaterialSuggestion(_ id: String) { if selectedMaterialIDs.contains(id) { selectedMaterialIDs.remove(id) } else { selectedMaterialIDs.insert(id) } }
 }
 
 private struct AddLeadTaskSheet: View {
@@ -684,11 +711,15 @@ private struct AddLeadTaskSheet: View {
     @State private var title = ""
     @State private var hasDueDate = true
     @State private var dueDate = Date()
+    @State private var priority = "medium"
+    @State private var notes = ""
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Next action", text: $title)
+                TextField("Details, access or expected result", text: $notes, axis: .vertical).lineLimit(2...5)
+                Picker("Priority", selection: $priority) { Text("Low").tag("low"); Text("Medium").tag("medium"); Text("High").tag("high") }
                 Toggle("Set due date", isOn: $hasDueDate)
                 if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }
             }
@@ -698,13 +729,13 @@ private struct AddLeadTaskSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
                         let due = hasDueDate ? SupabaseService.localDay(for: dueDate) : nil
-                        Task { if await appState.addLeadTask(leadID: lead.id, title: title, dueDate: due) { dismiss() } }
+                        Task { if await appState.addLeadTask(leadID: lead.id, title: title, dueDate: due, priority: priority, notes: notes.isEmpty ? nil : notes) { dismiss() } }
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
-        .frame(minWidth: 420, minHeight: 270)
+        .frame(minWidth: 420, minHeight: 390)
     }
 }
 

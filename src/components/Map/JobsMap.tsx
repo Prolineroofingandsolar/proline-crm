@@ -18,6 +18,7 @@ const STAGE_COLOR: Record<string, string> = {
   'Won':         '#16a34a',
   'In Progress': '#ea580c',
   'Completed':   '#059669',
+  'Waiting for Payment': '#4f46e5',
   'Paid':        '#0d9488',
 };
 
@@ -67,7 +68,7 @@ function CardPositionTracker({
   return null;
 }
 
-const MAP_STAGES = ['Won', 'In Progress', 'Completed', 'Paid'];
+const MAP_STAGES = ['Won', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid'];
 const CARD_W = 210;
 const CARD_H = 188;
 

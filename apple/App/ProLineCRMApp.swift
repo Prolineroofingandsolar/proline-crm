@@ -136,11 +136,14 @@ struct ProLineCRMApp: App {
         .commands {
             SidebarCommands()
             CommandMenu("CRM") {
-                Button("Search CRM…") { appState.showingGlobalSearch = true }.keyboardShortcut("k")
-                Button("New Lead…") { appState.showingGlobalAddLead = true }.keyboardShortcut("n")
-                Button("Operations Assistant…") { appState.showingAssistant = true }.keyboardShortcut("a", modifiers: [.command, .shift])
-                Divider()
+                if appState.isAdmin {
+                    Button("Search CRM…") { appState.showingGlobalSearch = true }.keyboardShortcut("k")
+                    Button("New Lead…") { appState.showingGlobalAddLead = true }.keyboardShortcut("n")
+                    Button("Operations Assistant…") { appState.showingAssistant = true }.keyboardShortcut("a", modifiers: [.command, .shift])
+                    Divider()
+                }
                 Button("Refresh") { Task { await appState.refresh() } }.keyboardShortcut("r")
+                    .disabled(appState.isWorkerPreview)
             }
         }
         #endif

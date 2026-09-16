@@ -286,7 +286,7 @@ function JobTasksSection({ view }: { view: View }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const activeLeads = leads.filter(l =>
-    ['Won', 'In Progress', 'Completed'].includes(l.stage) && l.tasks.length > 0
+    ['Won', 'In Progress', 'Completed', 'Waiting for Payment'].includes(l.stage) && l.tasks.length > 0
   );
 
   const leadsWithMatchingTasks = activeLeads.map(lead => {

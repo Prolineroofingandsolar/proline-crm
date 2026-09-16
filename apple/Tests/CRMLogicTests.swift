@@ -2,6 +2,22 @@ import XCTest
 @testable import ProLine_CRM
 
 final class CRMLogicTests: XCTestCase {
+    func testDailyCompanyPlanRanksOverdueJobsBeforeQuotes() {
+        var overdue = lead(id: "late", stage: .inProgress, value: 1000, balance: 500)
+        overdue.endDate = "2026-09-05"
+        let quote = lead(id: "quote", stage: .quoteSent, value: 1000, balance: 0)
+        let result = OperationsInsights.answer("Create my daily company plan. Rank what I need to do first, identify risks, and suggest the next best actions.", leads: [quote, overdue], tasks: [], today: "2026-09-06")
+        XCTAssertTrue(result.text.contains("1. Recover overdue jobs"))
+        XCTAssertTrue(result.text.contains("Follow up 1 sent quotes"))
+        XCTAssertEqual(result.ids, ["late", "quote"])
+    }
+
+    func testDailyPlanWithNoRecordsDoesNotInventWork() {
+        let result = OperationsInsights.answer("Create my daily company plan", leads: [], tasks: [], today: "2026-09-06")
+        XCTAssertTrue(result.text.contains("No urgent items"))
+        XCTAssertTrue(result.ids.isEmpty)
+    }
+
     func testJobUpdateSuggestionPreservesQuantityAndDueDate() throws {
         let json = #"{"summary":"Front slope felted and battened.","suggestions":[{"id":"next-1","action":"add","task_id":null,"title":"Collect 12 packs of batten","reason":"Needed in the morning","due_date":"2026-09-06"}]}"#.data(using: .utf8)!
         let result = try JSONDecoder().decode(JobNoteAnalysis.self, from: json)
@@ -15,6 +31,28 @@ final class CRMLogicTests: XCTestCase {
         let json = #"{"summary":"Front slope prepared.","suggestions":[{"id":"next-2","action":"add","task_id":null,"title":"Photograph the front slope","reason":"Explicit next action"}]}"#.data(using: .utf8)!
         let result = try JSONDecoder().decode(JobNoteAnalysis.self, from: json)
         XCTAssertNil(result.suggestions.first?.dueDate)
+    }
+
+    func testJobUpdateDecodesProposedMaterial() throws {
+        let json = #"{"summary":"Need more batten.","suggestions":[],"materials":[{"id":"mat-1","name":"Batten","quantity":12,"unit":"packs","reason":"Needed tomorrow"}],"analysis_mode":"ai"}"#.data(using: .utf8)!
+        let result = try JSONDecoder().decode(JobNoteAnalysis.self, from: json)
+        XCTAssertEqual(result.materials?.first?.name, "Batten")
+        XCTAssertEqual(result.materials?.first?.quantity, 12)
+        XCTAssertEqual(result.materials?.first?.unit, "packs")
+        XCTAssertEqual(result.analysisMode, "ai")
+    }
+
+    func testJobTaskDecodesNestedSubtasksAndLegacyTasks() throws {
+        let nested = #"{"id":"task-1","title":"Prepare roof","completed":false,"completedDate":null,"dueDate":"2026-09-08","isTemplate":false,"priority":"high","notes":"Front elevation first","subtasks":[{"id":"step-1","title":"Set scaffold","completed":true},{"id":"step-2","title":"Strip tiles","completed":false}]}"#.data(using: .utf8)!
+        let task = try JSONDecoder().decode(CRMTask.self, from: nested)
+        XCTAssertEqual(task.subtasks?.count, 2)
+        XCTAssertEqual(task.subtasks?.first?.title, "Set scaffold")
+        XCTAssertEqual(task.priority, "high")
+
+        let legacy = #"{"id":"task-2","title":"Old task","completed":false}"#.data(using: .utf8)!
+        let oldTask = try JSONDecoder().decode(CRMTask.self, from: legacy)
+        XCTAssertNil(oldTask.subtasks)
+        XCTAssertNil(oldTask.notes)
     }
 
     func testLegacyAndTimestampDatesParse() {
@@ -36,7 +74,8 @@ final class CRMLogicTests: XCTestCase {
     func testLeadStageDisplayNames() {
         XCTAssertEqual(LeadStage.newLead.displayName, "New Enquiry")
         XCTAssertEqual(LeadStage.quotePreparing.displayName, "Quote Preparing")
-        XCTAssertEqual(Set(LeadStage.allCases).count, 10)
+        XCTAssertEqual(LeadStage.waitingForPayment.displayName, "Waiting for Payment")
+        XCTAssertEqual(Set(LeadStage.allCases).count, 11)
     }
 
     func testWidgetEmptySnapshotIsSafe() {
@@ -46,9 +85,14 @@ final class CRMLogicTests: XCTestCase {
     }
 
     func testStaffCannotAccessCompanyFinancialSections() {
-        XCTAssertTrue(AppState.canAccess(.pipeline, role: "user"))
-        XCTAssertTrue(AppState.canAccess(.team, role: "user"))
+        XCTAssertTrue(AppState.canAccess(.dashboard, role: "user"))
+        XCTAssertTrue(AppState.canAccess(.jobs, role: "user"))
+        XCTAssertTrue(AppState.canAccess(.tasks, role: "user"))
         XCTAssertTrue(AppState.canAccess(.timesheet, role: "casual"))
+        XCTAssertFalse(AppState.canAccess(.pipeline, role: "user"))
+        XCTAssertTrue(AppState.canAccess(.calendar, role: "user"))
+        XCTAssertFalse(AppState.canAccess(.team, role: "user"))
+        XCTAssertTrue(AppState.canAccess(.tools, role: "casual"))
         XCTAssertFalse(AppState.canAccess(.accounts, role: "user"))
         XCTAssertFalse(AppState.canAccess(.finance, role: "casual"))
         XCTAssertFalse(AppState.canAccess(.cis, role: "user"))
@@ -196,19 +240,21 @@ final class CRMLogicTests: XCTestCase {
         deposit.deposit = 2_000
         deposit.depositPaid = false
         let completed = lead(id: "complete", stage: .completed, value: 8_000, balance: 3_000)
+        let waiting = lead(id: "waiting", stage: .waitingForPayment, value: 7_000, balance: 2_000)
         let paid = lead(id: "paid", stage: .paid, value: 5_000, balance: 0)
 
-        let admin = PaymentReminderPolicy.summary(leads: [deposit, completed, paid], isAdmin: true, enabled: true)
-        XCTAssertEqual(admin.count, 2)
-        XCTAssertEqual(admin.total, 5_000, accuracy: 0.001)
+        let admin = PaymentReminderPolicy.summary(leads: [deposit, completed, waiting, paid], isAdmin: true, enabled: true)
+        XCTAssertEqual(admin.count, 3)
+        XCTAssertEqual(admin.total, 7_000, accuracy: 0.001)
         XCTAssertEqual(PaymentReminderPolicy.summary(leads: [deposit], isAdmin: false, enabled: true).count, 0)
         XCTAssertEqual(PaymentReminderPolicy.summary(leads: [deposit], isAdmin: true, enabled: false).count, 0)
     }
 
     func testEmailIdentifiersNeverUseLegacyAuthenticationFallback() {
-        XCTAssertTrue(AuthenticationPolicy.usesSecureLogin(identifier: "worker@example.com"))
-        XCTAssertTrue(AuthenticationPolicy.usesSecureLogin(identifier: "  worker@example.com  "))
-        XCTAssertFalse(AuthenticationPolicy.usesSecureLogin(identifier: "legacy-worker"))
+        XCTAssertEqual(AuthenticationPolicy.secureEmail(for: "worker@example.com"), "worker@example.com")
+        XCTAssertEqual(AuthenticationPolicy.secureEmail(for: "  Worker@Example.com  "), "worker@example.com")
+        XCTAssertEqual(AuthenticationPolicy.secureEmail(for: "willconway9"), "admin@prolineroofingandsolar.co.uk")
+        XCTAssertNil(AuthenticationPolicy.secureEmail(for: "legacy-worker"))
     }
 
     func testNotificationQueueIsChronologicalAndCanBeSafelyCapped() {

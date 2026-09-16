@@ -47,7 +47,6 @@ const STAGE_TASKS: Partial<Record<Stage, string[]>> = {
     'Final inspection with customer',
     'Take completion photos',
     'Send final invoice',
-    'Collect outstanding balance',
   ],
   'Paid': [
     'File all job paperwork',
@@ -298,6 +297,7 @@ export const useStore = create<Store>()(
                 Won: { title: 'Job Won', pref: 'jobWon' },
                 'In Progress': { title: 'Job Started', pref: 'jobStarted' },
                 Completed: { title: 'Job Completed', pref: 'jobCompleted' },
+                'Waiting for Payment': { title: 'Job Completed', pref: 'jobCompleted' },
                 Paid: { title: 'Payment Received', pref: 'paymentReceived' },
               };
               const notification = stageNotification[lead.stage];
@@ -642,7 +642,7 @@ export const useStore = create<Store>()(
         const updates: Partial<Lead> = { stage, updatedAt: now };
         if (stage === 'Won') updates.wonDate = now;
         if (stage === 'In Progress' && !lead.startDate) updates.startDate = now;
-        if (stage === 'Completed') updates.completedDate = now;
+        if ((stage === 'Completed' || stage === 'Waiting for Payment') && !lead.completedDate) updates.completedDate = now;
         if (stage === 'Paid') { updates.paidDate = now; updates.balance = 0; }
         const customTasks = lead.tasks.filter(t => !t.isTemplate);
         const newTemplateTasks = (STAGE_TASKS[stage] ?? []).map(title => ({
@@ -657,6 +657,7 @@ export const useStore = create<Store>()(
           Won:             { title: 'Job Won',          pref: 'jobWon' },
           'In Progress':   { title: 'Job Started',      pref: 'jobStarted' },
           Completed:       { title: 'Job Completed',    pref: 'jobCompleted' },
+          'Waiting for Payment': { title: 'Job Completed', pref: 'jobCompleted' },
           Paid:            { title: 'Payment Received', pref: 'paymentReceived' },
         };
         const pushEntry = pushTitles[stage];

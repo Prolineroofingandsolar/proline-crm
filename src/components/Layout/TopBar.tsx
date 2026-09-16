@@ -18,7 +18,7 @@ export default function TopBar({ onNewLead }: Props) {
   const surveysToday = leads.filter(l => l.surveyDate === today);
   // Jobs with end date passed and not completed/paid
   const overdueJobs = leads.filter(l =>
-    l.endDate && l.endDate < today && !['Completed', 'Paid'].includes(l.stage)
+    l.endDate && l.endDate < today && !['Completed', 'Waiting for Payment', 'Paid'].includes(l.stage)
   );
   // Incomplete tasks on active jobs
   const pendingTasks = leads

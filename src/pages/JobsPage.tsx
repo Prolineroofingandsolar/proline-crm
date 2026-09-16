@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate, jobTypeColor } from '../utils/helpers';
 import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 
-const JOB_STAGES = ['Won', 'In Progress', 'Completed', 'Paid'];
+const JOB_STAGES = ['Won', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid'];
 
 export default function JobsPage() {
   const { leads, selectedId, setSelectedId, moveToStage, deleteLead, users, currentUserId } = useStore();
@@ -83,6 +83,7 @@ export default function JobsPage() {
                 <td className="px-4 py-3">
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
                     lead.stage === 'Paid' ? 'bg-teal-100 text-teal-700' :
+                    lead.stage === 'Waiting for Payment' ? 'bg-indigo-100 text-indigo-700' :
                     lead.stage === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
                     lead.stage === 'In Progress' ? 'bg-orange-100 text-orange-700' :
                     'bg-green-100 text-green-700'
@@ -114,6 +115,11 @@ export default function JobsPage() {
                       </button>
                     )}
                     {isAdmin && lead.stage === 'Completed' && (
+                      <button onClick={() => moveToStage(lead.id, 'Waiting for Payment')} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-medium whitespace-nowrap">
+                        <CreditCard size={11} /><span className="hidden sm:inline"> Await payment</span>
+                      </button>
+                    )}
+                    {isAdmin && lead.stage === 'Waiting for Payment' && (
                       <button onClick={() => moveToStage(lead.id, 'Paid')} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 text-xs font-medium">
                         <CreditCard size={11} /><span className="hidden sm:inline"> Paid</span>
                       </button>

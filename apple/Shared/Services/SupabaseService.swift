@@ -131,14 +131,15 @@ actor SupabaseService {
 
     func analyseJobNote(lead: Lead, note: String) async throws -> JobNoteAnalysis {
         struct TaskRecord: Encodable { let id: String; let title: String; let completed: Bool; let dueDate: String?; enum CodingKeys: String, CodingKey { case id, title, completed; case dueDate = "due_date" } }
+        struct MaterialRecord: Encodable { let name: String; let quantity: Double; let unit: String }
         struct Payload: Encodable {
-            let jobType: String; let stage: String; let note: String; let tasks: [TaskRecord]; let today: String
-            enum CodingKeys: String, CodingKey { case stage, note, tasks, today; case jobType = "job_type" }
+            let jobType: String; let stage: String; let note: String; let tasks: [TaskRecord]; let materials: [MaterialRecord]; let today: String
+            enum CodingKeys: String, CodingKey { case stage, note, tasks, materials, today; case jobType = "job_type" }
         }
         var call = URLRequest(url: functionsURL.appending(path: "analyse-job-note"))
         call.httpMethod = "POST"
         call.timeoutInterval = 35
-        call.httpBody = try JSONEncoder().encode(Payload(jobType: lead.jobType, stage: lead.stage.rawValue, note: note, tasks: lead.tasks.map { .init(id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate) }, today: Self.today))
+        call.httpBody = try JSONEncoder().encode(Payload(jobType: lead.jobType, stage: lead.stage.rawValue, note: note, tasks: lead.tasks.map { .init(id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate) }, materials: lead.materials.map { .init(name: $0.name, quantity: $0.quantity, unit: $0.unit) }, today: Self.today))
         call.setValue(anonKey, forHTTPHeaderField: "apikey")
         call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
         call.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -146,7 +147,7 @@ actor SupabaseService {
         return try decoder.decode(JobNoteAnalysis.self, from: data)
     }
 
-    func askOperationsAssistant(prompt: String, history: [AssistantConversationTurn], attachment: AssistantAttachment? = nil, leads: [Lead], tasks: [GeneralTask], user: CRMUser) async throws -> CRMAssistantResponse {
+    func askOperationsAssistant(prompt: String, history: [AssistantConversationTurn], attachment: AssistantAttachment? = nil, leads: [Lead], tasks: [GeneralTask], actions: [CompanyAction], user: CRMUser) async throws -> CRMAssistantResponse {
         struct SafeUser: Encodable { let id: String; let name: String; let role: String }
         struct SafeTask: Encodable { let id: String; let title: String; let completed: Bool; let dueDate: String?; let priority: String; let category: String; let assignedTo: [String] }
         struct SafeJobTask: Encodable { let id: String; let title: String; let completed: Bool; let dueDate: String? }
@@ -156,8 +157,9 @@ actor SupabaseService {
             let value: Double; let deposit: Double; let depositPaid: Bool; let balance: Double; let assignedTo: String; let surveyDate: String?; let surveyTime: String?
             let startDate: String?; let endDate: String?; let progress: Int; let tasks: [SafeJobTask]; let recentNotes: [SafeNote]
         }
-        struct Payload: Encodable { let prompt: String; let history: [AssistantConversationTurn]; let attachment: AssistantAttachment?; let leads: [SafeLead]; let tasks: [SafeTask]; let user: SafeUser; let today: String }
-        let safeLeads = leads.prefix(250).map { lead in
+        struct SafeAction: Encodable { let kind: String; let priority: String; let title: String; let detail: String; let reason: String; let leadID: String?; let dueDate: String?; enum CodingKeys: String, CodingKey { case kind, priority, title, detail, reason; case leadID = "lead_id"; case dueDate = "due_date" } }
+        struct Payload: Encodable { let prompt: String; let history: [AssistantConversationTurn]; let attachment: AssistantAttachment?; let leads: [SafeLead]; let tasks: [SafeTask]; let actions: [SafeAction]; let user: SafeUser; let today: String }
+        let safeLeads = leads.prefix(100).map { lead in
             SafeLead(id: lead.id, jobRef: lead.jobRef, customerName: lead.name, address: lead.address, jobType: lead.jobType,
                      stage: lead.stage.rawValue, value: lead.value, deposit: lead.deposit, depositPaid: lead.depositPaid, balance: lead.balance, assignedTo: lead.assignedTo,
                      surveyDate: lead.surveyDate, surveyTime: lead.surveyTime, startDate: lead.startDate, endDate: lead.endDate,
@@ -165,11 +167,12 @@ actor SupabaseService {
                      tasks: lead.tasks.map { SafeJobTask(id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate) },
                      recentNotes: lead.notes.suffix(3).map { SafeNote(content: $0.content, date: $0.date) })
         }
-        let safeTasks = tasks.prefix(250).map { SafeTask(id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate, priority: $0.priority, category: $0.category, assignedTo: $0.assignedTo) }
+        let safeTasks = tasks.prefix(100).map { SafeTask(id: $0.id, title: $0.title, completed: $0.completed, dueDate: $0.dueDate, priority: $0.priority, category: $0.category, assignedTo: $0.assignedTo) }
+        let safeActions = actions.prefix(30).map { SafeAction(kind: $0.kind.rawValue, priority: $0.priority.label, title: $0.title, detail: $0.detail, reason: $0.reason, leadID: $0.leadID, dueDate: $0.dueDate) }
         var call = URLRequest(url: functionsURL.appending(path: "operations-assistant"))
         call.httpMethod = "POST"
-        call.timeoutInterval = attachment == nil ? 35 : 60
-        call.httpBody = try JSONEncoder().encode(Payload(prompt: prompt, history: Array(history.suffix(12)), attachment: attachment, leads: safeLeads, tasks: safeTasks, user: .init(id: user.id, name: user.name, role: user.role), today: Self.today))
+        call.timeoutInterval = attachment == nil ? 55 : 70
+        call.httpBody = try JSONEncoder().encode(Payload(prompt: prompt, history: Array(history.suffix(12)), attachment: attachment, leads: safeLeads, tasks: safeTasks, actions: safeActions, user: .init(id: user.id, name: user.name, role: user.role), today: Self.today))
         call.setValue(anonKey, forHTTPHeaderField: "apikey")
         call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
         call.setValue("application/json", forHTTPHeaderField: "Content-Type")

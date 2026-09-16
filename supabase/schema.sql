@@ -151,7 +151,7 @@ as $$
     t->>'title'  as task_title
   from leads l,
        jsonb_array_elements(l.tasks) as t
-  where l.stage in ('Won', 'In Progress', 'Completed')
+  where l.stage in ('Won', 'In Progress', 'Completed', 'Waiting for Payment')
     and (t->>'completed')::boolean = false;
 $$;
 

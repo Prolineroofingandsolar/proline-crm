@@ -39,7 +39,7 @@ export const jobTypeColor = (jt: string): string => {
 };
 
 export const nextStage = (stage: string): string | null => {
-  const order = ['New Lead', 'Survey Booked', 'Quote Sent', 'Won', 'In Progress', 'Completed', 'Paid'];
+  const order = ['New Lead', 'Survey Booked', 'Quote Sent', 'Won', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid'];
   const idx = order.indexOf(stage);
   return idx >= 0 && idx < order.length - 1 ? order[idx + 1] : null;
 };

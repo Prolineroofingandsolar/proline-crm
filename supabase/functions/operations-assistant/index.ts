@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type" };
 const allowedKinds = new Set(["add_job_task", "complete_job_task", "create_general_task", "move_job_stage", "schedule_survey", "schedule_job", "draft_email", "record_deposit", "record_final_payment", "set_job_value", "set_deposit_amount", "set_balance", "add_job_note", "add_material"]);
-const allowedStages = new Set(["New Lead", "Survey Booked", "Quote Preparing", "Quote Sent", "Won", "Scheduled", "In Progress", "Completed", "Paid", "Lost"]);
+const allowedStages = new Set(["New Lead", "Survey Booked", "Quote Preparing", "Quote Sent", "Won", "Scheduled", "In Progress", "Completed", "Waiting for Payment", "Paid", "Lost"]);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
 async function verifyUser(req: Request) {
@@ -24,8 +24,8 @@ Deno.serve(async (req) => {
   const payload = await req.json();
   const prompt = String(payload.prompt ?? "").trim().slice(0, 4000);
   if (!prompt) return json({ error: "Ask a question first." }, 400);
-  const leads = Array.isArray(payload.leads) ? payload.leads.slice(0, 150) : [];
-  const tasks = Array.isArray(payload.tasks) ? payload.tasks.slice(0, 150) : [];
+  const leads = Array.isArray(payload.leads) ? payload.leads.slice(0, 100) : [];
+  const tasks = Array.isArray(payload.tasks) ? payload.tasks.slice(0, 100) : [];
   const history = Array.isArray(payload.history) ? payload.history.slice(-6) : [];
   const relevanceText = `${prompt} ${history.map((turn: any) => String(turn?.text ?? "")).join(" ")}`.toLowerCase();
   const compactLeads = leads.map((lead: any) => {
@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
       balance: lead.balance, assignedTo: lead.assignedTo, surveyDate: lead.surveyDate,
       surveyTime: lead.surveyTime, startDate: lead.startDate, endDate: lead.endDate,
       progress: lead.progress,
-      tasks: Array.isArray(lead.tasks) ? lead.tasks.filter((task: any) => !task.completed).slice(0, relevant ? 20 : 4) : []
+      tasks: Array.isArray(lead.tasks) ? lead.tasks.filter((task: any) => !task.completed).slice(0, relevant ? 12 : 2) : []
     };
     if (relevant) {
       summary.address = lead.address;
@@ -98,9 +98,9 @@ If ambiguous, ask a question and return no actions. Today: ${String(payload.toda
   let response: Response;
   try {
     response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(20_000), body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] },
+      method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(attachmentPart ? 55_000 : 40_000), body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: `Conversation history:\n${JSON.stringify(history)}\n\nCurrent request:\n${prompt}\n\nAttached filename: ${String(attachment?.filename ?? "none")}\n\nCRM jobs:\n${JSON.stringify(compactLeads)}\n\nGeneral tasks:\n${JSON.stringify(compactTasks)}` }, ...(attachmentPart ? [attachmentPart] : [])] }],
-        generationConfig: { temperature: 0.15, maxOutputTokens: 2048, responseMimeType: "application/json", responseSchema: schema } })
+        generationConfig: { temperature: 0.15, maxOutputTokens: 1200, responseMimeType: "application/json", responseSchema: schema } })
     });
   } catch (error) {
     console.error("Gemini request timed out or failed", error);
