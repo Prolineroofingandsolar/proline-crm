@@ -23,21 +23,21 @@ struct DashboardView: View {
         List {
             Section {
                 if scheduledToday.isEmpty {
-                    Text("Nothing booked today").foregroundStyle(.secondary)
+                    Text("Nothing booked").foregroundStyle(.secondary)
                 } else {
                     ForEach(scheduledToday) { lead in
                         NavigationLink(value: LeadRoute(id: lead.id)) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(lead.name).fontWeight(.medium)
-                                    Text([lead.jobType, lead.address].filter { !$0.isEmpty }.joined(separator: " · ")).font(.subheadline)
+                                    Text(lead.address.isEmpty ? lead.jobType : lead.address).font(.subheadline)
                                         .foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 Spacer()
                                 if lead.surveyDate == today {
-                                    Text(lead.surveyTime.map { "Survey \($0)" } ?? "Survey").font(.subheadline).foregroundStyle(.secondary)
+                                    Text(lead.surveyTime ?? "Survey").font(.subheadline).foregroundStyle(.secondary)
                                 } else {
-                                    Text(lead.stage == .inProgress ? "On site" : "Starts today").font(.subheadline).foregroundStyle(
+                                    Text(lead.stage == .inProgress ? "On site" : "Starts").font(.subheadline).foregroundStyle(
                                         .secondary)
                                 }
                             }
@@ -50,24 +50,11 @@ struct DashboardView: View {
 
             ActionQueueList()
 
-            Section("Business") {
-                LabeledContent("Open leads", value: "\(openLeads)")
+            Section {
+                LabeledContent("Leads", value: "\(openLeads)")
                 LabeledContent("Live jobs", value: "\(liveJobs)")
-                LabeledContent("Awaiting payment", value: "\(awaitingPayment)")
                 LabeledContent("To collect", value: toCollect.formatted(.currency(code: "GBP").precision(.fractionLength(0))))
-                NavigationLink {
-                    DashboardJobsMap().navigationTitle("Job map")
-                } label: {
-                    Label("Map of surveys and live jobs", systemImage: "map")
-                }
-                Button {
-                    appState.openAssistant(
-                        with:
-                            "Create my daily company plan. Rank what I need to do first, identify risks, and suggest the next best actions."
-                    )
-                } label: {
-                    Label("Ask ProLine to plan the day", systemImage: "sparkles")
-                }
+                NavigationLink { DashboardJobsMap().navigationTitle("Map") } label: { Label("Map", systemImage: "map") }
             }
         }
         #if os(iOS)

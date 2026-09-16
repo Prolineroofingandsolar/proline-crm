@@ -325,8 +325,6 @@ struct RootView: View {
                 Section {
                     moreLink(.settings)
                     if appState.isAdmin { Toggle("Simple mode", isOn: simpleModeBinding) }
-                } footer: {
-                    if appState.isAdmin { Text("Simple mode shows the same streamlined app that workers use.") }
                 }
             }
             .navigationTitle("More")
@@ -352,9 +350,7 @@ struct RootView: View {
                 if appState.isAdmin {
                     Section {
                         Toggle("Simple mode", isOn: simpleModeBinding)
-                    } footer: {
-                        Text("Turn off to return to the full CRM.")
-                    }
+                }
                 }
                 Section("Account") {
                     LabeledContent("Signed in as", value: appState.currentUser?.name ?? "—")

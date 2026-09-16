@@ -79,7 +79,7 @@ struct PipelineView: View {
                     Section {
                         ForEach(leads(in: stage)) { lead in PipelineRow(lead: lead) }
                         if leads(in: stage).isEmpty {
-                            Text("Nothing in \(stage.displayName)").foregroundStyle(.secondary)
+                            Text("Empty").foregroundStyle(.secondary)
                         }
                     } header: {
                         stageChooser
@@ -155,12 +155,9 @@ struct PipelineRow: View {
                         Text(lead.value, format: .currency(code: "GBP").precision(.fractionLength(0))).foregroundStyle(.secondary)
                     }
                 }
-                Text([lead.jobType, lead.address].filter { !$0.isEmpty }.joined(separator: " · ")).font(.subheadline).foregroundStyle(
+                Text(lead.address.isEmpty ? lead.jobType : lead.address).font(.subheadline).foregroundStyle(
                     .secondary
                 ).lineLimit(1)
-                if let next = lead.tasks.first(where: { !$0.completed }) {
-                    Text(next.title).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                }
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -264,7 +261,7 @@ struct StageMenu: View {
                             Spacer()
                             if lead.value > 0 { Text(lead.value, format: .currency(code: "GBP").precision(.fractionLength(0))) }
                         }
-                        Text([lead.jobType, lead.address].filter { !$0.isEmpty }.joined(separator: " · ")).font(.subheadline)
+                        Text(lead.address.isEmpty ? lead.jobType : lead.address).font(.subheadline)
                             .foregroundStyle(.secondary).lineLimit(2)
                         if let nextTask {
                             Label(nextTask.title, systemImage: "circle").font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
@@ -556,13 +553,7 @@ struct AddLeadView: View {
                         #endif
                 } header: {
                     Text("Customer")
-                } footer: {
-                    if !emailIsValid {
-                        Text("Enter a valid email address.").foregroundStyle(.red)
-                    } else if !contactIsValid && !name.isEmpty {
-                        Text("Add a phone number or email so the customer can be contacted.")
-                    }
-                }
+                } footer: { if !emailIsValid { Text("Enter a valid email address.").foregroundStyle(.red) } }
 
                 Section {
                     TextField("Address", text: $address, axis: .vertical)
@@ -578,12 +569,10 @@ struct AddLeadView: View {
                         }
                     }
                     Picker("Work", selection: $jobType) { ForEach(Self.jobTypes, id: \.self) { Text($0) } }
-                    Picker("Heard about us", selection: $source) { ForEach(Self.sources, id: \.self) { Text($0) } }
+                    Picker("Source", selection: $source) { ForEach(Self.sources, id: \.self) { Text($0) } }
                     TextField("Notes", text: $notes, axis: .vertical).lineLimit(2...5)
                 } header: {
                     Text("Job")
-                } footer: {
-                    if let error = addressSearch.errorMessage { Text(error) }
                 }
 
                 Section {
@@ -602,8 +591,6 @@ struct AddLeadView: View {
                         }
                     }
                     Toggle("Follow up tomorrow", isOn: $createFollowUp)
-                } footer: {
-                    Text("The value is usually set by the quote. Leave it blank for now if you don't know it.")
                 }
             }
             .formStyle(.grouped)

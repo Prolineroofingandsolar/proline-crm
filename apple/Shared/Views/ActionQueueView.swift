@@ -27,8 +27,7 @@ struct ActionQueueList: View {
     var body: some View {
         Group {
             if actions.isEmpty {
-                ContentUnavailableView(
-                    "You’re all caught up", systemImage: "checkmark.circle", description: Text("Nothing needs chasing right now."))
+                Section { Label("Nothing to chase", systemImage: "checkmark.circle").foregroundStyle(.secondary) }
             } else {
                 ForEach([CompanyActionPriority.critical, .urgent, .soon], id: \.rawValue) { priority in
                     let rows = group(priority)
@@ -36,9 +35,7 @@ struct ActionQueueList: View {
                         Section {
                             ForEach(rows) { action in row(action) }
                         } header: {
-                            HStack {
-                                Text(priority.label); Spacer(); Text("\(rows.count)").foregroundStyle(.secondary)
-                            }
+                            Text(priority.label)
                         }
                     }
                 }
@@ -132,7 +129,8 @@ struct CompanyActionRow: View {
     }
 
     private var detail: String {
-        [action.detail, action.reason].filter { !$0.isEmpty }.joined(separator: " · ")
+        // The section header already says when; the row only needs who.
+        action.detail
     }
     private var icon: String {
         switch action.kind {

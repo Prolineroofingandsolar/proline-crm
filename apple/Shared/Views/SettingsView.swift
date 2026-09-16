@@ -32,8 +32,6 @@ struct SettingsView: View {
                     TextField("Address", text: $businessAddress, axis: .vertical).lineLimit(2...4)
                 } header: {
                     Text("Business details")
-                } footer: {
-                    Text("Printed on quotes. Stored on this device.")
                 }
 
                 Section {
@@ -52,8 +50,6 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Team")
-                } footer: {
-                    Text("Invited workers choose their own password and enter their own pay, CIS and bank details.")
                 }
             }
 
@@ -88,10 +84,6 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Gmail assistant")
-                } footer: {
-                    Text(
-                        "Important customer emails become tasks and suggested replies are saved as Gmail drafts. Nothing is ever sent automatically."
-                    )
                 }
 
                 Section("Data") {

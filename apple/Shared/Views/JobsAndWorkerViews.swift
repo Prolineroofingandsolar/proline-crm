@@ -35,7 +35,7 @@ struct JobsView: View {
                 }
             }
             if jobs.isEmpty {
-                Text(search.isEmpty ? "No jobs yet. Jobs appear here once a lead is won." : "No matching jobs").foregroundStyle(.secondary)
+                Text("No jobs").foregroundStyle(.secondary)
             }
         }
         .searchable(text: $search, prompt: "Customer, job or address")
@@ -69,7 +69,7 @@ struct WorkerJobsView: View {
             Section {
                 ForEach(jobs) { lead in NavigationLink(value: LeadRoute(id: lead.id)) { WorkerJobRow(lead: lead) } }
                 if jobs.isEmpty {
-                    Text(search.isEmpty ? (showingCompleted ? "No completed jobs" : "No current jobs") : "No matching jobs")
+                    Text("No jobs")
                         .foregroundStyle(.secondary)
                 }
             } header: {
@@ -132,7 +132,7 @@ struct WorkerHomeView: View {
             Section {
                 NavigationLink(value: AppSection.timesheet) {
                     Label(
-                        todayEntry == nil ? "Record today's time" : "Time recorded for today",
+                        todayEntry == nil ? "Record time" : "Time recorded",
                         systemImage: todayEntry == nil ? "clock" : "checkmark.circle")
                 }
             }
@@ -153,10 +153,8 @@ struct WorkerHomeView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                if dueTasks.isEmpty { Label("You’re all caught up", systemImage: "checkmark.circle").foregroundStyle(.secondary) }
-            } header: {
-                Text("Due today")
-            }
+                if dueTasks.isEmpty { Label("Nothing due", systemImage: "checkmark.circle").foregroundStyle(.secondary) }
+            } header: { Text("Tasks") }
         }
         .navigationTitle("Today")
         .navigationDestination(for: AppSection.self) { section in
@@ -339,11 +337,10 @@ struct WorkerJobDetailView: View {
         if let lead {
             Form {
                 Section {
-                    LabeledContent("Stage", value: lead.stage.displayName)
                     if let start = lead.startDate { LabeledContent("Starts", value: CRMFormat.relativeDay(start)) }
                     if let end = lead.endDate { LabeledContent("Expected finish", value: CRMFormat.relativeDay(end)) }
                 } header: {
-                    Text([lead.jobType, lead.jobRef].filter { !$0.isEmpty }.joined(separator: " · "))
+                    Text(lead.jobType)
                 }
 
                 Section("Site") {
@@ -353,10 +350,8 @@ struct WorkerJobDetailView: View {
                         } else {
                             Label(lead.address, systemImage: "map")
                         }
-                    } else {
-                        Text("Address not added").foregroundStyle(.secondary)
                     }
-                    if !lead.phone.isEmpty { PhoneActionMenu(number: lead.phone, label: "Call customer", lead: lead) }
+                    if !lead.phone.isEmpty { PhoneActionMenu(number: lead.phone, label: "Call", lead: lead) }
                     if lead.lat != nil && lead.lng != nil { WorkerJobMapCard(lead: lead) }
                 }
 
@@ -397,9 +392,9 @@ struct WorkerJobDetailView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    if lead.tasks.isEmpty { Text("No checklist items yet").foregroundStyle(.secondary) }
+                    
                 } header: {
-                    Text("Checklist · \(lead.tasks.filter(\.completed).count) of \(lead.tasks.count) done")
+                    Text("Checklist")
                 }
 
                 Section {
@@ -456,8 +451,6 @@ private struct WorkerAddJobNoteSheet: View {
                     }
                 } header: {
                     Text("Job note")
-                } footer: {
-                    Text("Your name and today's date will be added automatically.")
                 }
             }
             .navigationTitle("Add Note")

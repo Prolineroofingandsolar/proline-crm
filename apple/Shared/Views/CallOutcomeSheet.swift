@@ -24,8 +24,6 @@ struct CallOutcomeSheet: View {
                 Section {
                     Toggle("Follow up", isOn: $followUp)
                     if followUp { DatePicker("On", selection: $followUpDate, displayedComponents: .date) }
-                } footer: {
-                    Text("Adds a follow-up task to this customer's job.")
                 }
             }
             .formStyle(.grouped)

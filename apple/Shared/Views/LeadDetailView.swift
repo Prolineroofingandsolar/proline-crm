@@ -127,7 +127,6 @@ struct LeadDetailView: View {
 
     private func overview(_ lead: Lead) -> some View {
         Section {
-            LabeledContent("Stage", value: lead.stage.displayName)
             if let step = AppState.nextStep(for: lead) {
                 Button {
                     perform(step, for: lead)
@@ -148,7 +147,7 @@ struct LeadDetailView: View {
                 .foregroundStyle(.primary)
             }
         } header: {
-            Text([lead.jobType, lead.jobRef].filter { !$0.isEmpty }.joined(separator: " · "))
+            Text("\(lead.jobType) · \(lead.stage.displayName)")
         }
     }
 
@@ -167,9 +166,6 @@ struct LeadDetailView: View {
                     Label(lead.address, systemImage: "map")
                 }
             }
-            if lead.phone.isEmpty && lead.email.isEmpty && lead.address.isEmpty {
-                Text("No contact details yet").foregroundStyle(.secondary)
-            }
         }
     }
 
@@ -184,8 +180,7 @@ struct LeadDetailView: View {
             if lead.balance > 0 && [.won, .scheduled, .inProgress, .completed, .waitingForPayment].contains(lead.stage) {
                 Button("Mark balance paid") { confirmingFinalPayment = true }
             }
-            if !lead.source.isEmpty { LabeledContent("Source", value: lead.source) }
-            LabeledContent("Assigned to", value: lead.assignedTo.isEmpty ? "Unassigned" : lead.assignedTo)
+            if !lead.assignedTo.isEmpty { LabeledContent("Assigned to", value: lead.assignedTo) }
         }
     }
 
@@ -196,10 +191,7 @@ struct LeadDetailView: View {
             }
             if let start = lead.startDate { LabeledContent("Starts", value: CRMFormat.day(start)) }
             if let end = lead.endDate { LabeledContent("Expected finish", value: CRMFormat.day(end)) }
-            if lead.surveyDate == nil && lead.startDate == nil {
-                Text("Nothing booked yet").foregroundStyle(.secondary)
-            }
-            LabeledContent("Added", value: CRMFormat.day(lead.createdAt))
+            if lead.surveyDate == nil && lead.startDate == nil { Text("Nothing booked").foregroundStyle(.secondary) }
         }
     }
 
@@ -215,11 +207,7 @@ struct LeadDetailView: View {
                 Text(CRMFormat.money(profit)).foregroundStyle(profit < 0 ? Color.red : Color.primary)
             }
         } header: {
-            Text("Cost & profit")
-        } footer: {
-            if lead.value > 0 && profit < lead.value * 0.2 {
-                Text(profit < 0 ? "Over budget — review labour and materials." : "Margin is getting tight.")
-            }
+            Text("Cost")
         }
     }
 
@@ -347,7 +335,7 @@ struct LeadTasksView: View {
                             }
                         }
                     }
-                    if lead.tasks.isEmpty { Text("No checklist items yet").foregroundStyle(.secondary) }
+                    if lead.tasks.isEmpty { Text("Empty").foregroundStyle(.secondary) }
                 } header: {
                     Text("\(lead.tasks.filter(\.completed).count) of \(lead.tasks.count) done")
                 }
@@ -391,7 +379,7 @@ struct LeadNotesView: View {
                         }
                         .padding(.vertical, 2)
                     }
-                    if lead.notes.isEmpty { Text("No notes yet").foregroundStyle(.secondary) }
+                    if lead.notes.isEmpty { Text("Empty").foregroundStyle(.secondary) }
                 }
             }
         }
@@ -417,9 +405,7 @@ struct LeadPhotosView: View {
         ScrollView {
             if let lead {
                 if lead.photos.isEmpty {
-                    ContentUnavailableView(
-                        "No photos yet", systemImage: "camera", description: Text("Before, during and after photos are the job record.")
-                    )
+                    ContentUnavailableView("No photos", systemImage: "camera")
                     .padding(.top, 60)
                 } else {
                     LazyVStack(alignment: .leading, spacing: 20) {
@@ -478,7 +464,7 @@ struct LeadFilesView: View {
                         Label(file.name, systemImage: file.type == "image" ? "photo" : "doc")
                     }
                 }
-                if lead.files.isEmpty { Text("No files yet").foregroundStyle(.secondary) }
+                if lead.files.isEmpty { Text("Empty").foregroundStyle(.secondary) }
             }
         }
         .navigationTitle("Files")
@@ -519,7 +505,7 @@ struct LeadMaterialsView: View {
                     }
                     .padding(.vertical, 2)
                 }
-                if lead.materials.isEmpty { Text("No materials yet").foregroundStyle(.secondary) }
+                if lead.materials.isEmpty { Text("Empty").foregroundStyle(.secondary) }
             }
         }
         .navigationTitle("Materials")
@@ -1290,7 +1276,7 @@ private struct EditLeadView: View {
                         if !AddLeadView.jobTypes.contains(lead.jobType) { Text(lead.jobType).tag(lead.jobType) }
                     }
                     Picker("Stage", selection: $lead.stage) { ForEach(LeadStage.allCases) { Text($0.displayName).tag($0) } }
-                    Picker("Heard about us", selection: $lead.source) {
+                    Picker("Source", selection: $lead.source) {
                         ForEach(AddLeadView.sources, id: \.self) { Text($0) }
                         if !AddLeadView.sources.contains(lead.source) {
                             Text(lead.source.isEmpty ? "Not set" : lead.source).tag(lead.source)
@@ -1311,13 +1297,7 @@ private struct EditLeadView: View {
                     Toggle("Deposit paid", isOn: $lead.depositPaid)
                 } header: {
                     Text("Money")
-                } footer: {
-                    if !validDeposit {
-                        Text("Deposit cannot be more than the job value.").foregroundStyle(.red)
-                    } else {
-                        Text("The balance follows automatically from value, deposit and whether the deposit is paid.")
-                    }
-                }
+                } footer: { if !validDeposit { Text("Deposit cannot be more than the job value.").foregroundStyle(.red) } }
                 Section {
                     OptionalDateField(label: "Survey date", icon: "calendar", value: $lead.surveyDate)
                     if lead.surveyDate != nil {
