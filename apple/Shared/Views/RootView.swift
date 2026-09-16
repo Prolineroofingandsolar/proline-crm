@@ -380,7 +380,7 @@ private struct SectionContent: View {
             case .dashboard:
                 if appState.usesAdminInterface {
                     #if os(iOS)
-                    FocusTodayView()
+                    CustomerDeckView()
                     #else
                     DashboardView()
                     #endif

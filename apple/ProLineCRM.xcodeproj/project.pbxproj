@@ -16,6 +16,7 @@
 		1371CC79AFB2E4C8A71F1D1B /* CallOutcomeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02474CC5E3238C41CE4E7415 /* CallOutcomeSheet.swift */; };
 		177E94A61A6D6C3C5A256A85 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56A442B5FB64919428E1379 /* LoginView.swift */; };
 		1CDBD9F5BC4E6A5F87B652D2 /* MacOperationsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60A63AB803245371E52A5C07 /* MacOperationsViews.swift */; };
+		1E99A542612A5B492EB51FFF /* CustomerDeckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF44176F2052ADA4FAE0736D /* CustomerDeckView.swift */; };
 		1EAA657E602A23D2B0AE0C40 /* OperationsAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1195AE03B365A24B80347981 /* OperationsAssistantView.swift */; };
 		2A1489460FBC73D7A057823E /* RoofingToolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D6202CC8E9DB93C565CCAA /* RoofingToolsView.swift */; };
 		2D99D844088B05809C09221B /* OperationsAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1195AE03B365A24B80347981 /* OperationsAssistantView.swift */; };
@@ -24,11 +25,11 @@
 		3A5F45198041116658DA8371 /* ProLineWidget-iOS.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B4AE5494759EF138A297B919 /* ProLineWidget-iOS.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3C41E40C18A799EC012B79C8 /* MacOperationsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60A63AB803245371E52A5C07 /* MacOperationsViews.swift */; };
 		4260F902DC8C720D5BB47467 /* LeadDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B83D1E0FE1DD7E70F67049C /* LeadDetailView.swift */; };
-		4583F576C870E730D6C4B531 /* FocusTodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4473613328660279394885AC /* FocusTodayView.swift */; };
 		49D88EB7B7CC2CEA10ECDE39 /* ActionQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F50204BD5453D21D7A515C0 /* ActionQueueView.swift */; };
 		4A96B68512890F6B91158E8B /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2975D6A4FF6612C3AD25373A /* TasksView.swift */; };
 		4B12C5A884E92CBEAD7843B0 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A9A145C7E1F26D10196B717 /* CalendarView.swift */; };
 		4B4BC089F94669B54CEA3376 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56A442B5FB64919428E1379 /* LoginView.swift */; };
+		4F081AFDC8F1A54552E39FE1 /* CustomerDeckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF44176F2052ADA4FAE0736D /* CustomerDeckView.swift */; };
 		500B0EF3DB74307E5CC2372A /* QuotePDFRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94705493636263CF0B142A9E /* QuotePDFRenderer.swift */; };
 		51D32E520162A88176161E99 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E4364C310749209AF649093E /* Assets.xcassets */; };
 		551D8C85104C46A1F0CFDB03 /* GlobalSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 146C22AF0DD6491B5D82CA46 /* GlobalSearchView.swift */; };
@@ -57,7 +58,6 @@
 		9B1D51AE524E0B755AB1C73A /* RoofingToolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D6202CC8E9DB93C565CCAA /* RoofingToolsView.swift */; };
 		9DEA8A8B6B112BC11F4131DF /* ContactsFilesReportsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 177D310CA0AAE1F3BA4DFBE9 /* ContactsFilesReportsViews.swift */; };
 		A2F48568746396A9B9426937 /* CRMModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76954FC1891FA8555C44D6B2 /* CRMModels.swift */; };
-		AC7CE80E0DEE2F99F4D41F38 /* FocusTodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4473613328660279394885AC /* FocusTodayView.swift */; };
 		AE68E143B95143736AF23358 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C15F2C475C0F8AF3B86C93E5 /* KeychainStore.swift */; };
 		AEFF7B6D081E406E835478C7 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F403D225C733DBBFCE86C2C /* AppState.swift */; };
 		B14337EA047143C00AA3A142 /* LeadDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B83D1E0FE1DD7E70F67049C /* LeadDetailView.swift */; };
@@ -152,7 +152,6 @@
 		177D310CA0AAE1F3BA4DFBE9 /* ContactsFilesReportsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsFilesReportsViews.swift; sourceTree = "<group>"; };
 		1B83D1E0FE1DD7E70F67049C /* LeadDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadDetailView.swift; sourceTree = "<group>"; };
 		2975D6A4FF6612C3AD25373A /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
-		4473613328660279394885AC /* FocusTodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusTodayView.swift; sourceTree = "<group>"; };
 		480FAB9E772AC8316A736F73 /* ProLineWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProLineWidget.swift; sourceTree = "<group>"; };
 		4B98F6F1BDF384E6B4A51DB4 /* ContactLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactLinks.swift; sourceTree = "<group>"; };
 		504C74BD92984F137A041D8F /* CRMLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRMLogicTests.swift; sourceTree = "<group>"; };
@@ -169,6 +168,7 @@
 		97CB30822368769F57E75640 /* ProLineCRM-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "ProLineCRM-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9F50204BD5453D21D7A515C0 /* ActionQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionQueueView.swift; sourceTree = "<group>"; };
 		A56A442B5FB64919428E1379 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		AF44176F2052ADA4FAE0736D /* CustomerDeckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomerDeckView.swift; sourceTree = "<group>"; };
 		B4AE5494759EF138A297B919 /* ProLineWidget-iOS.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = "ProLineWidget-iOS.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC6CF6AD5C4068FFD281E76C /* EmailWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailWorkspaceView.swift; sourceTree = "<group>"; };
 		C02AF66FEBD0B82C80CEE696 /* AccountsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsViews.swift; sourceTree = "<group>"; };
@@ -275,10 +275,10 @@
 				8A9A145C7E1F26D10196B717 /* CalendarView.swift */,
 				02474CC5E3238C41CE4E7415 /* CallOutcomeSheet.swift */,
 				177D310CA0AAE1F3BA4DFBE9 /* ContactsFilesReportsViews.swift */,
+				AF44176F2052ADA4FAE0736D /* CustomerDeckView.swift */,
 				0F743533CC7633814355822C /* DashboardView.swift */,
 				BC6CF6AD5C4068FFD281E76C /* EmailWorkspaceView.swift */,
 				C43C1B1BE1BA1844D1D534DE /* FinanceFleetViews.swift */,
-				4473613328660279394885AC /* FocusTodayView.swift */,
 				146C22AF0DD6491B5D82CA46 /* GlobalSearchView.swift */,
 				DB702FAED70865F4277742A5 /* JobsAndWorkerViews.swift */,
 				151862119AB5E913E6CAD73C /* JobsMapView.swift */,
@@ -482,10 +482,10 @@
 				1371CC79AFB2E4C8A71F1D1B /* CallOutcomeSheet.swift in Sources */,
 				6FB0168E9D7594138A5D8381 /* ContactLinks.swift in Sources */,
 				0C14E1AA86EF152E2688709E /* ContactsFilesReportsViews.swift in Sources */,
+				4F081AFDC8F1A54552E39FE1 /* CustomerDeckView.swift in Sources */,
 				EAF07A9B0AC2F00CD214BAA2 /* DashboardView.swift in Sources */,
 				EF26A3DE7397B8D541399291 /* EmailWorkspaceView.swift in Sources */,
 				B3B3FB39667D121A22AD6290 /* FinanceFleetViews.swift in Sources */,
-				4583F576C870E730D6C4B531 /* FocusTodayView.swift in Sources */,
 				551D8C85104C46A1F0CFDB03 /* GlobalSearchView.swift in Sources */,
 				8801D2034A9483A9AC493382 /* JobsAndWorkerViews.swift in Sources */,
 				69038FD1EFFCD570151A3B87 /* JobsMapView.swift in Sources */,
@@ -524,10 +524,10 @@
 				DF1895452926886C693C4C99 /* CallOutcomeSheet.swift in Sources */,
 				571CF445C7BC305045E3815F /* ContactLinks.swift in Sources */,
 				9DEA8A8B6B112BC11F4131DF /* ContactsFilesReportsViews.swift in Sources */,
+				1E99A542612A5B492EB51FFF /* CustomerDeckView.swift in Sources */,
 				7AB3E3A0FCD214FC8F12800B /* DashboardView.swift in Sources */,
 				EBD3F74F31B7FA3267D7584D /* EmailWorkspaceView.swift in Sources */,
 				642C9F5E015CA1C5FF24F648 /* FinanceFleetViews.swift in Sources */,
-				AC7CE80E0DEE2F99F4D41F38 /* FocusTodayView.swift in Sources */,
 				E025C26AB1A232634B465C26 /* GlobalSearchView.swift in Sources */,
 				7AF507795D77ACF5A2643E1E /* JobsAndWorkerViews.swift in Sources */,
 				6D2D9EF186AAD56B6B32C225 /* JobsMapView.swift in Sources */,
