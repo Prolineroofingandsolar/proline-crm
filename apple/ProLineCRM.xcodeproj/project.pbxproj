@@ -51,6 +51,7 @@
 		7666623C315B6423EBB867DD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86850E2E60D15462151C0F77 /* SettingsView.swift */; };
 		7AB3E3A0FCD214FC8F12800B /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F743533CC7633814355822C /* DashboardView.swift */; };
 		7AF507795D77ACF5A2643E1E /* JobsAndWorkerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB702FAED70865F4277742A5 /* JobsAndWorkerViews.swift */; };
+		80E5DF98FEFC8F57902C2487 /* PayMoneyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3439E15E0A884A53AF25E042 /* PayMoneyViews.swift */; };
 		81CD8DAEB60A6FFC07CABB6F /* AddressSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D03082AC6A483D2BF0F07D0 /* AddressSearchService.swift */; };
 		8801D2034A9483A9AC493382 /* JobsAndWorkerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB702FAED70865F4277742A5 /* JobsAndWorkerViews.swift */; };
 		891E84EA3F6C980DC393C32F /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */; };
@@ -87,6 +88,7 @@
 		EF26A3DE7397B8D541399291 /* EmailWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6CF6AD5C4068FFD281E76C /* EmailWorkspaceView.swift */; };
 		F41E893A20657D659FF86C68 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */; };
 		F8E99625E3B453F8BACBB334 /* RoofingWorkflowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A4DBE4864E2D9DAF866B55 /* RoofingWorkflowViews.swift */; };
+		FCAEA90DDF143966329054BA /* PayMoneyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3439E15E0A884A53AF25E042 /* PayMoneyViews.swift */; };
 		FCF56F424A154CB2B9A4ED45 /* PipelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A56B7310279EB386850363 /* PipelineView.swift */; };
 /* End PBXBuildFile section */
 
@@ -154,6 +156,7 @@
 		177D310CA0AAE1F3BA4DFBE9 /* ContactsFilesReportsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsFilesReportsViews.swift; sourceTree = "<group>"; };
 		1B83D1E0FE1DD7E70F67049C /* LeadDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadDetailView.swift; sourceTree = "<group>"; };
 		2975D6A4FF6612C3AD25373A /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
+		3439E15E0A884A53AF25E042 /* PayMoneyViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayMoneyViews.swift; sourceTree = "<group>"; };
 		480FAB9E772AC8316A736F73 /* ProLineWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProLineWidget.swift; sourceTree = "<group>"; };
 		4B98F6F1BDF384E6B4A51DB4 /* ContactLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactLinks.swift; sourceTree = "<group>"; };
 		504C74BD92984F137A041D8F /* CRMLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRMLogicTests.swift; sourceTree = "<group>"; };
@@ -290,6 +293,7 @@
 				A56A442B5FB64919428E1379 /* LoginView.swift */,
 				60A63AB803245371E52A5C07 /* MacOperationsViews.swift */,
 				1195AE03B365A24B80347981 /* OperationsAssistantView.swift */,
+				3439E15E0A884A53AF25E042 /* PayMoneyViews.swift */,
 				CEF16B57CF42196DA023354A /* PayrollViews.swift */,
 				91A56B7310279EB386850363 /* PipelineView.swift */,
 				12D6202CC8E9DB93C565CCAA /* RoofingToolsView.swift */,
@@ -498,6 +502,7 @@
 				177E94A61A6D6C3C5A256A85 /* LoginView.swift in Sources */,
 				1CDBD9F5BC4E6A5F87B652D2 /* MacOperationsViews.swift in Sources */,
 				2D99D844088B05809C09221B /* OperationsAssistantView.swift in Sources */,
+				FCAEA90DDF143966329054BA /* PayMoneyViews.swift in Sources */,
 				0976A6092012819742D1BED8 /* PayrollViews.swift in Sources */,
 				FCF56F424A154CB2B9A4ED45 /* PipelineView.swift in Sources */,
 				119F0A37D21BD96434CAC2C9 /* ProLineCRMApp.swift in Sources */,
@@ -541,6 +546,7 @@
 				4B4BC089F94669B54CEA3376 /* LoginView.swift in Sources */,
 				3C41E40C18A799EC012B79C8 /* MacOperationsViews.swift in Sources */,
 				1EAA657E602A23D2B0AE0C40 /* OperationsAssistantView.swift in Sources */,
+				80E5DF98FEFC8F57902C2487 /* PayMoneyViews.swift in Sources */,
 				D72119B750E1D71690875D27 /* PayrollViews.swift in Sources */,
 				EB1710A6160831305C94ECAB /* PipelineView.swift in Sources */,
 				E26EE3F79AC816DEFD102D8F /* ProLineCRMApp.swift in Sources */,

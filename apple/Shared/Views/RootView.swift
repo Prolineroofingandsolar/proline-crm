@@ -377,7 +377,8 @@ struct RootView: View {
                     moreLink(.email)
                 }
                 Section("Business") {
-                    moreLink(.accounts)
+                    NavigationLink(value: AppSection.timesheet) { Label("Pay", systemImage: "sterlingsign.circle") }
+                    NavigationLink(value: AppSection.finance) { Label("Money", systemImage: "banknote") }
                     moreLink(.fleet)
                 }
                 Section("Resources") {
@@ -461,8 +462,18 @@ private struct SectionContent: View {
             case .contacts: ContactsView()
             case .files: FilesView()
             case .fleet: FleetView()
-            case .accounts: AccountsWorkspaceView()
-            case .finance: FinanceCentreView()
+            case .accounts:
+                #if os(iOS)
+                PayView()
+                #else
+                AccountsWorkspaceView()
+                #endif
+            case .finance:
+                #if os(iOS)
+                MoneyView()
+                #else
+                FinanceCentreView()
+                #endif
             case .reports: ReportsView()
             case .timesheet: TimesheetView()
             case .cis: CISView()

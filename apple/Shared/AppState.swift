@@ -412,6 +412,17 @@ final class AppState {
                     priority: "medium", category: "General", notes: nil, createdAt: today, assignedTo: [worker.id])
             ]
             if adminPreview {
+                let monday = PayrollMath.key(PayrollMath.monday(for: .now))
+                let dayKeys = (0..<5).map { SupabaseService.localDay(for: Calendar.current.date(byAdding: .day, value: $0, to: PayrollMath.monday(for: .now)) ?? .now) }
+                let crew = [
+                    CRMUser(id: "crew-dan", name: "Dan Reeves", username: "dan", role: "worker", dayRate: 180, cisRate: 20, utrNumber: nil, bankName: "Monzo", bankAccountNumber: "12345678", bankSortCode: "04-00-04"),
+                    CRMUser(id: "crew-lee", name: "Lee Baxter", username: "lee", role: "worker", dayRate: 160, cisRate: 20, utrNumber: nil, bankName: nil, bankAccountNumber: nil, bankSortCode: nil),
+                    CRMUser(id: "crew-jo", name: "Jo Price", username: "jo", role: "labourer", dayRate: 120, cisRate: 30, utrNumber: nil, bankName: "Lloyds", bankAccountNumber: "87654321", bankSortCode: "30-00-00"),
+                ]
+                users += crew
+                timesheets = dayKeys.prefix(4).map { TimesheetEntry(id: "ts-dan-\($0)", userID: "crew-dan", leadID: "preview-job-1", date: $0, type: "full", amount: 180, createdAt: $0) }
+                    + dayKeys.prefix(3).map { TimesheetEntry(id: "ts-lee-\($0)", userID: "crew-lee", leadID: "preview-job-1", date: $0, type: $0 == dayKeys[2] ? "half" : "full", amount: $0 == dayKeys[2] ? 80 : 160, createdAt: $0) }
+                paymentRuns = [PaymentRun(id: "run-dan", userID: "crew-dan", weekStart: monday, status: .submitted, paidDate: nil, notes: nil, createdAt: monday)]
                 let yesterday = SupabaseService.localDay(for: Calendar.current.date(byAdding: .day, value: -1, to: .now) ?? .now)
                 let lastWeek = SupabaseService.localDay(for: Calendar.current.date(byAdding: .day, value: -8, to: .now) ?? .now)
                 leads += [
@@ -420,7 +431,7 @@ final class AppState {
                     Lead(id: "preview-lead-3", jobRef: "JOB-203", name: "Mr Okafor", phone: "", email: "", address: "2 Station Road, Bristol", jobType: "Flat Roof", stage: .completed, value: 3200, deposit: 960, depositPaid: true, balance: 2240, source: "Google", assignedTo: worker.name, surveyDate: nil, surveyTime: nil, startDate: lastWeek, endDate: yesterday, completedDate: yesterday, paidDate: nil, progress: 100, tasks: [], photos: [], notes: [], files: [], materials: [], wonDate: lastWeek, myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: lastWeek, updatedAt: yesterday),
                 ]
             }
-            timesheets = []
+            if !adminPreview { timesheets = [] }
             if ProcessInfo.processInfo.arguments.contains("--worker-preview-tools") {
                 selectedSection = .tools
             } else if ProcessInfo.processInfo.arguments.contains("--worker-preview-calendar") {
