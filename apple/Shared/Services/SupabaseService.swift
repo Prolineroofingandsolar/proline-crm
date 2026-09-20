@@ -45,7 +45,9 @@ actor SupabaseService {
         let (firstData, firstResponse) = try await URLSession.shared.data(for: originalRequest)
         guard let firstHTTP = firstResponse as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         if firstHTTP.statusCode == 401, KeychainStore.get("supabaseRefreshToken") != nil {
-            do { try await refreshAccessToken() } catch { throw SupabaseSessionExpired() }
+            // Only a rejected refresh token ends the session; a dropped connection or a server
+            // blip surfaces as an ordinary error and the user stays signed in.
+            try await refreshAccessToken()
             var retry = originalRequest
             guard let token = KeychainStore.get("supabaseAccessToken") else { throw SupabaseSessionExpired() }
             retry.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -68,15 +70,26 @@ actor SupabaseService {
         return (object["error"] as? String ?? object["message"] as? String)?.prefix(240).description
     }
 
+    private var refreshInFlight: Task<Void, Error>?
+
+    /// Swaps the refresh token for a new session. Refresh tokens are single-use, so concurrent
+    /// 401s share one exchange instead of racing each other with the same token.
     private func refreshAccessToken() async throws {
-        guard let refreshToken = KeychainStore.get("supabaseRefreshToken") else { throw SupabaseSessionExpired() }
-        var refresh = URLRequest(
-            url: authURL.appending(path: "token").appending(queryItems: [.init(name: "grant_type", value: "refresh_token")]))
-        refresh.httpMethod = "POST"
-        refresh.httpBody = try JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
-        refresh.setValue(anonKey, forHTTPHeaderField: "apikey")
-        refresh.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        persist(try await executeAuth(refresh))
+        if let running = refreshInFlight { return try await running.value }
+        let task = Task { [self] in
+            defer { refreshInFlight = nil }
+            guard let refreshToken = KeychainStore.get("supabaseRefreshToken") else { throw SupabaseSessionExpired() }
+            var refresh = URLRequest(
+                url: authURL.appending(path: "token").appending(queryItems: [.init(name: "grant_type", value: "refresh_token")]))
+            refresh.httpMethod = "POST"
+            refresh.timeoutInterval = 20
+            refresh.httpBody = try JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
+            refresh.setValue(anonKey, forHTTPHeaderField: "apikey")
+            refresh.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            persist(try await executeAuth(refresh))
+        }
+        refreshInFlight = task
+        try await task.value
     }
 
     func fetchLeads() async throws -> [Lead] {
@@ -365,16 +378,15 @@ actor SupabaseService {
     }
 
     func restoreAuthenticatedSession() async throws -> CRMUser? {
-        guard let refreshToken = KeychainStore.get("supabaseRefreshToken") else { return nil }
-        var request = URLRequest(
-            url: authURL.appending(path: "token").appending(queryItems: [.init(name: "grant_type", value: "refresh_token")]))
-        request.httpMethod = "POST"
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
-        request.setValue(anonKey, forHTTPHeaderField: "apikey")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let session = try await executeAuth(request)
-        persist(session)
-        return try await fetchAuthenticatedProfile(userID: session.user.id)
+        guard KeychainStore.get("supabaseRefreshToken") != nil else { return nil }
+        // Use the stored access token while it is still valid; it is only exchanged on a 401.
+        // Rotating on every launch risked stranding the device if the reply never arrived.
+        if let userID = KeychainStore.get("supabaseAuthUserID"), KeychainStore.get("supabaseAccessToken") != nil {
+            return try await fetchAuthenticatedProfile(userID: userID)
+        }
+        try await refreshAccessToken()
+        guard let userID = KeychainStore.get("supabaseAuthUserID") else { throw SupabaseSessionExpired() }
+        return try await fetchAuthenticatedProfile(userID: userID)
     }
 
     func validateAuthenticatedProfile() async throws -> CRMUser? {
@@ -472,7 +484,12 @@ actor SupabaseService {
     private func executeAuth(_ request: URLRequest) async throws -> AuthSession {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-        guard 200..<300 ~= http.statusCode else { throw SupabaseSessionExpired() }
+        guard 200..<300 ~= http.statusCode else {
+            // 400/401/403 mean the credentials or refresh token were rejected. Anything else
+            // (rate limiting, maintenance) is temporary and must not sign the user out.
+            if [400, 401, 403].contains(http.statusCode) { throw SupabaseSessionExpired() }
+            throw SupabaseHTTPError(statusCode: http.statusCode, message: Self.safeServerMessage(from: data))
+        }
         return try decoder.decode(AuthSession.self, from: data)
     }
 
