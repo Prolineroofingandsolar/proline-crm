@@ -776,7 +776,6 @@ final class AppState {
     private func commitLead(_ leadID: String, base: String? = nil, fallback: String, mutate: @escaping @MainActor (inout Lead) -> Void)
         async -> Bool
     {
-        guard !isWorkerPreview else { return false }
         guard let index = leads.firstIndex(where: { $0.id == leadID }) else {
             errorMessage = "This job could not be found. Refresh and try again."; return false
         }
@@ -785,6 +784,8 @@ final class AppState {
         mutate(&changed)
         changed.progress = Self.progress(of: changed.tasks)
         leads[index] = changed
+        // Preview data has no server: keep the change locally so the UI can be exercised.
+        if isWorkerPreview { return true }
 
         let previous = leadWriteQueues[leadID]
         let write = Task<Bool, Never> { @MainActor [self] in
@@ -1104,10 +1105,10 @@ final class AppState {
     }
 
     func toggleGeneralTask(_ task: GeneralTask) async {
-        guard !isWorkerPreview else { return }
         var changed = task; changed.completed.toggle(); changed.completedDate = changed.completed ? SupabaseService.today : nil
         guard let index = generalTasks.firstIndex(where: { $0.id == task.id }) else { return }
         generalTasks[index] = changed
+        if isWorkerPreview { return }
         do { try await SupabaseService.shared.update(changed, in: "general_tasks", id: task.id); await scheduleNotifications() } catch {
             generalTasks[index] = task; errorMessage = "Task could not be updated."
         }

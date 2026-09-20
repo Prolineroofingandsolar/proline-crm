@@ -18,28 +18,60 @@ struct CustomerDeckView: View {
     @State private var offset: CGSize = .zero
     @State private var showingAll = false
 
-    private var deck: [DeckCard] {
-        let actions = appState.companyActions.filter { $0.kind != .timesheet }
-        var order: [String] = []
+    /// Card order is pinned for the session so a card never moves while you're working on it.
+    /// New customers join at the end; a finished card stays until you swipe past it.
+    @State private var order: [String] = []
+
+    private var grouped: [String: [CompanyAction]] {
         var groups: [String: [CompanyAction]] = [:]
-        for action in actions {
-            let key = action.leadID ?? "office"
-            if groups[key] == nil { order.append(key) }
-            groups[key, default: []].append(action)
+        for action in appState.companyActions where action.kind != .timesheet {
+            groups[action.leadID ?? "office", default: []].append(action)
         }
-        return order.map { key in
-            let items = groups[key] ?? []
-            let lead = key == "office" ? nil : appState.leads.first { $0.id == key }
-            return DeckCard(id: key, lead: lead, actions: items, priority: items.map(\.priority).max() ?? .routine)
-        }
-        .sorted { left, right in
-            if left.priority != right.priority { return left.priority > right.priority }
-            let l = left.actions.compactMap(\.dueDate).min() ?? "9999-12-31"
-            let r = right.actions.compactMap(\.dueDate).min() ?? "9999-12-31"
-            return l < r
-        }
+        return groups
     }
+    // Before the first sync (one frame) fall back to the ranked order so the screen never flashes empty.
+    private var deck: [DeckCard] { (order.isEmpty ? ranked(Array(grouped.keys)) : order).compactMap(card(for:)) }
     private var current: Int { min(index, max(0, deck.count - 1)) }
+    private var remaining: Int { deck.reduce(0) { $0 + $1.actions.count } }
+
+    private func card(for id: String) -> DeckCard? {
+        let lead = id == "office" ? nil : appState.leads.first { $0.id == id }
+        if id != "office" && lead == nil { return nil }
+        let items = grouped[id] ?? []
+        return DeckCard(id: id, lead: lead, actions: items, priority: items.map(\.priority).max() ?? .routine)
+    }
+
+    private func ranked(_ ids: [String]) -> [String] {
+        ids.compactMap(card(for:))
+            .sorted { left, right in
+                if left.priority != right.priority { return left.priority > right.priority }
+                let l = left.actions.compactMap(\.dueDate).min() ?? "9999-12-31"
+                let r = right.actions.compactMap(\.dueDate).min() ?? "9999-12-31"
+                return l < r
+            }
+            .map(\.id)
+    }
+
+    /// Adds newly-actionable customers to the end of the deck, in priority order, and drops
+    /// finished cards the user has already swiped past. Never reorders what's on screen.
+    private func syncOrder() {
+        let groups = grouped
+        let known = Set(order)
+        let newcomers = ranked(groups.keys.filter { !known.contains($0) })
+        var next = order
+        var position = index
+        for (offset, id) in order.enumerated().reversed() {
+            let gone = card(for: id) == nil
+            let finished = (groups[id] ?? []).isEmpty && offset < index
+            if gone || finished {
+                next.remove(at: offset)
+                if offset < index { position -= 1 }
+            }
+        }
+        next += newcomers
+        if next != order { order = next }
+        index = max(0, min(position, max(0, next.count - 1)))
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -71,7 +103,7 @@ struct CustomerDeckView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                if !deck.isEmpty { Button("\(deck.reduce(0) { $0 + $1.actions.count }) to do") { showingAll = true } }
+                if remaining > 0 { Button("\(remaining) to do") { showingAll = true } }
             }
         }
         .sheet(isPresented: $showingAll) {
@@ -82,7 +114,9 @@ struct CustomerDeckView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingAll = false } } }
             }
         }
-        .onChange(of: deck.count) { _, count in index = min(index, max(0, count - 1)) }
+        .onAppear(perform: syncOrder)
+        .onChange(of: Set(grouped.keys)) { _, _ in syncOrder() }
+        .onChange(of: appState.leads.count) { _, _ in syncOrder() }
     }
 
     private var dragGesture: some Gesture {
@@ -100,6 +134,7 @@ struct CustomerDeckView: View {
                     withTransaction(transaction) {
                         index = forward ? current + 1 : current - 1
                         offset = CGSize(width: forward ? -80 : 80, height: 0)
+                        if forward { syncOrder() }
                     }
                     offset = .zero
                 }
@@ -128,10 +163,14 @@ private struct DeckCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
-            VStack(spacing: 0) {
-                ForEach(card.actions) { action in
-                    DeckItemRow(action: action, lead: card.lead, call: call, record: record)
-                    if action.id != card.actions.last?.id { Divider() }
+            if card.actions.isEmpty {
+                Label("All done", systemImage: "checkmark.circle.fill").foregroundStyle(.secondary).padding(.vertical, 12)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(card.actions) { action in
+                        DeckItemRow(action: action, lead: card.lead, call: call, record: record)
+                        if action.id != card.actions.last?.id { Divider() }
+                    }
                 }
             }
             if let lead = card.lead { footer(lead) }
