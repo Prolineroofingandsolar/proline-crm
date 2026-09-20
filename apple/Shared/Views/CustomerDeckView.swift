@@ -495,6 +495,7 @@ struct NumbersRow: View {
     private var workers: [CRMUser] { appState.users.filter { $0.role != "admin" && $0.dayRate != nil } }
     private var onSite: Int { Set(appState.timesheets.filter { $0.date == today && $0.type != "off" }.map(\.userID)).count }
     private var unrecorded: Int { workers.filter { worker in !appState.timesheets.contains { $0.userID == worker.id && $0.date == today } }.count }
+    @State private var showingCrew = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -502,8 +503,11 @@ struct NumbersRow: View {
                 tile("To collect", CRMFormat.money(toCollect), overdue > 0 ? "\(CRMFormat.money(overdue)) overdue" : nil, warn: overdue > 0)
             }.buttonStyle(.plain)
             tile("Quotes out", "\(quotes.count)", quotes.isEmpty ? nil : CRMFormat.money(quotes.reduce(0) { $0 + $1.value }))
-            tile("Crew", workers.isEmpty ? "—" : "\(onSite) of \(workers.count)", unrecorded > 0 ? "\(unrecorded) unrecorded" : nil)
+            Button { showingCrew = true } label: {
+                tile("Crew", workers.isEmpty ? "—" : "\(onSite) of \(workers.count)", unrecorded > 0 ? "\(unrecorded) not out" : "tap to plan")
+            }.buttonStyle(.plain)
         }
+        .sheet(isPresented: $showingCrew) { CrewView() }
     }
 
     private func tile(_ label: String, _ value: String, _ note: String?, warn: Bool = false) -> some View {

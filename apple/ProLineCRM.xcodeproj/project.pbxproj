@@ -48,12 +48,14 @@
 		6FB0168E9D7594138A5D8381 /* ContactLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B98F6F1BDF384E6B4A51DB4 /* ContactLinks.swift */; };
 		72137B00BA2F1B53A4129A02 /* CRMLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504C74BD92984F137A041D8F /* CRMLogicTests.swift */; };
 		73E302D51125FB25B9DA7D9A /* AccountsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02AF66FEBD0B82C80CEE696 /* AccountsViews.swift */; };
+		74FED861B92612749912CED8 /* CrewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D876B701BAADA5AD1500AC29 /* CrewView.swift */; };
 		7666623C315B6423EBB867DD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86850E2E60D15462151C0F77 /* SettingsView.swift */; };
 		7AB3E3A0FCD214FC8F12800B /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F743533CC7633814355822C /* DashboardView.swift */; };
 		7AF507795D77ACF5A2643E1E /* JobsAndWorkerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB702FAED70865F4277742A5 /* JobsAndWorkerViews.swift */; };
 		80E5DF98FEFC8F57902C2487 /* PayMoneyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3439E15E0A884A53AF25E042 /* PayMoneyViews.swift */; };
 		81CD8DAEB60A6FFC07CABB6F /* AddressSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D03082AC6A483D2BF0F07D0 /* AddressSearchService.swift */; };
 		8801D2034A9483A9AC493382 /* JobsAndWorkerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB702FAED70865F4277742A5 /* JobsAndWorkerViews.swift */; };
+		89054BC3AA16FDAD86D8379D /* CrewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D876B701BAADA5AD1500AC29 /* CrewView.swift */; };
 		891E84EA3F6C980DC393C32F /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */; };
 		99A15F2A48BC03FA99F4C397 /* CRMFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E3CD5F95F5979736AB77AA9 /* CRMFormat.swift */; };
 		9B1D51AE524E0B755AB1C73A /* RoofingToolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D6202CC8E9DB93C565CCAA /* RoofingToolsView.swift */; };
@@ -170,7 +172,7 @@
 		8C271B8ECBDDA70E88C7927A /* TimesheetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimesheetViews.swift; sourceTree = "<group>"; };
 		91A56B7310279EB386850363 /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineView.swift; sourceTree = "<group>"; };
 		94705493636263CF0B142A9E /* QuotePDFRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotePDFRenderer.swift; sourceTree = "<group>"; };
-		97CB30822368769F57E75640 /* ProLineCRM-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ProLineCRM-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		97CB30822368769F57E75640 /* ProLineCRM-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "ProLineCRM-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9F50204BD5453D21D7A515C0 /* ActionQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionQueueView.swift; sourceTree = "<group>"; };
 		A56A442B5FB64919428E1379 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		AF44176F2052ADA4FAE0736D /* CustomerDeckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomerDeckView.swift; sourceTree = "<group>"; };
@@ -181,13 +183,14 @@
 		C3FB3B42D30474665FC59B8F /* ProLineWidget-macOS.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "ProLineWidget-macOS.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C43C1B1BE1BA1844D1D534DE /* FinanceFleetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceFleetViews.swift; sourceTree = "<group>"; };
 		CEF16B57CF42196DA023354A /* PayrollViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayrollViews.swift; sourceTree = "<group>"; };
-		D33C1BB554952237F588BD4A /* ProLineCRM-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "ProLineCRM-macOS.app"; path = "ProLine CRM.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D33C1BB554952237F588BD4A /* ProLineCRM-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ProLineCRM-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D445CB8B99C93CF174EADDF9 /* ProLineCRMTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProLineCRMTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D876B701BAADA5AD1500AC29 /* CrewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrewView.swift; sourceTree = "<group>"; };
 		DB702FAED70865F4277742A5 /* JobsAndWorkerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobsAndWorkerViews.swift; sourceTree = "<group>"; };
 		DC4EA7B21552C2B0E511F0D9 /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherService.swift; sourceTree = "<group>"; };
 		DE5D7E6FD3FE69D518EC10AD /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		E4364C310749209AF649093E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		FD05C4E2A9A765B620D2A7E1 /* .swift-format */ = {isa = PBXFileReference; lastKnownFileType = text; path = ".swift-format"; sourceTree = "<group>"; };
+		FD05C4E2A9A765B620D2A7E1 /* .swift-format */ = {isa = PBXFileReference; path = ".swift-format"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -282,6 +285,7 @@
 				8A9A145C7E1F26D10196B717 /* CalendarView.swift */,
 				02474CC5E3238C41CE4E7415 /* CallOutcomeSheet.swift */,
 				177D310CA0AAE1F3BA4DFBE9 /* ContactsFilesReportsViews.swift */,
+				D876B701BAADA5AD1500AC29 /* CrewView.swift */,
 				AF44176F2052ADA4FAE0736D /* CustomerDeckView.swift */,
 				0F743533CC7633814355822C /* DashboardView.swift */,
 				BC6CF6AD5C4068FFD281E76C /* EmailWorkspaceView.swift */,
@@ -412,6 +416,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					1CB2316C72B3240769368BBB = {
+						DevelopmentTeam = J87GB8M4RD;
 						ProvisioningStyle = Automatic;
 					};
 					1D331345C5C0B96CB380BDE4 = {
@@ -489,6 +494,7 @@
 				1371CC79AFB2E4C8A71F1D1B /* CallOutcomeSheet.swift in Sources */,
 				6FB0168E9D7594138A5D8381 /* ContactLinks.swift in Sources */,
 				0C14E1AA86EF152E2688709E /* ContactsFilesReportsViews.swift in Sources */,
+				89054BC3AA16FDAD86D8379D /* CrewView.swift in Sources */,
 				4F081AFDC8F1A54552E39FE1 /* CustomerDeckView.swift in Sources */,
 				EAF07A9B0AC2F00CD214BAA2 /* DashboardView.swift in Sources */,
 				EF26A3DE7397B8D541399291 /* EmailWorkspaceView.swift in Sources */,
@@ -533,6 +539,7 @@
 				DF1895452926886C693C4C99 /* CallOutcomeSheet.swift in Sources */,
 				571CF445C7BC305045E3815F /* ContactLinks.swift in Sources */,
 				9DEA8A8B6B112BC11F4131DF /* ContactsFilesReportsViews.swift in Sources */,
+				74FED861B92612749912CED8 /* CrewView.swift in Sources */,
 				1E99A542612A5B492EB51FFF /* CustomerDeckView.swift in Sources */,
 				7AB3E3A0FCD214FC8F12800B /* DashboardView.swift in Sources */,
 				EBD3F74F31B7FA3267D7584D /* EmailWorkspaceView.swift in Sources */,
@@ -617,7 +624,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "Configuration/ProLineCRM-App.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = J87GB8M4RD;
 				INFOPLIST_FILE = "Configuration/iOS-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -907,7 +913,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "Configuration/ProLineCRM-App.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = J87GB8M4RD;
 				INFOPLIST_FILE = "Configuration/iOS-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
