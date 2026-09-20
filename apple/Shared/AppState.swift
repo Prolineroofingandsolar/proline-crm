@@ -1391,7 +1391,6 @@ final class AppState {
 
     @discardableResult
     func setTimesheetDay(userID: String, leadID: String, date: String, kind: String) async -> Bool {
-        guard !isWorkerPreview else { return false }
         guard ["full", "half", "off"].contains(kind) else { return false }
         guard kind == "off" || !leadID.isEmpty else { errorMessage = "Choose the job worked on."; return false }
         guard isAdmin || currentUser?.id == userID else { errorMessage = "Team members can only record their own work days."; return false }
@@ -1408,6 +1407,8 @@ final class AppState {
         let entry = TimesheetEntry(
             id: UUID().uuidString, userID: userID, leadID: kind == "off" ? "" : leadID, date: date, type: kind, amount: amount,
             createdAt: SupabaseService.now)
+        // Preview data has no server: keep the change locally so the UI can be exercised.
+        if isWorkerPreview { timesheets.append(entry); return true }
         do { try await SupabaseService.shared.insert(entry, into: "timesheet_entries"); timesheets.append(entry); return true } catch {
             errorMessage = "Work day could not be saved: \(error.localizedDescription)"; return false
         }
@@ -1415,7 +1416,6 @@ final class AppState {
 
     @discardableResult
     func saveTimesheet(_ entry: TimesheetEntry) async -> Bool {
-        guard !isWorkerPreview else { return false }
         guard let index = timesheets.firstIndex(where: { $0.id == entry.id }) else {
             errorMessage = "Timesheet entry could not be found. Refresh and try again."; return false
         }
@@ -1426,19 +1426,20 @@ final class AppState {
         guard !isTimesheetWeekLocked(userID: old.userID, date: old.date), !isTimesheetWeekLocked(userID: entry.userID, date: entry.date)
         else { errorMessage = "This pay week is approved or paid. Reopen it before changing timesheets."; return false }
         timesheets[index] = entry
+        if isWorkerPreview { return true }
         do { try await SupabaseService.shared.update(entry, in: "timesheet_entries", id: entry.id); return true } catch {
             timesheets[index] = old; errorMessage = "Timesheet changes could not be saved: \(error.localizedDescription)"; return false
         }
     }
 
     func deleteTimesheet(_ entry: TimesheetEntry) async {
-        guard !isWorkerPreview else { return }
         guard isAdmin || currentUser?.id == entry.userID else { errorMessage = "Team members can only delete their own work days."; return }
         guard !isTimesheetWeekLocked(userID: entry.userID, date: entry.date) else {
             errorMessage = "This pay week is approved or paid. Reopen it before changing timesheets."; return
         }
         guard let index = timesheets.firstIndex(where: { $0.id == entry.id }) else { return }
         timesheets.remove(at: index)
+        if isWorkerPreview { return }
         do { try await SupabaseService.shared.delete(from: "timesheet_entries", id: entry.id) } catch {
             timesheets.insert(entry, at: index); errorMessage = "Timesheet entry could not be deleted."
         }
@@ -1490,7 +1491,8 @@ final class AppState {
 
     private func isTimesheetWeekLocked(userID: String, date: String) -> Bool {
         guard let weekStart = PayrollPolicy.weekStartKey(for: date) else { return false }
-        return paymentRuns.contains { $0.userID == userID && $0.weekStart == weekStart && $0.status != .due }
+        // Paid weeks are final for everyone; a submitted week is only locked for the worker who submitted it.
+        return paymentRuns.contains { $0.userID == userID && $0.weekStart == weekStart && ($0.status == .paid || (!isAdmin && $0.status != .due)) }
     }
 
     func setPaymentStatus(userID: String, weekStart: String, status: PaymentStatus) async {
@@ -1498,6 +1500,7 @@ final class AppState {
         if let index = paymentRuns.firstIndex(where: { $0.userID == userID && $0.weekStart == weekStart }) {
             let old = paymentRuns[index]; var changed = old; changed.status = status;
             changed.paidDate = status == .paid ? SupabaseService.today : nil; paymentRuns[index] = changed
+            if isWorkerPreview { return }
             do { try await SupabaseService.shared.update(changed, in: "payment_runs", id: changed.id) } catch {
                 paymentRuns[index] = old; errorMessage = "Payment status could not be saved."
             }
@@ -1505,6 +1508,7 @@ final class AppState {
             let run = PaymentRun(
                 id: UUID().uuidString, userID: userID, weekStart: weekStart, status: status,
                 paidDate: status == .paid ? SupabaseService.today : nil, notes: nil, createdAt: SupabaseService.today)
+            if isWorkerPreview { paymentRuns.append(run); return }
             do { try await SupabaseService.shared.insert(run, into: "payment_runs"); paymentRuns.append(run) } catch {
                 errorMessage = "Payment status could not be saved."
             }
