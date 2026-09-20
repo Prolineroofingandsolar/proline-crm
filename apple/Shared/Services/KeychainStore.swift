@@ -29,16 +29,9 @@ enum KeychainStore {
     }
 
     static func get(_ key: String) -> String? {
-        if let value = read(baseQuery(key)) { return value }
-        #if os(macOS)
-            // One-off move of items saved by earlier builds into the login keychain.
-            if let value = read(baseQuery(key, legacy: true)) {
-                set(value, for: key)
-                SecItemDelete(baseQuery(key, legacy: true) as CFDictionary)
-                return value
-            }
-        #endif
-        return nil
+        // Items older builds left in the login keychain are deliberately not read: touching
+        // them is exactly what raised the "wants to use your confidential information" dialog.
+        read(baseQuery(key))
     }
 
     private static func read(_ base: [String: Any]) -> String? {
@@ -52,8 +45,5 @@ enum KeychainStore {
 
     static func remove(_ key: String) {
         SecItemDelete(baseQuery(key) as CFDictionary)
-        #if os(macOS)
-            SecItemDelete(baseQuery(key, legacy: true) as CFDictionary)
-        #endif
     }
 }
