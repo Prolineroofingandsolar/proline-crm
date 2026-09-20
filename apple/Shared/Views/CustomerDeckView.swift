@@ -8,6 +8,29 @@ struct DeckCard: Identifiable {
     let actions: [CompanyAction]
     let priority: CompanyActionPriority
     var isOffice: Bool { lead == nil }
+
+    /// One line that says where this job is, so the card explains itself without reading the rows.
+    static func summary(for lead: Lead) -> String {
+        let today = SupabaseService.today
+        let type = lead.jobType.isEmpty ? "Job" : lead.jobType
+        switch lead.stage {
+        case .quoteSent:
+            let sent = SupabaseService.date(from: lead.updatedAt).map { Calendar.current.dateComponents([.day], from: $0, to: .now).day ?? 0 } ?? 0
+            return "\(type) · quote sent \(sent == 0 ? "today" : sent == 1 ? "yesterday" : "\(sent) days ago") · \(CRMFormat.money(lead.value))"
+        case .completed where lead.balance > 0, .waitingForPayment where lead.balance > 0:
+            return "\(type) · balance \(CRMFormat.money(lead.balance)) · finished \(CRMFormat.relativeDay(lead.completedDate ?? lead.endDate).lowercased())"
+        case .won where !lead.depositPaid && lead.deposit > 0, .scheduled where !lead.depositPaid && lead.deposit > 0:
+            return "\(type) · deposit \(CRMFormat.money(lead.deposit)) to collect"
+        case .surveyBooked where lead.surveyDate != nil, .newLead where lead.surveyDate != nil:
+            return "\(type) · survey \(lead.surveyDate == today ? (lead.surveyTime ?? "today") : CRMFormat.relativeDay(lead.surveyDate).lowercased())"
+        case .inProgress:
+            return "\(type) · on site" + (lead.endDate.map { " · due \(CRMFormat.relativeDay($0).lowercased())" } ?? "")
+        case .scheduled:
+            return "\(type) · starts \(CRMFormat.relativeDay(lead.startDate).lowercased())"
+        default:
+            return "\(type) · \(lead.stage.displayName)"
+        }
+    }
 }
 
 /// iPhone admin Today: a deck of customers. Tick what's done on the card, swipe right for the
@@ -73,39 +96,54 @@ struct CustomerDeckView: View {
         index = max(0, min(position, max(0, next.count - 1)))
     }
 
+    @State private var showingTomorrow = false
+    private var today: String { SupabaseService.today }
+    private var chosenDay: Date { Calendar.current.date(byAdding: .day, value: showingTomorrow ? 1 : 0, to: Calendar.current.startOfDay(for: .now)) ?? .now }
+    private var chosenKey: String { SupabaseService.localDay(for: chosenDay) }
+
     var body: some View {
-        VStack(spacing: 16) {
-            if deck.isEmpty {
-                allClear
-            } else {
-                DeckCardView(card: deck[current])
-                    .offset(offset)
-                    .rotationEffect(.degrees(Double(offset.width / 20)))
-                    .gesture(dragGesture)
-                    .id(deck[current].id)
-                    .background {
-                        // A hint that more cards follow, sized to the card in front.
-                        if current + 1 < deck.count {
-                            RoundedRectangle(cornerRadius: 20).fill(.background)
-                                .shadow(color: .black.opacity(0.04), radius: 8, y: 4)
-                                .scaleEffect(0.96)
-                                .offset(y: 12)
-                        }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                headerRow
+                dayLine
+                TimelineCard(day: chosenDay, dayKey: chosenKey, forecast: appState.weather.forecast)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Next up").font(.headline)
+                    Spacer()
+                    if !deck.isEmpty {
+                        Button("\(current + 1) of \(deck.count) · \(remaining) to do") { showingAll = true }
+                            .font(.caption).foregroundStyle(.secondary).buttonStyle(.plain)
                     }
-                    .animation(.spring(duration: 0.35), value: offset)
-                Text("\(current + 1) of \(deck.count)").font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 2)
+                if deck.isEmpty {
+                    allClear
+                } else {
+                    DeckCardView(card: deck[current])
+                        .offset(offset)
+                        .rotationEffect(.degrees(Double(offset.width / 20)))
+                        .gesture(dragGesture)
+                        .id(deck[current].id)
+                        .background {
+                            // A hint that more cards follow, sized to the card in front.
+                            if current + 1 < deck.count {
+                                RoundedRectangle(cornerRadius: 20).fill(.background)
+                                    .shadow(color: .black.opacity(0.04), radius: 8, y: 4)
+                                    .scaleEffect(0.96)
+                                    .offset(y: 12)
+                            }
+                        }
+                        .animation(.spring(duration: 0.35), value: offset)
+                        .padding(.bottom, 10)
+                }
+                NumbersRow()
+                if let forecast = appState.weather.forecast { WeekStrip(forecast: forecast) }
             }
+            .padding(16)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(16)
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Today")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                if remaining > 0 { Button("\(remaining) to do") { showingAll = true } }
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showingAll) {
             NavigationStack {
                 List { ActionQueueList(showLater: true) }
@@ -118,6 +156,53 @@ struct CustomerDeckView: View {
         .onChange(of: Set(grouped.keys)) { _, _ in syncOrder() }
         .onChange(of: appState.leads.count) { _, _ in syncOrder() }
     }
+
+    private var headerRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image("Logo").resizable().scaledToFit().frame(height: 36).accessibilityLabel("ProLine Roofing & Solar")
+            Spacer()
+            if !appState.syncIssues.isEmpty {
+                Button { appState.errorMessage = "Some CRM data is not currently synced: \(appState.syncIssues.joined(separator: ", ")). Pull down or tap Refresh." } label: { Image(systemName: "exclamationmark.icloud") }
+                    .accessibilityLabel("Data sync issue")
+            }
+            Button { appState.showingGlobalSearch = true } label: { Image(systemName: "magnifyingglass").font(.body.weight(.medium)).frame(width: 36, height: 36) }
+                .background(.background, in: Circle()).accessibilityLabel("Search")
+            Button { appState.showingGlobalAddLead = true } label: { Image(systemName: "plus").font(.body.weight(.medium)).frame(width: 36, height: 36) }
+                .background(.background, in: Circle()).accessibilityLabel("Add lead")
+        }
+    }
+
+    private var dayLine: some View {
+        HStack(alignment: .center) {
+            Button { withAnimation(.snappy) { showingTomorrow.toggle() } } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(showingTomorrow ? "Tomorrow" : chosenDay.formatted(.dateTime.weekday(.wide))).font(.title2.weight(.semibold)).foregroundStyle(.primary)
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                    }
+                    Text("\(chosenDay.formatted(.dateTime.day().month(.abbreviated))) · \(bookedCount) booked").font(.subheadline).foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(showingTomorrow ? "Show today" : "Show tomorrow")
+            Spacer()
+            if let forecast = appState.weather.forecast, let now = forecast.hour(at: showingTomorrow ? chosenDay.addingTimeInterval(9 * 3600) : .now) {
+                HStack(spacing: 6) {
+                    Image(systemName: WeatherPolicy.symbol(for: now.code)).foregroundStyle(WeatherPolicy.isWet(now.code) ? Color.blue : (now.code <= 1 ? Color.accentColor : Color.secondary))
+                    Text("\(Int(now.temperature.rounded()))°").fontWeight(.medium)
+                    if let note = WeatherPolicy.note(for: forecast.hours(on: chosenDay), now: showingTomorrow ? chosenDay : .now) {
+                        Text(note).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(.background, in: Capsule())
+            }
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private var bookedCount: Int { TimelineCard.bookings(in: appState.leads, dayKey: chosenKey, today: today, timesheets: appState.timesheets).count }
 
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 12)
@@ -197,8 +282,7 @@ private struct DeckCardView: View {
             }
             if let lead = card.lead {
                 Text(lead.name).font(.title2.weight(.semibold))
-                Text([lead.jobType, lead.stage.displayName].filter { !$0.isEmpty }.joined(separator: " · ")).foregroundStyle(.secondary)
-                if !lead.address.isEmpty { Text(lead.address).font(.subheadline).foregroundStyle(.secondary).lineLimit(2) }
+                Text(DeckCard.summary(for: lead)).foregroundStyle(.secondary)
             } else {
                 Text("Office").font(.title2.weight(.semibold))
             }
@@ -307,6 +391,154 @@ private struct DeckItemRow: View {
             Task { await appState.toggleGeneralTask(task) }
         } else if let leadID = action.leadID, let taskID = action.leadTaskID {
             Task { await appState.toggleLeadTask(leadID: leadID, taskID: taskID) }
+        }
+    }
+}
+#endif
+
+#if os(iOS)
+/// Today's bookings in time order.
+struct TimelineCard: View {
+    @Environment(AppState.self) private var appState
+    let day: Date
+    let dayKey: String
+    let forecast: Forecast?
+
+    struct Booking: Identifiable {
+        enum Kind { case survey, start, onSite }
+        let lead: Lead
+        let kind: Kind
+        let time: String?
+        let crew: Int
+        var id: String { lead.id + (kind == .survey ? "-s" : "-j") }
+    }
+
+    static func bookings(in leads: [Lead], dayKey: String, today: String, timesheets: [TimesheetEntry]) -> [Booking] {
+        var rows: [Booking] = []
+        for lead in leads {
+            let crew = Set(timesheets.filter { $0.leadID == lead.id && $0.date == dayKey && $0.type != "off" }.map(\.userID)).count
+            if lead.surveyDate == dayKey { rows.append(Booking(lead: lead, kind: .survey, time: lead.surveyTime, crew: 0)) }
+            if lead.startDate == dayKey && lead.stage != .inProgress { rows.append(Booking(lead: lead, kind: .start, time: nil, crew: crew)) }
+            else if lead.stage == .inProgress, let start = lead.startDate, start <= dayKey, (lead.endDate ?? dayKey) >= dayKey {
+                rows.append(Booking(lead: lead, kind: .onSite, time: nil, crew: crew))
+            }
+        }
+        return rows.sorted { ($0.time ?? ($0.kind == .onSite ? "00:00" : "99")) < ($1.time ?? ($1.kind == .onSite ? "00:00" : "99")) }
+    }
+
+    private var rows: [Booking] { Self.bookings(in: appState.leads, dayKey: dayKey, today: SupabaseService.today, timesheets: appState.timesheets) }
+    private var nextID: String? {
+        let now = Date.now.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+        guard Calendar.current.isDateInToday(day) else { return rows.first?.id }
+        return rows.first { $0.kind == .onSite || ($0.time ?? "99") >= now }?.id
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if rows.isEmpty {
+                Text("Nothing booked").foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(14)
+            }
+            ForEach(rows) { booking in
+                let isNext = booking.id == nextID
+                Button { appState.openLead(booking.lead.id) } label: {
+                    HStack(spacing: 12) {
+                        Text(booking.time ?? "—").font(.subheadline.weight(isNext ? .semibold : .regular)).foregroundStyle(isNext ? Color.accentColor : Color.secondary).frame(width: 44, alignment: .leading)
+                        Image(systemName: icon(booking.kind)).foregroundStyle(isNext ? Color.accentColor : Color.secondary).frame(width: 22)
+                        (Text(surname(booking.lead.name)).fontWeight(isNext ? .semibold : .regular) + Text("  \(detail(booking))").foregroundStyle(.secondary))
+                            .lineLimit(1)
+                        Spacer()
+                        trailing(booking, isNext: isNext)
+                    }
+                    .padding(.vertical, 11).padding(.horizontal, 14)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if booking.id != rows.last?.id { Divider().padding(.leading, 14) }
+            }
+        }
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder private func trailing(_ booking: Booking, isNext: Bool) -> some View {
+        if let rain = rainChance(for: booking) { Text("rain \(rain)%").font(.caption).foregroundStyle(.blue) }
+        else if booking.crew > 0 { Text("\(booking.crew) on site").font(.caption).foregroundStyle(.secondary) }
+        else if isNext { Text("next").font(.caption).foregroundStyle(Color.accentColor) }
+    }
+
+    private func rainChance(for booking: Booking) -> Int? {
+        guard let forecast, booking.kind != .onSite else { return nil }
+        let parts = (booking.time ?? "08:00").split(separator: ":").compactMap { Int($0) }
+        guard let at = Calendar.current.date(bySettingHour: parts.first ?? 8, minute: 0, second: 0, of: day), let hour = forecast.hour(at: at) else { return nil }
+        return hour.rainChance >= 50 ? hour.rainChance : nil
+    }
+
+    private func icon(_ kind: Booking.Kind) -> String { switch kind { case .survey: "ruler"; case .start: "truck.box"; case .onSite: "hammer" } }
+    private func surname(_ name: String) -> String { name.split(separator: " ").last.map(String.init) ?? name }
+    private func detail(_ booking: Booking) -> String {
+        let town = booking.lead.address.split(separator: ",").last?.trimmingCharacters(in: .whitespaces) ?? ""
+        switch booking.kind {
+        case .survey: return ["survey", town].filter { !$0.isEmpty }.joined(separator: " · ")
+        case .start: return "\(booking.lead.jobType.lowercased()) start"
+        case .onSite: return booking.lead.jobType.lowercased()
+        }
+    }
+}
+
+/// Three numbers, each with the one detail that matters.
+struct NumbersRow: View {
+    @Environment(AppState.self) private var appState
+    private var today: String { SupabaseService.today }
+    private var live: [Lead] { appState.leads.filter { ![.paid, .lost].contains($0.stage) } }
+    private var toCollect: Double { live.reduce(0) { $0 + $1.balance } }
+    private var overdue: Double { live.filter { [.completed, .waitingForPayment].contains($0.stage) }.reduce(0) { $0 + $1.balance } }
+    private var quotes: [Lead] { appState.leads.filter { $0.stage == .quoteSent } }
+    private var workers: [CRMUser] { appState.users.filter { $0.role != "admin" && $0.dayRate != nil } }
+    private var onSite: Int { Set(appState.timesheets.filter { $0.date == today && $0.type != "off" }.map(\.userID)).count }
+    private var unrecorded: Int { workers.filter { worker in !appState.timesheets.contains { $0.userID == worker.id && $0.date == today } }.count }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button { appState.pendingSection = .accounts } label: {
+                tile("To collect", CRMFormat.money(toCollect), overdue > 0 ? "\(CRMFormat.money(overdue)) overdue" : nil, warn: overdue > 0)
+            }.buttonStyle(.plain)
+            tile("Quotes out", "\(quotes.count)", quotes.isEmpty ? nil : CRMFormat.money(quotes.reduce(0) { $0 + $1.value }))
+            tile("Crew", workers.isEmpty ? "—" : "\(onSite) of \(workers.count)", unrecorded > 0 ? "\(unrecorded) unrecorded" : nil)
+        }
+    }
+
+    private func tile(_ label: String, _ value: String, _ note: String?, warn: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.title3.weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+            Text(note ?? " ").font(.caption2).foregroundStyle(warn ? Color.red : Color.secondary).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// The next five working days' weather, for planning the van.
+struct WeekStrip: View {
+    let forecast: Forecast
+    private var days: [WeatherDay] {
+        Array(forecast.days.filter { !Calendar.current.isDateInToday($0.date) && $0.date > .now && Calendar.current.component(.weekday, from: $0.date) != 1 }.prefix(5))
+    }
+    var body: some View {
+        if !days.isEmpty {
+            HStack {
+                ForEach(days, id: \.date) { day in
+                    VStack(spacing: 3) {
+                        Text(day.date.formatted(.dateTime.weekday(.abbreviated))).font(.caption2).foregroundStyle(.secondary)
+                        Image(systemName: WeatherPolicy.symbol(for: day.code)).font(.body).frame(height: 22)
+                            .foregroundStyle(WeatherPolicy.isWet(day.code) ? Color.blue : (day.code <= 1 ? Color.accentColor : Color.secondary))
+                        Text("\(Int(day.maxTemperature.rounded()))°").font(.caption)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.vertical, 8).padding(.horizontal, 6)
+            .background(.background, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 }

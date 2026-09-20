@@ -66,10 +66,12 @@
 		B393306DAC4EF95AD3C459EF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86850E2E60D15462151C0F77 /* SettingsView.swift */; };
 		B3B3FB39667D121A22AD6290 /* FinanceFleetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C43C1B1BE1BA1844D1D534DE /* FinanceFleetViews.swift */; };
 		BE5C73C16879D05CC472BD14 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5D7E6FD3FE69D518EC10AD /* SupabaseService.swift */; };
+		C63AD94332F9373A793A6125 /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4EA7B21552C2B0E511F0D9 /* WeatherService.swift */; };
 		CB3A772106F70AC4371DEF4C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1124751956B1D90B6489ADE7 /* RootView.swift */; };
 		CBF41FA5E440DA815A84219B /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5D7E6FD3FE69D518EC10AD /* SupabaseService.swift */; };
 		CDEFB06430F243CCC3A3EE05 /* ProLineWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480FAB9E772AC8316A736F73 /* ProLineWidget.swift */; };
 		D3786082013A46C5D0E275B1 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */; };
+		D46C95DD86C9F0908E465ED8 /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4EA7B21552C2B0E511F0D9 /* WeatherService.swift */; };
 		D72119B750E1D71690875D27 /* PayrollViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF16B57CF42196DA023354A /* PayrollViews.swift */; };
 		D8FB94A333137FB76CDC8C90 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F403D225C733DBBFCE86C2C /* AppState.swift */; };
 		DA2873087A0F37439F3D8D11 /* AccountsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02AF66FEBD0B82C80CEE696 /* AccountsViews.swift */; };
@@ -179,6 +181,7 @@
 		D33C1BB554952237F588BD4A /* ProLineCRM-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ProLineCRM-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D445CB8B99C93CF174EADDF9 /* ProLineCRMTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProLineCRMTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB702FAED70865F4277742A5 /* JobsAndWorkerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobsAndWorkerViews.swift; sourceTree = "<group>"; };
+		DC4EA7B21552C2B0E511F0D9 /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherService.swift; sourceTree = "<group>"; };
 		DE5D7E6FD3FE69D518EC10AD /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		E4364C310749209AF649093E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FD05C4E2A9A765B620D2A7E1 /* .swift-format */ = {isa = PBXFileReference; path = ".swift-format"; sourceTree = "<group>"; };
@@ -194,6 +197,7 @@
 				C15F2C475C0F8AF3B86C93E5 /* KeychainStore.swift */,
 				94705493636263CF0B142A9E /* QuotePDFRenderer.swift */,
 				DE5D7E6FD3FE69D518EC10AD /* SupabaseService.swift */,
+				DC4EA7B21552C2B0E511F0D9 /* WeatherService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -506,6 +510,7 @@
 				4A96B68512890F6B91158E8B /* TasksView.swift in Sources */,
 				636EF01B6C6C18DB1B50C394 /* TeamHubView.swift in Sources */,
 				E139052589E39270AFF061F7 /* TimesheetViews.swift in Sources */,
+				D46C95DD86C9F0908E465ED8 /* WeatherService.swift in Sources */,
 				B18AB031FD44CF655676BBC0 /* WidgetSnapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -548,6 +553,7 @@
 				6CC0610C486E847D4774CA9F /* TasksView.swift in Sources */,
 				B2147323C9C9DD0CAE2BE21F /* TeamHubView.swift in Sources */,
 				0A6D5335897BF543B3496DA0 /* TimesheetViews.swift in Sources */,
+				C63AD94332F9373A793A6125 /* WeatherService.swift in Sources */,
 				D3786082013A46C5D0E275B1 /* WidgetSnapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

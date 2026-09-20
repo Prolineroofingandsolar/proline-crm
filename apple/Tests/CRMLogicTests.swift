@@ -505,4 +505,18 @@ final class CRMLogicTests: XCTestCase {
         lead.stage = .paid
         XCTAssertNil(AppState.nextStep(for: lead))
     }
+
+    func testWeatherSymbolsAndSiteNote() {
+        XCTAssertEqual(WeatherPolicy.symbol(for: 0), "sun.max")
+        XCTAssertEqual(WeatherPolicy.symbol(for: 61), "cloud.rain")
+        XCTAssertEqual(WeatherPolicy.symbol(for: 95), "cloud.bolt.rain")
+        let calendar = Calendar.current
+        let start = calendar.date(bySettingHour: 7, minute: 0, second: 0, of: .now)!
+        let hours = (0...11).map { offset in
+            WeatherHour(date: calendar.date(byAdding: .hour, value: offset, to: start)!, temperature: 14, rainChance: offset >= 8 ? 70 : 10, code: offset >= 8 ? 61 : 1)
+        }
+        let note = WeatherPolicy.note(for: hours, now: start, calendar: calendar)
+        XCTAssertEqual(note, "rain from 15:00")
+        XCTAssertEqual(WeatherPolicy.note(for: hours.map { WeatherHour(date: $0.date, temperature: 14, rainChance: 5, code: 1) }, now: start, calendar: calendar), "dry all day")
+    }
 }

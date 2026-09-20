@@ -15,11 +15,7 @@ struct LoginView: View {
 
     var body: some View {
         VStack(spacing: 22) {
-            Image(systemName: "house.lodge.fill").font(.largeTitle).foregroundStyle(Color.accentColor)
-            VStack(spacing: 4) {
-                Text("ProLine CRM").font(.largeTitle.bold())
-                Text("Roofing & Solar").foregroundStyle(.secondary)
-            }
+            Image("Logo").resizable().scaledToFit().frame(maxWidth: 240).accessibilityLabel("ProLine Roofing & Solar")
             VStack(spacing: 12) {
                 TextField("Email or username", text: $username).textContentType(.username)
                 SecureField("Password", text: $password).textContentType(.password)

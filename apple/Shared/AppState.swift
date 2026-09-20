@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import Observation
 import SwiftUI
@@ -106,6 +107,8 @@ final class AppState {
     /// A call started from the app; when the user comes back we ask how it went.
     private var pendingCall: PendingCall?
     var pendingCallOutcome: PendingCall?
+    /// Site weather for the Today screen.
+    let weather = WeatherService()
     var assistantErrorMessage: String?
     var isAdminUsingSimpleView = UserDefaults.standard.bool(forKey: "adminUsesSimpleView")
     var gmailConnectionStatus: GmailConnectionStatus?
@@ -426,6 +429,7 @@ final class AppState {
                 selectedSection = .dashboard
             }
             syncIssues = []
+            Task { await refreshWeather() }
         }
     #endif
 
@@ -607,6 +611,15 @@ final class AppState {
         }
         updateWidget()
         await scheduleNotifications()
+        Task { await refreshWeather() }
+    }
+
+    /// Forecast for wherever today's first booked job is (or the business address).
+    func refreshWeather() async {
+        let today = SupabaseService.today
+        let booked = leads.first { ($0.surveyDate == today || $0.startDate == today || $0.stage == .inProgress) && $0.lat != nil && $0.lng != nil }
+        let coordinate = booked.flatMap { lead in lead.lat.flatMap { lat in lead.lng.map { CLLocationCoordinate2D(latitude: lat, longitude: $0) } } }
+        await weather.refresh(near: coordinate, fallbackAddress: UserDefaults.standard.string(forKey: "businessAddress") ?? "")
     }
 
     private func cacheSignedInUser(_ user: CRMUser) {
