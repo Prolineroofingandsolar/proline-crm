@@ -127,6 +127,9 @@ struct ProLineCRMApp: App {
             }
             .environment(appState)
             .task {
+                // The unit-test host launches this app too; leave the keychain and network alone there
+                // so a test run never raises the macOS "wants to use your confidential information" dialog.
+                guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
                 await appState.restoreSession(); appState.resumeRemoteNotificationsIfEnabled()
             }
             .onOpenURL { appState.open($0) }
