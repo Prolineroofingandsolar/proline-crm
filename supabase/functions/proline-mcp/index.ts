@@ -7,12 +7,12 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const FUNCTION_BASE = `${PROJECT_URL}/functions/v1/proline-mcp`;
 const MCP_RESOURCE = `${FUNCTION_BASE}/mcp`;
-const RESOURCE_METADATA = `${FUNCTION_BASE}/.well-known/oauth-protected-resource?v=7`;
+const RESOURCE_METADATA = `${FUNCTION_BASE}/.well-known/oauth-protected-resource?v=8`;
 const SUPABASE_AUTH_ORIGIN = `${PROJECT_URL}/auth/v1`;
 // Cursor's cloud token exchange can be challenged by the Supabase edge.
 // Publish the ProLine OAuth facade, which proxies only the OAuth protocol
 // endpoints to this same Supabase Auth server and returns standards-compliant JSON.
-const AUTHORIZATION_SERVER = `${FUNCTION_BASE}/oauth`;
+const AUTHORIZATION_SERVER = "https://oauth.prolineroofingandsolar.co.uk";
 const SCOPES = ["email", "profile"];
 
 const cors = {

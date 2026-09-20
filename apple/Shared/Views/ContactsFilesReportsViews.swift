@@ -51,11 +51,8 @@ struct ContactDetailView: View {
                 Section("Contact") {
                     LabeledContent("Name", value: contact.name);
                     if !contact.phone.isEmpty { PhoneActionMenu(number: contact.phone, label: contact.phone) };
-                    if let u = ContactLinks.email(contact.email) {
-                        Link(contact.email, destination: u)
-                    } else if !contact.email.isEmpty {
-                        LabeledContent("Email", value: contact.email)
-                    }; LabeledContent("Address", value: contact.address.isEmpty ? "Not added" : contact.address)
+                    if !contact.email.isEmpty { EmailActionMenu(address: contact.email) };
+                    LabeledContent("Address", value: contact.address.isEmpty ? "Not added" : contact.address)
                 };
                 Section("Related leads and jobs") {
                     if related.isEmpty { Text("No related leads").foregroundStyle(.secondary) };

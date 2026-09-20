@@ -100,39 +100,87 @@ struct RootView: View {
             .task { await activeSyncLoop() }
         #else
             NavigationSplitView {
-                List(selection: $appState.selectedSection) {
-                    if appState.isAdmin {
-                        ForEach(adminSidebarGroups, id: \.title) { group in
-                            Section(group.title) {
-                                ForEach(group.sections.filter(appState.canAccess)) { section in sidebarRow(section) }
-                            }
+                VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 0) {
+                            Text("PRO").foregroundStyle(.white)
+                            Text("LINE").foregroundStyle(Color(red: 1, green: 0.29, blue: 0.04))
                         }
-                    } else {
-                        ForEach(workerSections) { section in sidebarRow(section) }
+                        .font(.system(size: 24, weight: .black, design: .rounded))
+                        Text("ROOFING CRM")
+                            .font(.system(size: 9, weight: .bold))
+                            .tracking(3)
+                            .foregroundStyle(.white.opacity(0.72))
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 22)
+                    .padding(.bottom, 20)
+
+                    if appState.isAdmin {
+                        Button { appState.showingGlobalAddLead = true } label: {
+                            Label("Add lead", systemImage: "plus")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white)
+                        .background(Color(red: 1, green: 0.29, blue: 0.04), in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 18)
+                    }
+
+                    List(selection: $appState.selectedSection) {
+                        if appState.isAdmin {
+                            ForEach(adminSidebarGroups, id: \.title) { group in
+                                Section(group.title.uppercased()) {
+                                    ForEach(group.sections.filter(appState.canAccess)) { section in sidebarRow(section) }
+                                }
+                            }
+                            Section { sidebarRow(.settings) }
+                        } else {
+                            ForEach(workerSections) { section in sidebarRow(section) }
+                        }
+                    }
+                    .listStyle(.sidebar)
+                    .scrollContentBackground(.hidden)
+                    .foregroundStyle(.white)
+                    .onChange(of: appState.selectedSection) { _, _ in macPath = NavigationPath() }
                 }
-                .listStyle(.sidebar)
-                .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
+                .background(
+                    LinearGradient(
+                        colors: [Color(red: 0.025, green: 0.10, blue: 0.16), Color(red: 0.02, green: 0.14, blue: 0.21)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .safeAreaInset(edge: .bottom) {
                     if let user = appState.currentUser {
-                        Menu {
-                            Button("Settings…") { openSettings() }
-                            Divider()
-                            Button("Sign Out", role: .destructive) { appState.signOut() }
-                        } label: {
-                            Label {
-                                VStack(alignment: .leading) {
-                                    Text(user.name).lineLimit(1); Text(user.role.capitalized).font(.caption).foregroundStyle(.secondary)
-                                }
-                            } icon: {
-                                Image(systemName: "person.crop.circle")
+                        HStack {
+                            Circle()
+                                .fill(Color.orange)
+                                .frame(width: 30, height: 30)
+                                .overlay(Text(user.name.prefix(1)).font(.caption.bold()).foregroundStyle(.white))
+                            VStack(alignment: .leading) {
+                                Text(user.name).lineLimit(1).font(.caption.bold())
+                                Text(user.role.capitalized).font(.caption2).foregroundStyle(.white.opacity(0.55))
+                            }
+                            Spacer()
+                            Menu {
+                                Button("Settings…") { openSettings() }
+                                Divider()
+                                Button("Sign Out", role: .destructive) { appState.signOut() }
+                            } label: {
+                                Image(systemName: "chevron.down")
                             }
                         }
-                        .menuStyle(.borderlessButton)
-                        .padding(12)
+                        .foregroundStyle(.white)
+                        .padding(16)
+                        .background(Color.black.opacity(0.12))
                     }
                 }
-                .onChange(of: appState.selectedSection) { _, _ in macPath = NavigationPath() }
+                .navigationSplitViewColumnWidth(min: 190, ideal: 205, max: 220)
             } detail: {
                 NavigationStack(path: $macPath) {
                     SectionContent(section: appState.selectedSection)
@@ -261,9 +309,26 @@ struct RootView: View {
     }
 
     private func sidebarRow(_ section: AppSection) -> some View {
-        Label(sectionLabel(section), systemImage: section.icon)
-            .badge(sectionBadge(section))
+        HStack {
+            Label(sectionLabel(section), systemImage: section.icon)
+            Spacer()
+            let count = sectionBadge(section)
+            if count > 0 {
+                Text("\(count)")
+                    .font(.caption2.bold())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange, in: Capsule())
+                    .foregroundStyle(.white)
+            }
+        }
+            .font(.system(size: 14, weight: appState.selectedSection == section ? .semibold : .regular))
+            .foregroundStyle(appState.selectedSection == section ? Color.white : Color.white.opacity(0.78))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
             .tag(section)
+            .listRowBackground(appState.selectedSection == section ? Color.white.opacity(0.10) : Color.clear)
     }
 
     private func showSyncIssues() {

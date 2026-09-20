@@ -71,9 +71,7 @@
             Form {
                 Section(contact.name) {
                     if !contact.phone.isEmpty { PhoneActionMenu(number: contact.phone, label: contact.phone) }
-                    if let url = ContactLinks.email(contact.email) {
-                        Link(destination: url) { Label(contact.email, systemImage: "envelope") }
-                    }
+                    if !contact.email.isEmpty { EmailActionMenu(address: contact.email) }
                     if !contact.address.isEmpty { Label(contact.address, systemImage: "map") }
                     LabeledContent("Customer since", value: CRMFormat.day(contact.createdAt))
                 }

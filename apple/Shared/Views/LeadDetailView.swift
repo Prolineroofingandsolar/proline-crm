@@ -51,6 +51,35 @@ struct PhoneActionMenu: View {
     }
 }
 
+struct EmailActionMenu: View {
+    let address: String
+    var body: some View {
+        Menu {
+            if let url = ContactLinks.email(address) {
+                Link(destination: url) {
+                    Label("Compose email", systemImage: "envelope")
+                }
+            }
+            Button {
+                copyAddress()
+            } label: {
+                Label("Copy email address", systemImage: "doc.on.doc")
+            }
+        } label: {
+            Label(address, systemImage: "envelope")
+        }
+    }
+
+    private func copyAddress() {
+        #if os(iOS)
+            UIPasteboard.general.string = address
+        #elseif os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(address, forType: .string)
+        #endif
+    }
+}
+
 struct LeadDetailView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -154,11 +183,7 @@ struct LeadDetailView: View {
     private func contact(_ lead: Lead) -> some View {
         Section("Contact") {
             if !lead.phone.isEmpty { PhoneActionMenu(number: lead.phone, label: lead.phone, lead: lead) }
-            if let mail = ContactLinks.email(lead.email) {
-                Link(destination: mail) { Label(lead.email, systemImage: "envelope") }
-            } else if !lead.email.isEmpty {
-                Label(lead.email, systemImage: "envelope")
-            }
+            if !lead.email.isEmpty { EmailActionMenu(address: lead.email) }
             if !lead.address.isEmpty {
                 if let maps = ContactLinks.maps(address: lead.address) {
                     Link(destination: maps) { Label(lead.address, systemImage: "map") }
