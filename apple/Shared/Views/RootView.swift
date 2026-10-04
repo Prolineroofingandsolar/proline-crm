@@ -79,6 +79,7 @@ struct RootView: View {
                 .badge(appState.usesAdminInterface ? appState.unreadTeamCount : 0)
                 .tag(AppSection.settings)
             }
+            .proLineAdaptiveTabPlacement()
             .sheet(isPresented: $appState.showingGlobalSearch) { GlobalSearchView() }
             .sheet(isPresented: $appState.showingAssistant) { OperationsAssistantView() }
             .sheet(isPresented: $appState.showingGlobalAddLead) { AddLeadView(defaultStage: .newLead) }
@@ -362,6 +363,21 @@ struct RootView: View {
         }
     }
 }
+
+#if os(iOS)
+private extension View {
+    /// On iPhone Duo the sidebar is used on the regular-width inner display and
+    /// collapses back to the familiar tab presentation on compact-width displays.
+    @ViewBuilder
+    func proLineAdaptiveTabPlacement() -> some View {
+        if #available(iOS 18.0, *) {
+            defaultAdaptableTabBarPlacement(.sidebar)
+        } else {
+            self
+        }
+    }
+}
+#endif
 
 #if os(iOS)
     private struct MobileMoreView: View {

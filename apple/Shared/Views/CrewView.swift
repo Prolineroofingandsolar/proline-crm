@@ -1,11 +1,12 @@
 import SwiftUI
 
 #if os(iOS)
-/// Who is on which job, one day at a time. Tap a name under a job to put them on it;
-/// tap again to take them off. The same days feed Pay.
+/// The admin's expected crew plan, one day at a time. Worker-submitted timesheets stay
+/// separate so Pay can compare their week with this office copy before approval.
 struct CrewView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var day = Calendar.current.startOfDay(for: .now)
 
     private var dayKey: String { PayrollMath.key(day) }
@@ -20,43 +21,96 @@ struct CrewView: View {
         return (0..<21).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: monday) }
             .filter { Calendar.current.component(.weekday, from: $0) != 1 || Calendar.current.isDateInToday($0) }
     }
-    private func entry(_ user: CRMUser) -> TimesheetEntry? { appState.timesheets.first { $0.userID == user.id && $0.date == dayKey } }
+    private func entry(_ user: CRMUser) -> TimesheetEntry? { appState.adminTimesheetChecks.first { $0.userID == user.id && $0.date == dayKey } }
     private var unassigned: [CRMUser] { workers.filter { entry($0).map { $0.type == "off" || $0.leadID.isEmpty } ?? true } }
+    private var assigned: [CRMUser] { workers.filter { entry($0).map { $0.type != "off" && !$0.leadID.isEmpty } ?? false } }
+    private var jobsWithCrew: Int { Set(assigned.compactMap { entry($0)?.leadID }).count }
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Plan the day").font(.title2.bold())
+                        Text(day.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 2)
+
                     dayStrip
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                }
-                ForEach(jobs) { job in
-                    Section {
-                        chips(for: job)
-                    } header: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(job.name).font(.headline).foregroundStyle(.primary)
-                            Text([job.jobType, town(job.address)].filter { !$0.isEmpty }.joined(separator: " · ")).font(.subheadline).foregroundStyle(.secondary)
+                    summaryCard
+
+                    HStack {
+                        Text("Jobs").font(.headline)
+                        Spacer()
+                        Text("Tap a name to assign or move them")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 2)
+
+                    if jobs.isEmpty {
+                        ContentUnavailableView("No live jobs", systemImage: "hammer", description: Text("Scheduled and active jobs will appear here."))
+                            .frame(maxWidth: .infinity).padding(.vertical, 28)
+                    } else {
+                        LazyVGrid(columns: jobColumns, alignment: .leading, spacing: 14) {
+                            ForEach(jobs) { job in jobCard(for: job) }
                         }
-                        .textCase(nil)
+                    }
+
+                    if !workers.isEmpty { unassignedCard }
+                    if workers.isEmpty {
+                        ContentUnavailableView("No crew members", systemImage: "person.2", description: Text("Add workers with a day rate in Team Hub."))
+                            .frame(maxWidth: .infinity).padding(.vertical, 28)
                     }
                 }
-                if jobs.isEmpty { Section { Text("No live jobs to put people on").foregroundStyle(.secondary) } }
-                if workers.isEmpty { Section { Text("Add workers with a day rate in Team Hub").foregroundStyle(.secondary) } }
+                .padding(16)
             }
-            .listStyle(.insetGrouped)
-            .navigationTitle(Calendar.current.isDateInToday(day) ? "Today" : day.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Crew")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
-            .safeAreaInset(edge: .bottom) {
-                if !unassigned.isEmpty && !jobs.isEmpty {
-                    Text("Not out: \(unassigned.map(firstName).joined(separator: ", "))")
-                        .font(.footnote).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity).padding(10).background(.bar)
+        }
+    }
+
+    private var jobColumns: [GridItem] {
+        horizontalSizeClass == .regular
+            ? [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)]
+            : [GridItem(.flexible(), alignment: .top)]
+    }
+
+    private var summaryCard: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 0) {
+                summaryMetric(value: "\(assigned.count) of \(workers.count)", label: "Assigned", icon: "person.2.fill")
+                Divider().frame(height: 42).padding(.horizontal, 14)
+                summaryMetric(value: "\(jobsWithCrew)", label: "Jobs covered", icon: "hammer.fill")
+            }
+            if !unassigned.isEmpty {
+                Divider()
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
+                    Text("\(unassigned.count) not out today").font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text(unassigned.map(firstName).joined(separator: ", ")).font(.subheadline).foregroundStyle(.secondary)
                 }
             }
         }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(.quaternary))
+    }
+
+    private func summaryMetric(value: String, label: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).font(.headline).foregroundStyle(.tint)
+                .frame(width: 34, height: 34).background(Color.accentColor.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value).font(.headline)
+                Text(label).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var dayStrip: some View {
@@ -66,14 +120,18 @@ struct CrewView: View {
                     ForEach(days, id: \.self) { candidate in
                         let selected = Calendar.current.isDate(candidate, inSameDayAs: day)
                         let key = PayrollMath.key(candidate)
-                        let crewCount = Set(appState.timesheets.filter { $0.date == key && $0.type != "off" && !$0.leadID.isEmpty }.map(\.userID)).count
+                        let crewCount = Set(appState.adminTimesheetChecks.filter { $0.date == key && $0.type != "off" && !$0.leadID.isEmpty }.map(\.userID)).count
                         Button { day = candidate } label: {
-                            VStack(spacing: 2) {
-                                Text(candidate.formatted(.dateTime.weekday(.abbreviated))).font(.caption2)
-                                Text(candidate.formatted(.dateTime.day())).font(.headline)
-                                Text(crewCount > 0 ? "\(crewCount)" : " ").font(.caption2)
+                            VStack(spacing: 3) {
+                                Text(candidate.formatted(.dateTime.weekday(.abbreviated))).font(.caption.weight(.medium))
+                                Text(candidate.formatted(.dateTime.day())).font(.title3.bold())
+                                HStack(spacing: 2) {
+                                    Image(systemName: "person.fill").font(.system(size: 8))
+                                    Text("\(crewCount)").font(.caption2.weight(.semibold))
+                                }
+                                .opacity(crewCount > 0 ? 1 : 0)
                             }
-                            .frame(width: 48, height: 60)
+                            .frame(width: 56, height: 70)
                             .background(selected ? Color.accentColor : Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
                             .foregroundStyle(selected ? Color.white : Color.primary)
                             .overlay(alignment: .top) {
@@ -86,40 +144,81 @@ struct CrewView: View {
                         .id(key)
                     }
                 }
-                .padding(.horizontal, 16).padding(.vertical, 4)
+                .padding(.horizontal, 2).padding(.vertical, 2)
             }
             .onAppear { proxy.scrollTo(dayKey, anchor: .leading) }
         }
     }
 
-    private func chips(for job: Lead) -> some View {
-        FlowLayout(spacing: 8) {
-            ForEach(workers) { worker in
-                let current = entry(worker)
-                let onThisJob = current?.leadID == job.id && current?.type != "off"
-                let elsewhere = !onThisJob && (current.map { !$0.leadID.isEmpty && $0.type != "off" } ?? false)
-                Button {
-                    Task {
-                        if onThisJob, let current { await appState.deleteTimesheet(current) } else {
-                            await appState.setTimesheetDay(userID: worker.id, leadID: job.id, date: dayKey, kind: "full")
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        if onThisJob { Image(systemName: "checkmark").font(.caption.weight(.bold)) }
-                        Text(firstName(worker))
-                        if onThisJob && current?.type == "half" { Text("½").font(.caption) }
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 12).padding(.vertical, 7)
-                    .background(onThisJob ? Color.accentColor : Color(.tertiarySystemFill), in: Capsule())
-                    .foregroundStyle(onThisJob ? Color.white : elsewhere ? Color.secondary : Color.primary)
+    private func jobCard(for job: Lead) -> some View {
+        let jobCrew = workers.filter { entry($0)?.leadID == job.id && entry($0)?.type != "off" }
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: job.stage == .inProgress ? "hammer.fill" : "calendar")
+                    .font(.headline).foregroundStyle(.tint)
+                    .frame(width: 40, height: 40).background(Color.accentColor.opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(job.name).font(.headline)
+                    Text([job.jobType, town(job.address)].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.subheadline).foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(worker.name), \(onThisJob ? "on this job" : elsewhere ? "on another job" : "not out")")
+                Spacer()
+                Text("\(jobCrew.count) crew").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 9).padding(.vertical, 5).background(Color(.tertiarySystemFill), in: Capsule())
+            }
+            Divider()
+            FlowLayout(spacing: 8) {
+                ForEach(workers) { worker in
+                    let current = entry(worker)
+                    let onThisJob = current?.leadID == job.id && current?.type != "off"
+                    let elsewhere = !onThisJob && (current.map { !$0.leadID.isEmpty && $0.type != "off" } ?? false)
+                    Button {
+                        Task {
+                            if onThisJob, let current { await appState.deleteAdminTimesheetCheck(current) } else {
+                                await appState.setAdminTimesheetCheck(userID: worker.id, leadID: job.id, date: dayKey, kind: "full")
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: onThisJob ? "checkmark.circle.fill" : elsewhere ? "arrow.left.arrow.right.circle" : "circle")
+                                .font(.caption.weight(.semibold))
+                            Text(firstName(worker))
+                            if onThisJob && current?.type == "half" { Text("½").font(.caption) }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(onThisJob ? Color.accentColor : Color(.secondarySystemBackground), in: Capsule())
+                        .foregroundStyle(onThisJob ? Color.white : elsewhere ? Color.secondary : Color.primary)
+                        .overlay(Capsule().stroke(elsewhere ? Color.secondary.opacity(0.3) : Color.clear))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(worker.name), \(onThisJob ? "on this job" : elsewhere ? "on another job" : "not out")")
+                    .accessibilityHint(onThisJob ? "Remove from this job" : elsewhere ? "Move to this job" : "Assign to this job")
+                }
             }
         }
-        .padding(.vertical, 4)
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(.quaternary))
+        .shadow(color: .black.opacity(0.035), radius: 8, y: 3)
+    }
+
+    private var unassignedCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: unassigned.isEmpty ? "checkmark.circle.fill" : "person.crop.circle.badge.questionmark")
+                .font(.title3).foregroundStyle(unassigned.isEmpty ? Color.green : Color.orange)
+                .frame(width: 40, height: 40)
+                .background((unassigned.isEmpty ? Color.green : Color.orange).opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(unassigned.isEmpty ? "Everyone is assigned" : "Not out today").font(.headline)
+                Text(unassigned.isEmpty ? "The whole team has a job." : unassigned.map(\.name).joined(separator: ", "))
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(unassigned.isEmpty ? Color.green.opacity(0.25) : Color.orange.opacity(0.3)))
     }
 
     private func firstName(_ user: CRMUser) -> String { user.name.split(separator: " ").first.map(String.init) ?? user.name }

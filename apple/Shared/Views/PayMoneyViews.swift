@@ -19,21 +19,29 @@ struct PayView: View {
     struct WorkerWeek: Identifiable {
         let user: CRMUser
         let entries: [TimesheetEntry]
+        let planEntries: [TimesheetEntry]
+        let runStatus: PaymentStatus?
         let paid: Bool
         var id: String { user.id }
         var gross: Double { PayrollMath.gross(entries) }
         var net: Double { gross * (1 - Double(user.cisRate ?? 20) / 100) }
         var days: Double { PayrollMath.days(entries) }
         var missingBank: Bool { (user.bankAccountNumber ?? "").isEmpty || (user.bankSortCode ?? "").isEmpty }
+        var matchesPlan: Bool {
+            let actual = entries.sorted { $0.date < $1.date }.map { "\($0.date)|\($0.leadID)|\($0.type)|\(String(format: "%.2f", $0.amount))" }
+            let planned = planEntries.sorted { $0.date < $1.date }.map { "\($0.date)|\($0.leadID)|\($0.type)|\(String(format: "%.2f", $0.amount))" }
+            return !actual.isEmpty && actual == planned
+        }
     }
 
     /// Only people with days in this week — the crew changes week to week.
     private var onThisWeek: [WorkerWeek] {
         workers.compactMap { user in
             let entries = appState.timesheets.filter { $0.userID == user.id && $0.date >= weekKey && $0.date <= PayrollMath.key(days.last ?? weekStart) && $0.type != "off" }
-            guard !entries.isEmpty else { return nil }
-            let paid = appState.paymentRuns.first { $0.userID == user.id && $0.weekStart == weekKey }?.status == .paid
-            return WorkerWeek(user: user, entries: entries, paid: paid)
+            let planEntries = appState.adminTimesheetChecks.filter { $0.userID == user.id && $0.date >= weekKey && $0.date <= PayrollMath.key(days.last ?? weekStart) && $0.type != "off" }
+            guard !entries.isEmpty || !planEntries.isEmpty else { return nil }
+            let status = appState.paymentRuns.first { $0.userID == user.id && $0.weekStart == weekKey }?.status
+            return WorkerWeek(user: user, entries: entries, planEntries: planEntries, runStatus: status, paid: status == .paid)
         }
     }
     private var notOnThisWeek: [CRMUser] { workers.filter { user in !onThisWeek.contains { $0.user.id == user.id } } }
@@ -137,6 +145,8 @@ struct PayView: View {
                     .buttonStyle(.plain)
                     if week.missingBank && !week.paid { Text("· no bank details").font(.caption).foregroundStyle(.red) }
                 }
+                Label(reconciliationText(week), systemImage: reconciliationIcon(week))
+                    .font(.caption.weight(.semibold)).foregroundStyle(reconciliationColor(week))
                 HStack(spacing: 6) {
                     ForEach(days, id: \.self) { day in
                         let key = PayrollMath.key(day)
@@ -169,6 +179,23 @@ struct PayView: View {
                 Button("Remove", role: .destructive) { Task { for entry in week.entries { await appState.deleteTimesheet(entry) } } }
             }
         }
+    }
+
+    private func reconciliationText(_ week: WorkerWeek) -> String {
+        if week.planEntries.isEmpty { return "No crew plan" }
+        guard let status = week.runStatus, status != .due else { return "Waiting for submission" }
+        return week.matchesPlan ? "Matches crew plan" : "Doesn't match crew plan"
+    }
+
+    private func reconciliationIcon(_ week: WorkerWeek) -> String {
+        if week.planEntries.isEmpty { return "questionmark.circle" }
+        guard let status = week.runStatus, status != .due else { return "clock" }
+        return week.matchesPlan ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+    }
+
+    private func reconciliationColor(_ week: WorkerWeek) -> Color {
+        if week.planEntries.isEmpty || week.runStatus == nil || week.runStatus == .due { return .secondary }
+        return week.matchesPlan ? .green : .orange
     }
 
     /// none → full → half → none.

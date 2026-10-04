@@ -37,6 +37,7 @@ struct DeckCard: Identifiable {
 /// next customer, left to go back. Swiping never changes data.
 struct CustomerDeckView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var index = 0
     @State private var offset: CGSize = .zero
     @State private var showingAll = false
@@ -103,47 +104,15 @@ struct CustomerDeckView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                headerRow
-                dayLine
-                TimelineCard(day: chosenDay, dayKey: chosenKey, forecast: appState.weather.forecast)
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Next up").font(.headline)
-                    Spacer()
-                    if !deck.isEmpty {
-                        Button("\(current + 1) of \(deck.count) · \(remaining) to do") { showingAll = true }
-                            .font(.caption).foregroundStyle(.secondary).buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 2)
-                if deck.isEmpty {
-                    allClear
-                } else {
-                    DeckCardView(card: deck[current])
-                        .offset(offset)
-                        .rotationEffect(.degrees(Double(offset.width / 20)))
-                        .gesture(dragGesture)
-                        .id(deck[current].id)
-                        .background {
-                            // A hint that more cards follow, sized to the card in front.
-                            if current + 1 < deck.count {
-                                RoundedRectangle(cornerRadius: 20).fill(.background)
-                                    .shadow(color: .black.opacity(0.04), radius: 8, y: 4)
-                                    .scaleEffect(0.96)
-                                    .offset(y: 12)
-                            }
-                        }
-                        .animation(.spring(duration: 0.35), value: offset)
-                        .padding(.bottom, 10)
-                }
-                NumbersRow()
-                if let forecast = appState.weather.forecast { WeekStrip(forecast: forecast) }
+            if horizontalSizeClass == .regular {
+                openDisplayLayout
+            } else {
+                compactDisplayLayout
             }
-            .padding(16)
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Today")
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingAll) {
             NavigationStack {
                 List { ActionQueueList(showLater: true) }
@@ -157,19 +126,80 @@ struct CustomerDeckView: View {
         .onChange(of: appState.leads.count) { _, _ in syncOrder() }
     }
 
-    private var headerRow: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image("Logo").resizable().scaledToFit().frame(height: 36).accessibilityLabel("ProLine Roofing & Solar")
-            Spacer()
-            if !appState.syncIssues.isEmpty {
-                Button { appState.errorMessage = "Some CRM data is not currently synced: \(appState.syncIssues.joined(separator: ", ")). Pull down or tap Refresh." } label: { Image(systemName: "exclamationmark.icloud") }
-                    .accessibilityLabel("Data sync issue")
-            }
-            Button { appState.showingGlobalSearch = true } label: { Image(systemName: "magnifyingglass").font(.body.weight(.medium)).frame(width: 36, height: 36) }
-                .background(.background, in: Circle()).accessibilityLabel("Search")
-            Button { appState.showingGlobalAddLead = true } label: { Image(systemName: "plus").font(.body.weight(.medium)).frame(width: 36, height: 36) }
-                .background(.background, in: Circle()).accessibilityLabel("Add lead")
+    /// The outer display and traditional iPhones keep the familiar single-column flow.
+    private var compactDisplayLayout: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            headerRow
+            scheduleColumn
+            actionColumn
         }
+        .padding(16)
+    }
+
+    /// The Duo inner display uses each side for a coherent group so cards do not straddle the fold.
+    private var openDisplayLayout: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            headerRow
+            HStack(alignment: .top, spacing: 16) {
+                scheduleColumn
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                actionColumn
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        }
+        .padding(20)
+    }
+
+    private var scheduleColumn: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            dayLine
+            TimelineCard(day: chosenDay, dayKey: chosenKey, forecast: appState.weather.forecast)
+            NumbersRow()
+            if let forecast = appState.weather.forecast { WeekStrip(forecast: forecast) }
+        }
+    }
+
+    private var actionColumn: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Next up").font(.headline)
+                Spacer()
+                if !deck.isEmpty {
+                    Button("\(current + 1) of \(deck.count) · \(remaining) to do") { showingAll = true }
+                        .font(.caption).foregroundStyle(.secondary).buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 2)
+            deckContent
+        }
+    }
+
+    @ViewBuilder private var deckContent: some View {
+        if deck.isEmpty {
+            allClear
+        } else {
+            DeckCardView(card: deck[current])
+                .offset(offset)
+                .rotationEffect(.degrees(Double(offset.width / 20)))
+                .gesture(dragGesture)
+                .id(deck[current].id)
+                .background {
+                    // A hint that more cards follow, sized to the card in front.
+                    if current + 1 < deck.count {
+                        RoundedRectangle(cornerRadius: 20).fill(.background)
+                            .shadow(color: .black.opacity(0.04), radius: 8, y: 4)
+                            .scaleEffect(0.96)
+                            .offset(y: 12)
+                    }
+                }
+                .animation(.spring(duration: 0.35), value: offset)
+                .padding(.bottom, 10)
+        }
+    }
+
+    private var headerRow: some View {
+        Image("Logo").resizable().scaledToFit().frame(height: 34).accessibilityLabel("ProLine Roofing & Solar")
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var dayLine: some View {
@@ -244,6 +274,7 @@ private struct DeckCardView: View {
     @State private var confirmingBalance = false
     @State private var showingSurvey = false
     @State private var showingSchedule = false
+    @State private var showingAddTask = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -272,19 +303,36 @@ private struct DeckCardView: View {
         }
         .sheet(isPresented: $showingSurvey) { if let lead = card.lead { ScheduleSurveySheet(lead: lead) } }
         .sheet(isPresented: $showingSchedule) { if let lead = card.lead { ScheduleJobSheet(lead: lead) } }
+        .sheet(isPresented: $showingAddTask) { if let lead = card.lead { AddLeadTaskSheet(lead: lead) } }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                if card.priority == .critical { Circle().fill(.red).frame(width: 8, height: 8) }
-                Text(card.priority.label).font(.subheadline).foregroundStyle(card.priority == .critical ? Color.red : Color.secondary)
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    if card.priority == .critical { Circle().fill(.red).frame(width: 8, height: 8) }
+                    Text(card.priority.label).font(.subheadline).foregroundStyle(card.priority == .critical ? Color.red : Color.secondary)
+                }
+                if let lead = card.lead {
+                    Text(lead.name).font(.title2.weight(.semibold))
+                    Text(DeckCard.summary(for: lead)).foregroundStyle(.secondary)
+                } else {
+                    Text("Office").font(.title2.weight(.semibold))
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             if let lead = card.lead {
-                Text(lead.name).font(.title2.weight(.semibold))
-                Text(DeckCard.summary(for: lead)).foregroundStyle(.secondary)
-            } else {
-                Text("Office").font(.title2.weight(.semibold))
+                Button { showingAddTask = true } label: {
+                    Image(systemName: "plus")
+                        .font(.body.weight(.medium))
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+                .background(Color(.secondarySystemBackground), in: Circle())
+                .accessibilityLabel("Add task for \(lead.name)")
+                .accessibilityHint("Opens a form for a new customer task")
             }
         }
     }
@@ -426,7 +474,10 @@ struct TimelineCard: View {
         return rows.sorted { ($0.time ?? ($0.kind == .onSite ? "00:00" : "99")) < ($1.time ?? ($1.kind == .onSite ? "00:00" : "99")) }
     }
 
-    private var rows: [Booking] { Self.bookings(in: appState.leads, dayKey: dayKey, today: SupabaseService.today, timesheets: appState.timesheets) }
+    private var crewEntries: [TimesheetEntry] {
+        appState.adminTimesheetChecks.contains { $0.date == dayKey } ? appState.adminTimesheetChecks : appState.timesheets
+    }
+    private var rows: [Booking] { Self.bookings(in: appState.leads, dayKey: dayKey, today: SupabaseService.today, timesheets: crewEntries) }
     private var nextID: String? {
         let now = Date.now.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
         guard Calendar.current.isDateInToday(day) else { return rows.first?.id }
@@ -493,8 +544,12 @@ struct NumbersRow: View {
     private var overdue: Double { live.filter { [.completed, .waitingForPayment].contains($0.stage) }.reduce(0) { $0 + $1.balance } }
     private var quotes: [Lead] { appState.leads.filter { $0.stage == .quoteSent } }
     private var workers: [CRMUser] { appState.users.filter { $0.role != "admin" && $0.dayRate != nil } }
-    private var onSite: Int { Set(appState.timesheets.filter { $0.date == today && $0.type != "off" }.map(\.userID)).count }
-    private var unrecorded: Int { workers.filter { worker in !appState.timesheets.contains { $0.userID == worker.id && $0.date == today } }.count }
+    private var crewEntries: [TimesheetEntry] {
+        let planned = appState.adminTimesheetChecks.filter { $0.date == today }
+        return planned.isEmpty ? appState.timesheets.filter { $0.date == today } : planned
+    }
+    private var onSite: Int { Set(crewEntries.filter { $0.type != "off" }.map(\.userID)).count }
+    private var unrecorded: Int { workers.filter { worker in !crewEntries.contains { $0.userID == worker.id } }.count }
     @State private var showingCrew = false
 
     var body: some View {

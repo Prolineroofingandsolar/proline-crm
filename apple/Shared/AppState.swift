@@ -422,6 +422,9 @@ final class AppState {
                 users += crew
                 timesheets = dayKeys.prefix(4).map { TimesheetEntry(id: "ts-dan-\($0)", userID: "crew-dan", leadID: "preview-job-1", date: $0, type: "full", amount: 180, createdAt: $0) }
                     + dayKeys.prefix(3).map { TimesheetEntry(id: "ts-lee-\($0)", userID: "crew-lee", leadID: "preview-job-1", date: $0, type: $0 == dayKeys[2] ? "half" : "full", amount: $0 == dayKeys[2] ? 80 : 160, createdAt: $0) }
+                adminTimesheetChecks = timesheets.map {
+                    TimesheetEntry(id: "office-\($0.id)", userID: $0.userID, leadID: $0.leadID, date: $0.date, type: $0.type, amount: $0.amount, createdAt: $0.createdAt)
+                }
                 paymentRuns = [PaymentRun(id: "run-dan", userID: "crew-dan", weekStart: monday, status: .submitted, paidDate: nil, notes: nil, createdAt: monday)]
                 let yesterday = SupabaseService.localDay(for: Calendar.current.date(byAdding: .day, value: -1, to: .now) ?? .now)
                 let lastWeek = SupabaseService.localDay(for: Calendar.current.date(byAdding: .day, value: -8, to: .now) ?? .now)
@@ -1463,6 +1466,7 @@ final class AppState {
         let entry = TimesheetEntry(
             id: UUID().uuidString, userID: userID, leadID: kind == "off" ? "" : leadID, date: date, type: kind,
             amount: kind == "off" ? 0 : rate * (kind == "half" ? 0.5 : 1), createdAt: SupabaseService.now)
+        if isWorkerPreview { adminTimesheetChecks.append(entry); return true }
         do {
             try await SupabaseService.shared.insert(entry, into: "admin_timesheet_entries"); adminTimesheetChecks.append(entry); return true
         } catch { errorMessage = "Your office timesheet copy could not be saved: \(error.localizedDescription)"; return false }
@@ -1475,6 +1479,7 @@ final class AppState {
             errorMessage = "Office timesheet entry could not be found."; return false
         }
         let old = adminTimesheetChecks[index]; adminTimesheetChecks[index] = entry
+        if isWorkerPreview { return true }
         do { try await SupabaseService.shared.update(entry, in: "admin_timesheet_entries", id: entry.id); return true } catch {
             adminTimesheetChecks[index] = old; errorMessage = "Your office timesheet copy could not be updated."; return false
         }
@@ -1484,6 +1489,7 @@ final class AppState {
         guard isAdmin else { errorMessage = "Only administrators can maintain the office timesheet copy."; return }
         guard let index = adminTimesheetChecks.firstIndex(where: { $0.id == entry.id }) else { return }
         adminTimesheetChecks.remove(at: index)
+        if isWorkerPreview { return }
         do { try await SupabaseService.shared.delete(from: "admin_timesheet_entries", id: entry.id) } catch {
             adminTimesheetChecks.insert(entry, at: index); errorMessage = "Office timesheet entry could not be deleted."
         }

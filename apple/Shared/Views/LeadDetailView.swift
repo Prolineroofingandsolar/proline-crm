@@ -947,7 +947,7 @@ struct JobUpdateSheet: View {
     }
 }
 
-private struct AddLeadTaskSheet: View {
+struct AddLeadTaskSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     let lead: Lead
