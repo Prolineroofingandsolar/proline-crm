@@ -19,6 +19,13 @@ enum CRMFormat {
         return day(iso)
     }
 
+    /// The recorded creation date, including the time when the source stored one.
+    static func addedAt(_ iso: String) -> String {
+        guard let date = SupabaseService.date(from: iso) else { return iso.isEmpty ? "Not recorded" : iso }
+        guard iso.contains("T") else { return day(iso) }
+        return date.formatted(.dateTime.day().month(.abbreviated).year().hour().minute())
+    }
+
     static func money(_ value: Double, pence: Bool = false) -> String {
         value.formatted(.currency(code: "GBP").precision(.fractionLength(pence ? 2 : 0)))
     }

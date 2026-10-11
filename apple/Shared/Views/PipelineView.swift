@@ -85,7 +85,7 @@ private struct MobilePipelineOpportunity:View {
 private struct MobilePipelineCard:View {
     let lead:Lead;let tint:Color
     private var next:CRMTask?{lead.tasks.first{!$0.completed}}
-    var body:some View{VStack(alignment:.leading,spacing:12){HStack(alignment:.top,spacing:11){Circle().fill(tint.opacity(0.14)).frame(width:46,height:46).overlay(Text(lead.name.prefix(1)).font(.headline).foregroundStyle(tint));VStack(alignment:.leading,spacing:3){Text(lead.name).font(.headline);Text(lead.address.isEmpty ? "Address not added":lead.address).font(.caption).foregroundStyle(.secondary).lineLimit(1);Text(lead.jobType).font(.subheadline)};Spacer();VStack(alignment:.trailing,spacing:5){Text(lead.value,format:.currency(code:"GBP").precision(.fractionLength(0))).font(.headline);Image(systemName:"chevron.right").font(.caption).foregroundStyle(.tertiary)}};HStack(spacing:7){Text(lead.source.isEmpty ? "Direct":lead.source).font(.caption2).padding(.horizontal,7).padding(.vertical,4).background(tint.opacity(0.1),in:Capsule()).foregroundStyle(tint);if let next{Label(next.title,systemImage:"circle").font(.caption).foregroundStyle(.secondary).lineLimit(1)}else{Text("No next action").font(.caption).foregroundStyle(.orange)};Spacer();Text(lead.jobRef).font(.caption2).foregroundStyle(.tertiary)}}.padding(14).background(.background)}
+    var body:some View{VStack(alignment:.leading,spacing:12){HStack(alignment:.top,spacing:11){Circle().fill(tint.opacity(0.14)).frame(width:46,height:46).overlay(Text(lead.name.prefix(1)).font(.headline).foregroundStyle(tint));VStack(alignment:.leading,spacing:3){Text(lead.name).font(.headline);Text(lead.address.isEmpty ? "Address not added":lead.address).font(.caption).foregroundStyle(.secondary).lineLimit(1);Text(lead.jobType).font(.subheadline)};Spacer();VStack(alignment:.trailing,spacing:5){Text(lead.value,format:.currency(code:"GBP").precision(.fractionLength(0))).font(.headline);Image(systemName:"chevron.right").font(.caption).foregroundStyle(.tertiary)}};HStack(spacing:7){Text(lead.source.isEmpty ? "Direct":lead.source).font(.caption2).padding(.horizontal,7).padding(.vertical,4).background(tint.opacity(0.1),in:Capsule()).foregroundStyle(tint);if let next{Label(next.title,systemImage:"circle").font(.caption).foregroundStyle(.secondary).lineLimit(1)}else{Text("No next action").font(.caption).foregroundStyle(.orange)};Spacer()};HStack{Text(lead.jobRef);Spacer();Label("Added \(CRMFormat.addedAt(lead.createdAt))",systemImage:"calendar.badge.plus")}.font(.caption2).foregroundStyle(.tertiary)}.padding(14).background(.background)}
 }
 private func stageColorMobile(_ s:LeadStage)->Color{switch s{case .newLead:.blue;case .surveyBooked:.orange;case .quotePreparing,.quoteSent:.purple;case .won,.paid:.green;case .scheduled:.teal;case .inProgress:.cyan;case .completed:.mint;case .waitingForPayment:.indigo;case .lost:.gray}}
 private func stageIconMobile(_ s:LeadStage)->String{switch s{case .newLead:"message.fill";case .surveyBooked:"calendar";case .quotePreparing:"doc.text.fill";case .quoteSent:"paperplane.fill";case .won:"checkmark.circle.fill";case .scheduled:"calendar.badge.clock";case .inProgress:"hammer.fill";case .completed:"flag.checkered";case .waitingForPayment:"clock.fill";case .paid:"sterlingsign.circle.fill";case .lost:"archivebox.fill"}}
@@ -292,7 +292,7 @@ private struct MacLeadCard: View {
                     }
                     HStack {
                         Text(lead.source.isEmpty ? "Direct" : lead.source).font(.caption2).padding(.horizontal, 6).padding(.vertical, 3).background(tint.opacity(0.11), in: Capsule()).foregroundStyle(tint)
-                        Text(age).font(.caption2).foregroundStyle(.secondary)
+                        Text("Added \(CRMFormat.addedAt(lead.createdAt))").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                         Spacer()
                         Text("\(lead.tasks.filter(\.completed).count)/\(lead.tasks.count)").font(.caption2).foregroundStyle(.secondary)
                     }
@@ -334,12 +334,6 @@ private struct MacLeadCard: View {
         } message: { Text("\(lead.name) will leave the live pipeline and move into Completed Jobs.") }
     }
 
-    private var age: String {
-        guard let date = SupabaseService.date(from: lead.createdAt) else { return lead.jobRef }
-        let days = max(0, Calendar.current.dateComponents([.day], from: date, to: .now).day ?? 0)
-        return "\(days)d"
-    }
-
     private func complete(_ task: CRMTask) {
         completing = true
         Task {
@@ -354,8 +348,8 @@ private func stageColor(_ s:LeadStage)->Color{switch s{case .newLead:.blue;case 
 private func stageIcon(_ s:LeadStage)->String{switch s{case .newLead:"message";case .surveyBooked:"calendar";case .quotePreparing:"doc.text";case .quoteSent:"paperplane";case .won:"checkmark.circle";case .scheduled:"calendar.badge.clock";case .inProgress:"hammer";case .completed:"flag.checkered";case .waitingForPayment:"clock";case .paid:"sterlingsign.circle";case .lost:"archivebox"}}
 #endif
 
-struct LeadCard: View { let lead:Lead;var body:some View{VStack(alignment:.leading,spacing:7){HStack{Text(lead.name).font(.headline);Spacer();Text(lead.jobRef).font(.caption).foregroundStyle(.secondary)};Text(lead.jobType).font(.caption).foregroundStyle(.orange);Text(lead.address).font(.caption).foregroundStyle(.secondary).lineLimit(2);if lead.value>0{Text(lead.value,format:.currency(code:"GBP")).font(.subheadline.bold())}}.padding(12).frame(maxWidth:.infinity,alignment:.leading).background(.background,in:RoundedRectangle(cornerRadius:12)).shadow(color:.black.opacity(0.06),radius:3,y:1)} }
-struct LeadRow: View { let lead:Lead;var body:some View{VStack(alignment:.leading){Text(lead.name).font(.headline);Text("\(lead.jobRef) · \(lead.stage.displayName)").font(.caption).foregroundStyle(.secondary)}} }
+struct LeadCard: View { let lead:Lead;var body:some View{VStack(alignment:.leading,spacing:7){HStack{Text(lead.name).font(.headline);Spacer();Text(lead.jobRef).font(.caption).foregroundStyle(.secondary)};Text(lead.jobType).font(.caption).foregroundStyle(.orange);Text(lead.address).font(.caption).foregroundStyle(.secondary).lineLimit(2);if lead.value>0{Text(lead.value,format:.currency(code:"GBP")).font(.subheadline.bold())};Label("Added \(CRMFormat.addedAt(lead.createdAt))",systemImage:"calendar.badge.plus").font(.caption2).foregroundStyle(.tertiary)}.padding(12).frame(maxWidth:.infinity,alignment:.leading).background(.background,in:RoundedRectangle(cornerRadius:12)).shadow(color:.black.opacity(0.06),radius:3,y:1)} }
+struct LeadRow: View { let lead:Lead;var body:some View{VStack(alignment:.leading){Text(lead.name).font(.headline);Text("\(lead.jobRef) · \(lead.stage.displayName)").font(.caption).foregroundStyle(.secondary);Text("Added \(CRMFormat.addedAt(lead.createdAt))").font(.caption2).foregroundStyle(.tertiary)}} }
 
 struct AddLeadView: View {
     @Environment(AppState.self) private var appState

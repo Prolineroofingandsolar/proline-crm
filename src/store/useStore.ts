@@ -596,7 +596,7 @@ export const useStore = create<Store>()(
       // ── Leads ───────────────────────────────────────────────────────────────
       addLead: (data) => {
         const ref = `JOB-${String(jobCounterN++).padStart(3, '0')}`;
-        const now = new Date().toISOString().split('T')[0];
+        const now = new Date().toISOString();
         const lead: Lead = {
           ...data, id: generateId(), jobRef: ref, createdAt: now, updatedAt: now,
           tasks: [], photos: [], notes: [], files: [], materials: [],

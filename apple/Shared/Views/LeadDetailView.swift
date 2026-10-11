@@ -211,12 +211,12 @@ struct LeadDetailView: View {
 
     private func dates(_ lead: Lead) -> some View {
         Section("Dates") {
+            LabeledContent("Added", value: CRMFormat.addedAt(lead.createdAt))
             if let survey = lead.surveyDate {
                 LabeledContent("Survey", value: [CRMFormat.day(survey), lead.surveyTime].compactMap { $0 }.joined(separator: " · "))
             }
             if let start = lead.startDate { LabeledContent("Starts", value: CRMFormat.day(start)) }
             if let end = lead.endDate { LabeledContent("Expected finish", value: CRMFormat.day(end)) }
-            if lead.surveyDate == nil && lead.startDate == nil { Text("Nothing booked").foregroundStyle(.secondary) }
         }
     }
 

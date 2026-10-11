@@ -719,7 +719,7 @@ final class AppState {
             completedDate: [.completed, .waitingForPayment].contains(stage) ? today : nil, paidDate: stage == .paid ? today : nil,
             progress: 0, tasks: tasks, photos: [], notes: leadNotes, files: [], materials: [],
             wonDate: [.won, .scheduled, .inProgress, .completed, .waitingForPayment, .paid].contains(stage) ? today : nil,
-            myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: today, updatedAt: today)
+            myBuilderURL: nil, reviewRequestSent: nil, lat: nil, lng: nil, createdAt: SupabaseService.now, updatedAt: today)
         do {
             try await SupabaseService.shared.insertLead(lead)
             leads.insert(lead, at: 0)

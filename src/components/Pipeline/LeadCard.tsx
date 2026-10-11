@@ -3,7 +3,7 @@ import { Phone, Calendar, ChevronRight, Trophy, Play, CheckCircle, CreditCard, C
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Lead } from '../../types';
-import { formatCurrency, formatDateShort, dayLabel, jobTypeColor } from '../../utils/helpers';
+import { formatAddedAt, formatCurrency, formatDateShort, dayLabel, jobTypeColor } from '../../utils/helpers';
 import { useStore } from '../../store/useStore';
 import { StorageImage } from '../StorageAsset';
 
@@ -73,14 +73,14 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
 
       {/* Location */}
       <p className="text-xs text-gray-500 mb-2 pl-6">{lead.address.split(',').slice(-2).join(',').trim()}</p>
+      <p className="text-[11px] text-gray-400 mb-2 pl-6 flex items-center gap-1">
+        <Calendar size={11} /> Added {formatAddedAt(lead.createdAt)}
+      </p>
 
       {/* Stage-specific content */}
       <div className="pl-6">
         {lead.stage === 'New Lead' && (
-          <div className="flex items-center justify-between">
-            <span className={`text-xs font-medium ${dayLabel(lead.createdAt) === 'Today' ? 'text-green-600' : dayLabel(lead.createdAt) === 'Yesterday' ? 'text-amber-600' : 'text-gray-400'}`}>
-              {dayLabel(lead.createdAt)}
-            </span>
+          <div className="flex items-center justify-end">
             <div className="flex gap-1">
               <a href={`https://wa.me/${lead.phone.replace(/\s/g, '')}`} onClick={e => e.stopPropagation()} target="_blank" rel="noreferrer"
                 className="p-1 rounded bg-green-50 text-green-600 hover:bg-green-100"><MessageSquare size={12} /></a>

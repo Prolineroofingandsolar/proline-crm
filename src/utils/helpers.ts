@@ -13,6 +13,17 @@ export const formatDateShort = (d?: string) => {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 };
 
+export const formatAddedAt = (d?: string) => {
+  if (!d) return 'Not recorded';
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return d;
+  const options: Intl.DateTimeFormatOptions = {
+    day: 'numeric', month: 'short', year: 'numeric',
+    ...(d.includes('T') ? { hour: '2-digit', minute: '2-digit' } : {}),
+  };
+  return date.toLocaleString('en-GB', options);
+};
+
 export const dayLabel = (d?: string) => {
   if (!d) return '';
   const date = new Date(d);

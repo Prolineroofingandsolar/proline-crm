@@ -19,7 +19,7 @@ function formatFindAddress(raw: string, postcode: string): string {
 
 import type { Lead, JobType } from '../../types';
 import { useStore } from '../../store/useStore';
-import { formatCurrency, formatDate, jobTypeColor } from '../../utils/helpers';
+import { formatAddedAt, formatCurrency, formatDate, jobTypeColor } from '../../utils/helpers';
 
 const JOB_TYPES: JobType[] = ['Roof Repair', 'Solar Installation', 'New Roof', 'Flat Roof', 'Solar + Battery', 'Guttering', 'Fascias & Soffits', 'Chimney Repair'];
 
@@ -232,6 +232,7 @@ export default function InfoTab({ lead }: { lead: Lead }) {
 
       <div className="space-y-3">
         <Row label="Reference" value={lead.jobRef} />
+        <Row label="Added" value={formatAddedAt(lead.createdAt)} />
         <Row label="Customer" value={lead.name} />
         <Row label="Phone" value={lead.phone} />
         <Row label="Email" value={lead.email} />

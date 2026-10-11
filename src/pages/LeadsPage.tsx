@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Phone, Mail, Trophy, ChevronRight, Trash2, Search } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import { formatCurrency, formatDate, jobTypeColor } from '../utils/helpers';
+import { formatAddedAt, formatCurrency, jobTypeColor } from '../utils/helpers';
 import AddLeadModal from '../components/Pipeline/AddLeadModal';
 import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 
@@ -56,7 +56,7 @@ export default function LeadsPage() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Location</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stage</th>
               {isAdmin && <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Value</th>}
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Created</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Added</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
@@ -82,7 +82,7 @@ export default function LeadsPage() {
                   <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 whitespace-nowrap">{lead.stage}</span>
                 </td>
                 {isAdmin && <td className="px-4 py-3 text-sm font-semibold text-gray-700 whitespace-nowrap">{lead.value > 0 ? formatCurrency(lead.value) : '—'}</td>}
-                <td className="px-4 py-3 text-sm text-gray-400 hidden lg:table-cell">{formatDate(lead.createdAt)}</td>
+                <td className="px-4 py-3 text-sm text-gray-400 hidden lg:table-cell whitespace-nowrap">{formatAddedAt(lead.createdAt)}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                     <a href={`tel:${lead.phone}`} className="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500"><Phone size={13} /></a>
