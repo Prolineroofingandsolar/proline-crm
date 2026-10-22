@@ -12,6 +12,8 @@
   <key>NSCameraUsageDescription</key><string>ProLine CRM uses the camera to add before, during and after photos to a job.</string>
   <key>NSSpeechRecognitionUsageDescription</key><string>ProLine CRM uses speech recognition to prepare reviewed job progress notes and task changes.</string>
   <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>com.prolineroofingandsolar.crm</string><key>CFBundleURLSchemes</key><array><string>prolinecrm</string></array></dict></array>
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <key>NSLocalNetworkUsageDescription</key><string>ProLine CRM connects to Paperclip on your Mac to show your AI agents in the Virtual Office.</string>
   <key>UILaunchScreen</key><dict/>
   <key>NSSupportsLiveActivities</key><true/>
   <key>NSSupportsLiveActivitiesFrequentUpdates</key><true/>

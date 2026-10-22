@@ -24,6 +24,7 @@ struct RootView: View {
             ("Customers", [.contacts, .email]),
             ("Business", [.accounts, .team, .fleet]),
             ("Resources", [.files, .tools]),
+            ("AI team", [.office]),
         ]
     }
     private var workerSections: [AppSection] { [.dashboard, .calendar, .jobs, .tasks, .timesheet, .tools] }
@@ -400,6 +401,7 @@ private extension View {
                 Section("Resources") {
                     moreLink(.files)
                     moreLink(.tools)
+                    moreLink(.office)
                     Button {
                         appState.showingAssistant = true
                     } label: {
@@ -494,6 +496,7 @@ private struct SectionContent: View {
             case .timesheet: TimesheetView()
             case .cis: CISView()
             case .tools: RoofingToolsView()
+            case .office: VirtualOfficeView()
             case .settings: SettingsView()
             }
         }

@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		412002D2E845045D8ABCFCCF /* VirtualOfficeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A59C6A48FB25FAEEF8BB21 /* VirtualOfficeView.swift */; };
+		113D9C9F9350687E349152C0 /* VirtualOfficeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A59C6A48FB25FAEEF8BB21 /* VirtualOfficeView.swift */; };
+		3609285D5584385EDC28DCC9 /* PaperclipService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E61B4E41EF6970F7495FD4 /* PaperclipService.swift */; };
+		AF12E7F38010604EF70295EC /* PaperclipService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E61B4E41EF6970F7495FD4 /* PaperclipService.swift */; };
 		0648E9BFA9989E418007BA36 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1124751956B1D90B6489ADE7 /* RootView.swift */; };
 		0976A6092012819742D1BED8 /* PayrollViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF16B57CF42196DA023354A /* PayrollViews.swift */; };
 		0A6D5335897BF543B3496DA0 /* TimesheetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C271B8ECBDDA70E88C7927A /* TimesheetViews.swift */; };
@@ -163,6 +167,7 @@
 		4B98F6F1BDF384E6B4A51DB4 /* ContactLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactLinks.swift; sourceTree = "<group>"; };
 		504C74BD92984F137A041D8F /* CRMLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRMLogicTests.swift; sourceTree = "<group>"; };
 		51A4DBE4864E2D9DAF866B55 /* RoofingWorkflowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoofingWorkflowViews.swift; sourceTree = "<group>"; };
+		C7E61B4E41EF6970F7495FD4 /* PaperclipService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperclipService.swift; sourceTree = "<group>"; };
 		5D03082AC6A483D2BF0F07D0 /* AddressSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressSearchService.swift; sourceTree = "<group>"; };
 		60A63AB803245371E52A5C07 /* MacOperationsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOperationsViews.swift; sourceTree = "<group>"; };
 		628D29D8B5886B34241198AB /* TeamHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamHubView.swift; sourceTree = "<group>"; };
@@ -173,6 +178,7 @@
 		91A56B7310279EB386850363 /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineView.swift; sourceTree = "<group>"; };
 		94705493636263CF0B142A9E /* QuotePDFRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotePDFRenderer.swift; sourceTree = "<group>"; };
 		97CB30822368769F57E75640 /* ProLineCRM-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "ProLineCRM-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D9A59C6A48FB25FAEEF8BB21 /* VirtualOfficeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualOfficeView.swift; sourceTree = "<group>"; };
 		9F50204BD5453D21D7A515C0 /* ActionQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionQueueView.swift; sourceTree = "<group>"; };
 		A56A442B5FB64919428E1379 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		AF44176F2052ADA4FAE0736D /* CustomerDeckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomerDeckView.swift; sourceTree = "<group>"; };
@@ -198,6 +204,7 @@
 			isa = PBXGroup;
 			children = (
 				5D03082AC6A483D2BF0F07D0 /* AddressSearchService.swift */,
+				C7E61B4E41EF6970F7495FD4 /* PaperclipService.swift */,
 				4B98F6F1BDF384E6B4A51DB4 /* ContactLinks.swift */,
 				0E3CD5F95F5979736AB77AA9 /* CRMFormat.swift */,
 				C15F2C475C0F8AF3B86C93E5 /* KeychainStore.swift */,
@@ -282,6 +289,7 @@
 			children = (
 				C02AF66FEBD0B82C80CEE696 /* AccountsViews.swift */,
 				9F50204BD5453D21D7A515C0 /* ActionQueueView.swift */,
+				D9A59C6A48FB25FAEEF8BB21 /* VirtualOfficeView.swift */,
 				8A9A145C7E1F26D10196B717 /* CalendarView.swift */,
 				02474CC5E3238C41CE4E7415 /* CallOutcomeSheet.swift */,
 				177D310CA0AAE1F3BA4DFBE9 /* ContactsFilesReportsViews.swift */,
@@ -486,6 +494,8 @@
 			files = (
 				DA2873087A0F37439F3D8D11 /* AccountsViews.swift in Sources */,
 				49D88EB7B7CC2CEA10ECDE39 /* ActionQueueView.swift in Sources */,
+				412002D2E845045D8ABCFCCF /* VirtualOfficeView.swift in Sources */,
+				3609285D5584385EDC28DCC9 /* PaperclipService.swift in Sources */,
 				81CD8DAEB60A6FFC07CABB6F /* AddressSearchService.swift in Sources */,
 				AEFF7B6D081E406E835478C7 /* AppState.swift in Sources */,
 				597678F841D57E07EE201798 /* CRMFormat.swift in Sources */,
@@ -531,6 +541,8 @@
 			files = (
 				73E302D51125FB25B9DA7D9A /* AccountsViews.swift in Sources */,
 				5E2C6A62E3A1082802A65516 /* ActionQueueView.swift in Sources */,
+				113D9C9F9350687E349152C0 /* VirtualOfficeView.swift in Sources */,
+				AF12E7F38010604EF70295EC /* PaperclipService.swift in Sources */,
 				6D00B30ECF349125383084B5 /* AddressSearchService.swift in Sources */,
 				D8FB94A333137FB76CDC8C90 /* AppState.swift in Sources */,
 				99A15F2A48BC03FA99F4C397 /* CRMFormat.swift in Sources */,

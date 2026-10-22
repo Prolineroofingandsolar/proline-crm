@@ -519,4 +519,20 @@ final class CRMLogicTests: XCTestCase {
         XCTAssertEqual(note, "rain from 15:00")
         XCTAssertEqual(WeatherPolicy.note(for: hours.map { WeatherHour(date: $0.date, temperature: 14, rainChance: 5, code: 1) }, now: start, calendar: calendar), "dry all day")
     }
+
+    func testPaperclipAgentDecodesWithMissingOptionalFields() throws {
+        let json = #"[{"id":"a1","name":"Sam Sales","role":"sales","title":null,"status":"running","reportsTo":"ceo","budgetMonthlyCents":3000,"spentMonthlyCents":1250.5}]"#
+        let agents = try JSONDecoder().decode([PaperclipAgent].self, from: Data(json.utf8))
+        XCTAssertEqual(agents.first?.displayRole, "Sales")
+        XCTAssertEqual(agents.first?.spentMonthlyCents, 1250.5)
+        XCTAssertNil(agents.first?.lastHeartbeatAt)
+    }
+
+    func testPaperclipActivityReadsAsASentence() throws {
+        let json =
+            #"{"id":"e1","actorType":"user","actorId":"me","action":"agent.paused","entityType":"agent","entityId":"a1","agentId":"a1","details":null,"createdAt":"2026-10-22T09:00:00.000Z"}"#
+        let entry = try JSONDecoder().decode(PaperclipActivity.self, from: Data(json.utf8))
+        XCTAssertEqual(entry.summary(names: ["a1": "Lena"]), "You · paused · Lena")
+        XCTAssertNotNil(PaperclipService.date(entry.createdAt))
+    }
 }

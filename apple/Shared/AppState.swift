@@ -2291,7 +2291,7 @@ enum SyncPolicy {
 enum AppSection: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard", pipeline = "Pipeline", jobs = "Jobs", tasks = "Tasks", email = "Email", calendar = "Calendar", team =
         "Team Hub", contacts = "Contacts", files = "Files", fleet = "Fleet", accounts = "Accounts", finance = "Finance", reports =
-        "Reports", timesheet = "Timesheet", cis = "CIS", tools = "Tools", settings = "Settings"
+        "Reports", timesheet = "Timesheet", cis = "CIS", tools = "Tools", office = "Virtual Office", settings = "Settings"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -2311,6 +2311,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .timesheet: "clock";
         case .cis: "doc.text";
         case .tools: "wrench.and.screwdriver";
+        case .office: "building.2";
         case .settings: "gearshape"
         }
     }

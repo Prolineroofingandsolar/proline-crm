@@ -86,6 +86,8 @@ struct SettingsView: View {
                     Text("Gmail assistant")
                 }
 
+                PaperclipConnectionSection()
+
                 Section("Data") {
                     Button("Export CRM data as CSV") { prepareExport() }
                 }
