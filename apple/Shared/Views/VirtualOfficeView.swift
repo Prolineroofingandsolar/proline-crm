@@ -35,11 +35,13 @@ final class VirtualOffice {
                 lastUpdated = .now
                 return
             }
-            async let agents = PaperclipService.agents(company: companyID)
-            async let runs = PaperclipService.liveRuns(company: companyID)
-            async let activity = PaperclipService.activity(company: companyID)
-            async let issues = PaperclipService.openIssues(company: companyID)
-            (self.agents, self.runs, self.activity, self.issues) = try await (agents, runs, activity, issues)
+            // Swift 6 treats sharing one local String across several `async let`
+            // calls as a potential data race. These requests are small local calls;
+            // perform them in sequence so the iOS target stays strictly Sendable-safe.
+            self.agents = try await PaperclipService.agents(company: companyID)
+            self.runs = try await PaperclipService.liveRuns(company: companyID)
+            self.activity = try await PaperclipService.activity(company: companyID)
+            self.issues = try await PaperclipService.openIssues(company: companyID)
             connection = .connected
             lastUpdated = .now
         } catch {
