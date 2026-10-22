@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Contact, FolderOpen, BarChart2, Settings, ChevronDown, Kanban, LogOut, Clock, Receipt, Landmark, Building2 } from 'lucide-react';
+import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Contact, FolderOpen, BarChart2, Settings, ChevronDown, Kanban, LogOut, Clock, Receipt, Landmark, Bot } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 const ALL_NAV = [
@@ -15,7 +15,7 @@ const ALL_NAV = [
   { id: 'reports',   label: 'Reports',   icon: BarChart2,       adminOnly: true },
   { id: 'cis',       label: 'CIS',       icon: Receipt,         adminOnly: true },
   { id: 'banking',   label: 'Banking',   icon: Landmark,        adminOnly: true },
-  { id: 'office',    label: 'Virtual Office', icon: Building2,  adminOnly: true },
+  { id: 'office',    label: 'Virtual Office', icon: Bot,        adminOnly: true },
   { id: 'settings',  label: 'Settings',  icon: Settings,        adminOnly: true },
 ];
 
