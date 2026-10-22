@@ -24,6 +24,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.105.4",
     "@tailwindcss/vite": "^4.3.0",
+    "@tauri-apps/api": "~2.11.1",
+    "@tauri-apps/plugin-http": "~2.7.0",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-window-state": "^2.4.1",
     "leaflet": "^1.9.4",

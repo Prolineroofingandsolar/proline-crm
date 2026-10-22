@@ -42,6 +42,7 @@ export default function TopBar({ onNewLead }: Props) {
     pipeline: 'Pipeline', dashboard: 'Dashboard', leads: 'Leads',
     jobs: 'Jobs', tasks: 'Tasks', calendar: 'Calendar', timesheet: 'Timesheet',
     contacts: 'Contacts', files: 'Files', reports: 'Reports', settings: 'Settings',
+    office: 'Virtual Office',
   };
 
   const openLead = (id: string) => {

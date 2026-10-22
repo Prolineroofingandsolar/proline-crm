@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Save, User, Building2, Bell, Shield, Palette, Trash2, Plus, Key, LogOut, X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { getDeviceNotificationPermission, isMacApp, sendDeviceNotification } from '../utils/push';
+import VirtualOfficeSettings from '../components/VirtualOffice/VirtualOfficeSettings';
 
 type AddUserForm = { name: string; username: string; password: string; confirm: string; role: 'admin' | 'user' };
 type ChangePwForm = { id: string; newPw: string; confirm: string };
@@ -340,6 +341,8 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      <VirtualOfficeSettings />
 
       {/* Pipeline stages */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

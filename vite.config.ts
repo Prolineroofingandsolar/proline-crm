@@ -10,6 +10,12 @@ export default defineConfig(({ mode }) => {
     server: {
       strictPort: true,
       proxy: {
+        // Paperclip (local AI agent server) has no CORS headers, so dev goes through here.
+        '/paperclip': {
+          target: env.PAPERCLIP_URL || 'http://localhost:3100',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/paperclip/, ''),
+        },
         '/api/getaddress': {
           target: 'https://api.getaddress.io',
           changeOrigin: true,

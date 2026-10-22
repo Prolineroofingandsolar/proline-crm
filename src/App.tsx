@@ -19,6 +19,7 @@ import SettingsPage from './pages/SettingsPage';
 import TimesheetPage from './pages/TimesheetPage';
 import CISPage from './pages/CISPage';
 import BankingPage from './pages/BankingPage';
+import VirtualOfficePage from './pages/VirtualOfficePage';
 import AddLeadModal from './components/Pipeline/AddLeadModal';
 import AIAssistant from './components/AI/AIAssistant';
 import { isMacApp, sendDeviceNotification } from './utils/push';
@@ -49,7 +50,7 @@ function LoadingScreen() {
 export default function App() {
   const { currentPage, setCurrentPage, currentUserId, users, leads, generalTasks, pushEnabled, isLoaded, loadData } = useStore();
   const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
-  const ADMIN_ONLY_PAGES = new Set(['dashboard', 'leads', 'contacts', 'files', 'reports', 'settings', 'cis', 'banking']);
+  const ADMIN_ONLY_PAGES = new Set(['dashboard', 'leads', 'contacts', 'files', 'reports', 'settings', 'cis', 'banking', 'office']);
   const [showNewLead, setShowNewLead] = useState(false);
 
   useEffect(() => {
@@ -127,6 +128,7 @@ export default function App() {
     reports: <ReportsPage />,
     cis: <CISPage />,
     banking: <BankingPage />,
+    office: <VirtualOfficePage />,
     settings: <SettingsPage />,
     timesheet: <TimesheetPage />,
   };
