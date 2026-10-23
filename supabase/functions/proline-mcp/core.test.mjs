@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { analyse, asToolResult, londonToday, pipelineSummary, TOOLS, validateArguments } from "./core.mjs";
+import { AGENT_WRITE_TOOLS, analyse, asToolResult, londonToday, pipelineSummary, TOOLS, toolsForConfig, validateArguments } from "./core.mjs";
 
 test("advertises the four read-only Grok Bot tools", () => {
   assert.deepEqual(TOOLS.map((tool) => tool.name), [
@@ -14,6 +14,28 @@ test("advertises the four read-only Grok Bot tools", () => {
     assert.equal(tool.annotations.destructiveHint, false);
     assert.equal(tool.securitySchemes[0].type, "oauth2");
   }
+});
+
+test("keeps business writes gated while allowing a check-in-only pilot", () => {
+  const pilot = toolsForConfig(true, false);
+  assert.deepEqual(pilot.map((tool) => tool.name), [
+    ...TOOLS.map((tool) => tool.name),
+    "proline_agent_checkin",
+  ]);
+  assert.equal(pilot.at(-1).annotations.readOnlyHint, false);
+  assert.deepEqual(toolsForConfig(false, false), TOOLS);
+  assert.equal(toolsForConfig(true, true).length, TOOLS.length + AGENT_WRITE_TOOLS.length);
+});
+
+test("caps Virtual Office check-ins at eight findings", () => {
+  const base = {
+    agent_slug: "stace",
+    provider_run_id: "run-1",
+    status: "succeeded",
+    summary: "Three exceptions found.",
+  };
+  assert.doesNotThrow(() => validateArguments("proline_agent_checkin", { ...base, items: Array.from({ length: 8 }, () => ({})) }));
+  assert.throws(() => validateArguments("proline_agent_checkin", { ...base, items: Array.from({ length: 9 }, () => ({})) }), /eight items/);
 });
 
 test("summarises pipeline value and balances without customer details", () => {

@@ -7,15 +7,15 @@ const schema = (properties = {}, required = []) => ({
 });
 
 const oauth = [{ type: "oauth2", scopes: ["email", "profile"] }];
-const tool = (name, description, inputSchema) => ({
+const tool = (name, description, inputSchema, readOnly = true, idempotent = true) => ({
   name,
   description,
   inputSchema,
   securitySchemes: oauth,
   annotations: {
-    readOnlyHint: true,
+    readOnlyHint: readOnly,
     destructiveHint: false,
-    idempotentHint: true,
+    idempotentHint: idempotent,
     openWorldHint: false,
   },
 });
@@ -47,6 +47,78 @@ export const TOOLS = [
     schema({ query: { ...text, minLength: 1, maxLength: 150 } }, ["query"]),
   ),
 ];
+
+// The check-in tool may be enabled during the Stace pilot because it only
+// records operational telemetry. The remaining tools stay hidden until the
+// pilot passes and PROLINE_AGENT_WRITES_ENABLED is explicitly set. None can
+// send, purchase, delete, move money or alter a live job.
+export const AGENT_WRITE_TOOLS = [
+  tool(
+    "proline_agent_checkin",
+    "Record one concise agent run in the ProLine Virtual Office. Maximum eight findings; makes no customer-facing change.",
+    schema({
+      agent_slug: { ...text, minLength: 1, maxLength: 80 },
+      provider_run_id: { ...text, minLength: 1, maxLength: 180 },
+      status: { type: "string", enum: ["running", "succeeded", "partial", "failed"] },
+      summary: { ...text, maxLength: 3000 },
+      items: { type: "array", maxItems: 8, items: { type: "object" } },
+      trigger: { type: "string", enum: ["scheduled", "manual", "webhook", "comparison"] },
+      next_run_at: { ...text, maxLength: 40 },
+      error: { ...text, maxLength: 500 },
+    }, ["agent_slug", "provider_run_id", "status", "summary", "items"]),
+    false,
+    true,
+  ),
+  tool(
+    "proline_create_internal_task",
+    "Create one idempotent internal ProLine task owned by the calling agent. Cannot change jobs or contact customers.",
+    schema({
+      agent_slug: { ...text, minLength: 1, maxLength: 80 },
+      dedupe_key: { ...text, minLength: 1, maxLength: 180 },
+      title: { ...text, minLength: 1, maxLength: 180 },
+      due_date: { ...text, maxLength: 10 },
+      priority: { type: "string", enum: ["low", "medium", "high"] },
+      category: { ...text, maxLength: 80 },
+      notes: { ...text, maxLength: 2000 },
+    }, ["agent_slug", "dedupe_key", "title"]),
+    false,
+    true,
+  ),
+  tool(
+    "proline_update_internal_task",
+    "Update completion, due date or notes on an internal task previously created by the same agent. Human-created tasks cannot be changed.",
+    schema({
+      agent_slug: { ...text, minLength: 1, maxLength: 80 },
+      task_id: { ...text, minLength: 1, maxLength: 100 },
+      completed: { type: "boolean" },
+      due_date: { ...text, maxLength: 10 },
+      notes: { ...text, maxLength: 2000 },
+    }, ["agent_slug", "task_id"]),
+    false,
+    true,
+  ),
+  tool(
+    "proline_submit_action_proposal",
+    "Submit a proposed consequential action for administrator review. This records a proposal only and never executes it.",
+    schema({
+      agent_slug: { ...text, minLength: 1, maxLength: 80 },
+      category: { type: "string", enum: ["customer_message", "schedule", "job_change", "finance", "purchase", "delete", "legal", "complaint", "other"] },
+      title: { ...text, minLength: 1, maxLength: 180 },
+      summary: { ...text, minLength: 1, maxLength: 2000 },
+      risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
+      source_refs: { type: "array", maxItems: 20, items: { type: "object" } },
+      proposed_action: { type: "object" },
+    }, ["agent_slug", "category", "title", "summary"]),
+    false,
+    false,
+  ),
+];
+
+export function toolsForConfig(checkinsEnabled = false, writesEnabled = false) {
+  if (writesEnabled) return [...TOOLS, ...AGENT_WRITE_TOOLS];
+  if (checkinsEnabled) return [...TOOLS, AGENT_WRITE_TOOLS[0]];
+  return TOOLS;
+}
 
 export function pipelineSummary(snapshot) {
   const stages = new Map();
@@ -104,8 +176,8 @@ function asArray(value) {
   }
 }
 
-export function validateArguments(name, args) {
-  const definition = TOOLS.find((item) => item.name === name);
+export function validateArguments(name, args, definitions = [...TOOLS, ...AGENT_WRITE_TOOLS]) {
+  const definition = definitions.find((item) => item.name === name);
   if (!definition) throw new Error("Unknown ProLine tool.");
   if (!args || typeof args !== "object" || Array.isArray(args)) {
     throw new Error("Arguments must be an object.");
@@ -122,6 +194,14 @@ export function validateArguments(name, args) {
   }
   if (args.today !== undefined && !validDay(args.today)) {
     throw new Error("Use a valid YYYY-MM-DD date.");
+  }
+  if (args.due_date !== undefined && !validDay(args.due_date)) {
+    throw new Error("Use a valid YYYY-MM-DD due date.");
+  }
+  if (name === "proline_agent_checkin") {
+    if (!Array.isArray(args.items) || args.items.length > 8) throw new Error("A check-in may contain no more than eight items.");
+    if (typeof args.summary !== "string" || args.summary.length > 3000) throw new Error("Check-in summary is too long.");
+    if (args.next_run_at !== undefined && Number.isNaN(Date.parse(args.next_run_at))) throw new Error("next_run_at must be an ISO timestamp.");
   }
 }
 
