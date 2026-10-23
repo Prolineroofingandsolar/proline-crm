@@ -3,6 +3,20 @@ import XCTest
 @testable import ProLine_CRM
 
 final class CRMLogicTests: XCTestCase {
+    func testWorkforceReportLimits() {
+        XCTAssertTrue(WorkforcePolicy.reportWithinLimits(itemCount: 8, summary: "Eight concise exceptions."))
+        XCTAssertFalse(WorkforcePolicy.reportWithinLimits(itemCount: 9, summary: "Too many exceptions."))
+        XCTAssertFalse(
+            WorkforcePolicy.reportWithinLimits(
+                itemCount: 1, summary: Array(repeating: "word", count: 301).joined(separator: " ")))
+    }
+
+    func testWorkforceUsageAdviceKeepsNextBotLockedWhenUsageIsHigh() {
+        XCTAssertTrue(WorkforcePolicy.usageAdvice(percent: nil).contains("Measure"))
+        XCTAssertTrue(WorkforcePolicy.usageAdvice(percent: 90).contains("locked"))
+        XCTAssertTrue(WorkforcePolicy.usageAdvice(percent: 40).contains("Do not upgrade"))
+    }
+
     func testDailyCompanyPlanRanksOverdueJobsBeforeQuotes() {
         var overdue = lead(id: "late", stage: .inProgress, value: 1000, balance: 500)
         overdue.endDate = "2026-09-05"

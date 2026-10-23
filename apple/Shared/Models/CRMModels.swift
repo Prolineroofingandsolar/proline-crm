@@ -1,5 +1,205 @@
 import Foundation
 
+// MARK: - Provider-neutral AI workforce
+
+struct WorkforceAgent: Codable, Identifiable, Hashable, Sendable {
+    let id: String
+    let slug: String
+    let name: String
+    let title: String
+    let provider: String
+    let status: String
+    let active: Bool
+    let pilot: Bool
+    let colour: String
+    let accessory: String
+    let instructions: String
+    let scheduleLabel: String?
+    let currentWork: String?
+    let nextRunAt: String?
+    let lastCheckinAt: String?
+    let lastSuccessAt: String?
+    let lastError: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, slug, name, title, provider, status, active, pilot, colour, accessory, instructions
+        case scheduleLabel = "schedule_label"
+        case currentWork = "current_work"
+        case nextRunAt = "next_run_at"
+        case lastCheckinAt = "last_checkin_at"
+        case lastSuccessAt = "last_success_at"
+        case lastError = "last_error"
+    }
+}
+
+struct WorkforceRun: Codable, Identifiable, Hashable, Sendable {
+    let id: String
+    let agentId: String
+    let triggerType: String
+    let status: String
+    let summary: String?
+    let itemCount: Int
+    let error: String?
+    let startedAt: String
+    let finishedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, status, summary, error
+        case agentId = "agent_id"
+        case triggerType = "trigger_type"
+        case itemCount = "item_count"
+        case startedAt = "started_at"
+        case finishedAt = "finished_at"
+    }
+}
+
+struct WorkforceProposal: Codable, Identifiable, Hashable, Sendable {
+    let id: String
+    let agentId: String
+    let category: String
+    let title: String
+    let summary: String
+    let riskLevel: String
+    let status: String
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, category, title, summary, status
+        case agentId = "agent_id"
+        case riskLevel = "risk_level"
+        case createdAt = "created_at"
+    }
+}
+
+struct WorkforceConnector: Codable, Identifiable, Hashable, Sendable {
+    let id: String
+    let connector: String
+    let displayName: String
+    let provider: String
+    let status: String
+    let lastCheckedAt: String?
+    let lastSuccessAt: String?
+    let lastError: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, connector, provider, status
+        case displayName = "display_name"
+        case lastCheckedAt = "last_checked_at"
+        case lastSuccessAt = "last_success_at"
+        case lastError = "last_error"
+    }
+}
+
+struct WorkforceSettings: Codable, Hashable, Sendable {
+    let organisationId: String
+    let targetPlan: String
+    let autoTopupEnabled: Bool
+    let weeklyUsagePercent: Double?
+    let usageMeasuredAt: String?
+    let maxReportItems: Int
+    let maxReportWords: Int
+    let paperclipFallbackEnabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case organisationId = "organisation_id"
+        case targetPlan = "target_plan"
+        case autoTopupEnabled = "auto_topup_enabled"
+        case weeklyUsagePercent = "weekly_usage_percent"
+        case usageMeasuredAt = "usage_measured_at"
+        case maxReportItems = "max_report_items"
+        case maxReportWords = "max_report_words"
+        case paperclipFallbackEnabled = "paperclip_fallback_enabled"
+    }
+}
+
+struct WorkforceAcceptance: Codable, Identifiable, Hashable, Sendable {
+    let id: String
+    let agentId: String
+    let activationOrder: Int
+    let gateStatus: String
+    let trialStartedAt: String?
+    let trialPassedAt: String?
+    let remoteRunConfirmed: Bool
+    let correctOrganisationConfirmed: Bool
+    let duplicateFreeConfirmed: Bool
+    let approvalBoundariesConfirmed: Bool
+    let conciseReportsConfirmed: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case agentId = "agent_id"
+        case activationOrder = "activation_order"
+        case gateStatus = "gate_status"
+        case trialStartedAt = "trial_started_at"
+        case trialPassedAt = "trial_passed_at"
+        case remoteRunConfirmed = "remote_run_confirmed"
+        case correctOrganisationConfirmed = "correct_organisation_confirmed"
+        case duplicateFreeConfirmed = "duplicate_free_confirmed"
+        case approvalBoundariesConfirmed = "approval_boundaries_confirmed"
+        case conciseReportsConfirmed = "concise_reports_confirmed"
+    }
+}
+
+struct WorkforceAction: Codable, Identifiable, Hashable, Sendable {
+    let id: String
+    let agentId: String
+    let actionType: String
+    let entityType: String
+    let entityId: String
+    let summary: String
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, summary
+        case agentId = "agent_id"
+        case actionType = "action_type"
+        case entityType = "entity_type"
+        case entityId = "entity_id"
+        case createdAt = "created_at"
+    }
+}
+
+struct WorkforceControlReply: Codable, Sendable {
+    let accepted: Bool?
+    let ok: Bool?
+    let message: String?
+    let error: String?
+}
+
+struct WorkforceAcceptanceChecks: Sendable, Equatable {
+    var remoteRunConfirmed: Bool
+    var correctOrganisationConfirmed: Bool
+    var duplicateFreeConfirmed: Bool
+    var approvalBoundariesConfirmed: Bool
+    var conciseReportsConfirmed: Bool
+
+    init(_ gate: WorkforceAcceptance) {
+        remoteRunConfirmed = gate.remoteRunConfirmed
+        correctOrganisationConfirmed = gate.correctOrganisationConfirmed
+        duplicateFreeConfirmed = gate.duplicateFreeConfirmed
+        approvalBoundariesConfirmed = gate.approvalBoundariesConfirmed
+        conciseReportsConfirmed = gate.conciseReportsConfirmed
+    }
+
+    var allPassed: Bool {
+        remoteRunConfirmed && correctOrganisationConfirmed && duplicateFreeConfirmed
+            && approvalBoundariesConfirmed && conciseReportsConfirmed
+    }
+}
+
+enum WorkforcePolicy {
+    static func reportWithinLimits(itemCount: Int, summary: String) -> Bool {
+        itemCount <= 8 && summary.split(whereSeparator: \.isWhitespace).count <= 300
+    }
+
+    static func usageAdvice(percent: Double?) -> String {
+        guard let percent else { return "Measure this week's Grok usage before adding another bot." }
+        if percent >= 85 { return "Keep the next bot locked and review the plan before increasing usage." }
+        if percent >= 65 { return "Usage is getting high. Keep server filtering on and review again next week." }
+        return "Usage is within the pilot target. Do not upgrade unless measured demand requires it."
+    }
+}
+
 enum CRMReportExport {
     static func csv(leads: [Lead]) -> String {
         let header = [

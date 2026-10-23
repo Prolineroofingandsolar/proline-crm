@@ -158,9 +158,464 @@ private func initials(_ name: String) -> String {
     return letters.isEmpty ? "?" : letters.joined()
 }
 
-// MARK: - Office
+// MARK: - Native ProLine workforce control room
+
+@MainActor @Observable
+final class WorkforceOffice {
+    enum Connection { case connecting, connected, failed(String) }
+
+    var connection: Connection = .connecting
+    var agents: [WorkforceAgent] = []
+    var runs: [WorkforceRun] = []
+    var proposals: [WorkforceProposal] = []
+    var connectors: [WorkforceConnector] = []
+    var acceptance: [WorkforceAcceptance] = []
+    var actions: [WorkforceAction] = []
+    var settings: WorkforceSettings?
+    var busyAgentIDs: Set<String> = []
+    var busyProposalIDs: Set<String> = []
+    var lastUpdated: Date?
+
+    func refresh() async {
+        do {
+            agents = try await SupabaseService.shared.fetchWorkforceAgents()
+            runs = try await SupabaseService.shared.fetchWorkforceRuns()
+            proposals = try await SupabaseService.shared.fetchWorkforceProposals()
+            connectors = try await SupabaseService.shared.fetchWorkforceConnectors()
+            acceptance = try await SupabaseService.shared.fetchWorkforceAcceptance()
+            actions = try await SupabaseService.shared.fetchWorkforceActions()
+            settings = try await SupabaseService.shared.fetchWorkforceSettings()
+            connection = .connected
+            lastUpdated = .now
+        } catch {
+            connection = .failed(error.localizedDescription)
+        }
+    }
+
+    func latestRun(for agentID: String) -> WorkforceRun? { runs.first { $0.agentId == agentID } }
+    func gate(for agentID: String) -> WorkforceAcceptance? { acceptance.first { $0.agentId == agentID } }
+    func name(for agentID: String) -> String { agents.first { $0.id == agentID }?.name ?? "AI agent" }
+
+    func run(_ agent: WorkforceAgent) async throws {
+        busyAgentIDs.insert(agent.id)
+        defer { busyAgentIDs.remove(agent.id) }
+        _ = try await SupabaseService.shared.runWorkforceAgent(id: agent.id)
+        await refresh()
+    }
+
+    func review(_ proposal: WorkforceProposal, approved: Bool) async throws {
+        busyProposalIDs.insert(proposal.id)
+        defer { busyProposalIDs.remove(proposal.id) }
+        _ = try await SupabaseService.shared.reviewWorkforceProposal(id: proposal.id, approved: approved)
+        await refresh()
+    }
+}
 
 struct VirtualOfficeView: View {
+    @Environment(AppState.self) private var appState
+    @State private var office = WorkforceOffice()
+    @State private var selectedAgent: WorkforceAgent?
+    @State private var showingUsage = false
+    @State private var showingFallback = false
+
+    private var pending: [WorkforceProposal] { office.proposals.filter { $0.status == "pending" } }
+    private var urgent: [WorkforceRun] {
+        office.runs.filter { $0.status == "failed" || $0.status == "partial" }.prefix(8).map { $0 }
+    }
+    private var waiting: [WorkforceAgent] {
+        office.agents.filter { $0.status == "degraded" || $0.status == "error" || ($0.active && $0.lastCheckinAt == nil) }
+    }
+    private var money: [WorkforceProposal] { pending.filter { $0.category == "finance" || $0.category == "purchase" } }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                controlHeader
+                switch office.connection {
+                case .connecting where office.agents.isEmpty:
+                    ProgressView("Opening your AI office…").frame(maxWidth: .infinity).padding(.top, 80)
+                case .failed(let message):
+                    ContentUnavailableView(
+                        "Control room is not ready", systemImage: "exclamationmark.triangle",
+                        description: Text(message))
+                default:
+                    decisionBoard
+                    if !pending.isEmpty { approvalQueue }
+                    agentGrid
+                    connectorStrip
+                    evidenceLog
+                }
+            }
+            .padding()
+        }
+        .background(Color.gray.opacity(0.06))
+        .navigationTitle("AI Workforce")
+        .toolbar {
+            ToolbarItem { Button { showingUsage = true } label: { Label("Usage", systemImage: "gauge.with.dots.needle.50percent") } }
+            ToolbarItem { Button { Task { await office.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") } }
+            ToolbarItem { Button { showingFallback = true } label: { Label("Paperclip fallback", systemImage: "lifepreserver") } }
+        }
+        .task {
+            while !Task.isCancelled {
+                await office.refresh()
+                try? await Task.sleep(for: .seconds(20))
+            }
+        }
+        .sheet(item: $selectedAgent) { agent in
+            WorkforceAgentSheet(office: office, agent: agent)
+        }
+        .sheet(isPresented: $showingUsage) {
+            WorkforceUsageSheet(office: office)
+        }
+        .sheet(isPresented: $showingFallback) {
+            NavigationStack { PaperclipConnectionForm() }
+                #if os(macOS)
+                    .frame(minWidth: 460, minHeight: 360)
+                #endif
+        }
+    }
+
+    private var controlHeader: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16).fill(proLineOrange.gradient)
+                Image(systemName: "building.2.crop.circle.fill").font(.title).foregroundStyle(.white)
+            }.frame(width: 56, height: 56)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("ProLine control room").font(.title2.bold())
+                Text("The bots run in the cloud. Closing this Mac does not stop a correctly connected Grok routine.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                HStack(spacing: 12) {
+                    Label(office.settings?.autoTopupEnabled == false ? "Paid top-ups off" : "Check top-ups", systemImage: "creditcard")
+                    Label("Paperclip fallback \(office.settings?.paperclipFallbackEnabled == true ? "on" : "off")", systemImage: "lifepreserver")
+                    Label("Reports: max \(office.settings?.maxReportItems ?? 8) items", systemImage: "text.badge.checkmark")
+                }.font(.caption)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 4) {
+                Text((office.settings?.targetPlan ?? "premium").capitalized).font(.headline)
+                Text(office.settings?.weeklyUsagePercent.map { "\(Int($0))% this week" } ?? "Usage not measured")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(16).background(.background, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.quaternary))
+    }
+
+    private var decisionBoard: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
+            WorkforceQueueCard(title: "Needs your approval", icon: "checkmark.shield", colour: .orange,
+                rows: pending.map { $0.title }, empty: "Nothing waiting")
+            WorkforceQueueCard(title: "Urgent today", icon: "exclamationmark.triangle", colour: .red,
+                rows: urgent.compactMap(\.summary), empty: "No new urgent exceptions")
+            WorkforceQueueCard(title: "Waiting on someone", icon: "person.crop.circle.badge.clock", colour: .blue,
+                rows: waiting.map { "\($0.name): \($0.lastError ?? $0.currentWork ?? "waiting for first check-in")" }, empty: "Nobody is blocked")
+            WorkforceQueueCard(title: "Money to chase", icon: "sterlingsign.circle", colour: .teal,
+                rows: money.map { $0.title }, empty: "No payment proposal waiting")
+        }
+    }
+
+    private var agentGrid: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("YOUR TEAM").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 235), spacing: 12)], spacing: 12) {
+                ForEach(office.agents.sorted { (office.gate(for: $0.id)?.activationOrder ?? 99) < (office.gate(for: $1.id)?.activationOrder ?? 99) }) { agent in
+                    Button { selectedAgent = agent } label: {
+                        WorkforceAgentCard(agent: agent, run: office.latestRun(for: agent.id), gate: office.gate(for: agent.id))
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var approvalQueue: some View {
+        GroupBox("Approval queue") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Approval records your decision; it does not send, purchase, pay, delete or change a live schedule automatically.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(pending.prefix(8)) { proposal in
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack {
+                            Text(proposal.title).font(.headline)
+                            Spacer()
+                            Text(proposal.riskLevel.uppercased()).font(.caption2.bold())
+                                .foregroundStyle(proposal.riskLevel == "critical" || proposal.riskLevel == "high" ? Color.red : Color.orange)
+                        }
+                        Text(proposal.summary).font(.subheadline).foregroundStyle(.secondary)
+                        HStack {
+                            Label(office.name(for: proposal.agentId), systemImage: "sparkles")
+                            Spacer()
+                            Button("Reject", role: .destructive) { review(proposal, approved: false) }
+                            Button("Approve proposal") { review(proposal, approved: true) }.buttonStyle(.borderedProminent)
+                        }.font(.caption)
+                    }
+                    .padding(12).background(Color.gray.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                    .disabled(office.busyProposalIDs.contains(proposal.id))
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func review(_ proposal: WorkforceProposal, approved: Bool) {
+        Task {
+            do { try await office.review(proposal, approved: approved) }
+            catch { appState.errorMessage = error.localizedDescription }
+        }
+    }
+
+    private var connectorStrip: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("CONNECTORS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            ScrollView(.horizontal) {
+                HStack(spacing: 10) {
+                    ForEach(office.connectors) { connector in
+                        Label(connector.displayName, systemImage: connector.status == "connected" || connector.status == "available" ? "checkmark.circle.fill" : "wrench.and.screwdriver.fill")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(connector.status == "connected" || connector.status == "available" ? Color.green : Color.orange)
+                            .padding(.horizontal, 10).padding(.vertical, 7)
+                            .background(.background, in: Capsule()).overlay(Capsule().strokeBorder(.quaternary))
+                    }
+                }
+            }.scrollIndicators(.hidden)
+        }
+    }
+
+    private var evidenceLog: some View {
+        GroupBox("Evidence-backed activity") {
+            VStack(alignment: .leading, spacing: 10) {
+                if office.actions.isEmpty { Text("No bot has changed an internal note or task yet.").foregroundStyle(.secondary) }
+                ForEach(office.actions.prefix(12)) { action in
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(office.name(for: action.agentId)).font(.caption.weight(.semibold)).frame(width: 72, alignment: .leading)
+                        Text(action.summary).font(.subheadline)
+                        Spacer()
+                        Text(timeAgo(action.createdAt)).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct WorkforceQueueCard: View {
+    let title: String
+    let icon: String
+    let colour: Color
+    let rows: [String]
+    let empty: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: icon).font(.headline).foregroundStyle(colour)
+            if rows.isEmpty { Text(empty).font(.subheadline).foregroundStyle(.secondary) }
+            ForEach(Array(rows.prefix(3).enumerated()), id: \.offset) { _, row in
+                Text(row).font(.subheadline).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }.padding(14).frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+            .background(.background, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(colour.opacity(0.2)))
+    }
+}
+
+private struct WorkforceAgentCard: View {
+    let agent: WorkforceAgent
+    let run: WorkforceRun?
+    let gate: WorkforceAcceptance?
+
+    private var colour: Color { Color(hexString: agent.colour) ?? .gray }
+    private var symbol: String {
+        switch agent.slug {
+        case "bruce": "clipboard.fill"
+        case "stace": "calendar.badge.clock"
+        case "rodney": "chart.line.uptrend.xyaxis"
+        case "derrick": "sterlingsign.circle.fill"
+        case "big-john": "hammer.fill"
+        default: "sparkles"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16).fill(colour.gradient)
+                    Image(systemName: symbol).font(.title2).foregroundStyle(.white)
+                }.frame(width: 52, height: 52)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(agent.name).font(.headline)
+                    Text(agent.title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer()
+                Text((gate?.gateStatus ?? "planned").replacingOccurrences(of: "_", with: " ").capitalized)
+                    .font(.caption2.weight(.bold)).padding(.horizontal, 7).padding(.vertical, 4)
+                    .background(colour.opacity(0.12), in: Capsule()).foregroundStyle(colour)
+            }
+            Text(agent.currentWork ?? run?.summary ?? (agent.active ? "Ready for the next cloud check" : "Locked until the previous pilot passes"))
+                .font(.subheadline).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Label(agent.status.capitalized, systemImage: agent.active ? "cloud.fill" : "lock.fill")
+                Spacer()
+                Text(agent.nextRunAt.map { "Next \(timeAgoFuture($0))" } ?? "No run booked")
+            }.font(.caption).foregroundStyle(.secondary)
+        }.padding(14).background(.background, in: RoundedRectangle(cornerRadius: 18))
+            .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(agent.active ? colour.opacity(0.45) : Color.gray.opacity(0.18)))
+    }
+}
+
+private struct WorkforceAgentSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    let office: WorkforceOffice
+    let agent: WorkforceAgent
+    @State private var saving = false
+    @State private var remote = false
+    @State private var correctOrg = false
+    @State private var duplicateFree = false
+    @State private var boundaries = false
+    @State private var concise = false
+
+    private var gate: WorkforceAcceptance? { office.gate(for: agent.id) }
+    private var checks: WorkforceAcceptanceChecks? {
+        guard gate != nil else { return nil }
+        var value = WorkforceAcceptanceChecks(gate!)
+        value.remoteRunConfirmed = remote; value.correctOrganisationConfirmed = correctOrg
+        value.duplicateFreeConfirmed = duplicateFree; value.approvalBoundariesConfirmed = boundaries
+        value.conciseReportsConfirmed = concise
+        return value
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Role") {
+                    Text(agent.instructions)
+                    if let schedule = agent.scheduleLabel { LabeledContent("Schedule", value: schedule) }
+                    LabeledContent("Provider", value: agent.provider.capitalized)
+                }
+                Section("Controls") {
+                    Button { runNow() } label: {
+                        if office.busyAgentIDs.contains(agent.id) { ProgressView() } else { Label("Run a cloud check now", systemImage: "bolt.fill") }
+                    }.disabled(!agent.active || office.busyAgentIDs.contains(agent.id))
+                    if !agent.active && gate?.gateStatus == "ready" {
+                        Button("Activate five-day pilot") { activate() }
+                    }
+                    if !agent.active && gate?.gateStatus != "ready" {
+                        Label("Locked until the previous agent passes", systemImage: "lock.fill").foregroundStyle(.secondary)
+                    }
+                }
+                if gate?.gateStatus == "pilot" {
+                    Section {
+                        Toggle("Runs while the Mac is off", isOn: $remote)
+                        Toggle("Uses the correct ProLine organisation", isOn: $correctOrg)
+                        Toggle("Does not duplicate alerts", isOn: $duplicateFree)
+                        Toggle("Respects approval boundaries", isOn: $boundaries)
+                        Toggle("Reports stay short and clear", isOn: $concise)
+                        Button("Save checks") { saveGate(finalize: false) }
+                        Button("Pass pilot and unlock next bot") { saveGate(finalize: true) }
+                            .disabled(checks?.allPassed != true)
+                    } header: {
+                        Text("Five-day acceptance gate")
+                    } footer: {
+                        Text("ProLine also verifies five separate successful business days before this bot can pass.")
+                    }
+                }
+                if let run = office.latestRun(for: agent.id) {
+                    Section("Latest check-in") {
+                        Text(run.summary ?? run.error ?? "No summary")
+                        LabeledContent("Items", value: "\(run.itemCount) of 8 maximum")
+                        LabeledContent("Status", value: run.status.capitalized)
+                    }
+                }
+            }.formStyle(.grouped).navigationTitle(agent.name)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+                .onAppear {
+                    guard let gate else { return }
+                    remote = gate.remoteRunConfirmed; correctOrg = gate.correctOrganisationConfirmed
+                    duplicateFree = gate.duplicateFreeConfirmed; boundaries = gate.approvalBoundariesConfirmed
+                    concise = gate.conciseReportsConfirmed
+                }
+        }
+        #if os(macOS)
+            .frame(minWidth: 520, minHeight: 640)
+        #endif
+    }
+
+    private func runNow() {
+        Task { do { try await office.run(agent) } catch { appState.errorMessage = error.localizedDescription } }
+    }
+    private func activate() {
+        Task { do { _ = try await SupabaseService.shared.activateWorkforceAgent(id: agent.id); await office.refresh() }
+            catch { appState.errorMessage = error.localizedDescription } }
+    }
+    private func saveGate(finalize: Bool) {
+        guard let checks else { return }
+        saving = true
+        Task { defer { saving = false }; do {
+            _ = try await SupabaseService.shared.updateWorkforceAcceptance(agentID: agent.id, checks: checks, finalize: finalize)
+            await office.refresh()
+        } catch { appState.errorMessage = error.localizedDescription } }
+    }
+}
+
+private struct WorkforceUsageSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    let office: WorkforceOffice
+    @State private var usage = ""
+    @State private var saving = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Weekly Grok usage") {
+                    TextField("Percentage used", text: $usage, prompt: Text("e.g. 42"))
+                    Text(WorkforcePolicy.usageAdvice(percent: Double(usage) ?? office.settings?.weeklyUsagePercent))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Cost controls") {
+                    Label("Automatic paid top-ups are recorded as off", systemImage: "checkmark.shield.fill")
+                    Text("ProLine never buys a plan or enables API billing from this screen.").foregroundStyle(.secondary)
+                }
+            }.formStyle(.grouped).navigationTitle("Usage check")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(saving || Double(usage) == nil) }
+                }
+        }
+        #if os(macOS)
+            .frame(minWidth: 440, minHeight: 320)
+        #endif
+    }
+    private func save() {
+        guard let value = Double(usage), 0...100 ~= value else { return }
+        saving = true
+        Task { defer { saving = false }; do {
+            _ = try await SupabaseService.shared.recordWorkforceUsage(percent: value)
+            await office.refresh(); dismiss()
+        } catch { appState.errorMessage = error.localizedDescription } }
+    }
+}
+
+private func timeAgoFuture(_ raw: String) -> String {
+    guard let date = PaperclipService.date(raw) else { return "soon" }
+    let seconds = Int(date.timeIntervalSinceNow)
+    if seconds <= 0 { return "now" }
+    if seconds < 3600 { return "in \(max(1, seconds / 60))m" }
+    if seconds < 86_400 { return "in \(seconds / 3600)h" }
+    return "in \(seconds / 86_400)d"
+}
+
+private extension Color {
+    init?(hexString: String) {
+        let value = hexString.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        guard value.count == 6, let number = UInt64(value, radix: 16) else { return nil }
+        self.init(red: Double((number >> 16) & 255) / 255, green: Double((number >> 8) & 255) / 255, blue: Double(number & 255) / 255)
+    }
+}
+
+// MARK: - Paperclip fallback
+
+private struct PaperclipOfficeView: View {
     @State private var office = VirtualOffice()
     @State private var selectedAgent: PaperclipAgent?
     @State private var showingSettings = false
