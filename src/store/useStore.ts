@@ -323,7 +323,7 @@ export const useStore = create<Store>()(
               set(s => ({ currentUserId: user.id, users: s.users.some(existing => existing.id === user.id) ? s.users : [...s.users, user] }));
               return true;
             }
-            await supabase.auth.signOut();
+            await supabase.auth.signOut({ scope: 'local' });
           }
         }
         const hash = await hashPassword(password);
@@ -334,7 +334,7 @@ export const useStore = create<Store>()(
         return false;
       },
 
-      logout: () => { void supabase.auth.signOut(); set({ currentUserId: null }); },
+      logout: () => { void supabase.auth.signOut({ scope: 'local' }); set({ currentUserId: null }); },
 
       addUser: async (name, username, password, role) => {
         const existing = get().users.find(u => u.username.toLowerCase() === username.toLowerCase());
