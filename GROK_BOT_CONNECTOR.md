@@ -1,6 +1,6 @@
 # ProLine CRM connector for the Stace pilot
 
-ProLine exposes an organisation-scoped Model Context Protocol (MCP) API that Grok Bot can use as a custom connector. During the pilot, business data is read-only. An optional check-in tool may write only to the AI run log; it cannot change jobs, tasks, customers, schedules or finances.
+ProLine exposes an organisation-scoped Model Context Protocol (MCP) API that Grok Bot can use as a custom connector. Reads are organisation-scoped. Narrow write tools can manage evidence-backed internal notes and tasks, verified shortlisted leads and approval proposals; they cannot contact customers, change live schedules, move money, purchase, delete or change job ownership, dates or stages.
 
 ## Connector URL
 
@@ -26,9 +26,9 @@ The Supabase Auth OAuth server must be enabled for the project before the sign-i
 - `proline_pipeline_summary` totals jobs, values and balances by pipeline stage without returning customer contact details.
 - `proline_find_jobs` finds live jobs by customer name, job reference or job type.
 
-The four business tools are read-only. If pilot check-ins are enabled, `proline_agent_checkin` can record up to eight short findings in the Virtual Office. It cannot change CRM operational records, record payments, send messages, purchase materials or access another organisation.
+The four business tools are read-only. `proline_check_for_changes` prevents unchanged data from waking a full review. `proline_agent_checkin` records up to eight short findings in the Virtual Office. Controlled internal actions require an active staged agent and evidence, and every change is audited.
 
-Internal task and proposal tools are implemented behind `PROLINE_AGENT_WRITES_ENABLED=false`. Leave that switch off throughout the five-day pilot.
+Internal action tools are behind `PROLINE_AGENT_WRITES_ENABLED`. Enabling it does not enable customer contact, schedule changes, payments, purchases, deletions or job-stage changes; those capabilities do not exist in this connector.
 
 ## Useful first prompts
 

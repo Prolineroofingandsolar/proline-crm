@@ -280,6 +280,98 @@ actor SupabaseService {
         let (data, _) = try await authenticatedData(for: call); return try decoder.decode(Reply.self, from: data).tasksCreated
     }
 
+    func fetchWorkforceAgents() async throws -> [WorkforceAgent] {
+        try await execute(
+            request(path: "ai_agents", query: [.init(name: "select", value: "*"), .init(name: "order", value: "name.asc")]),
+            as: [WorkforceAgent].self)
+    }
+
+    func fetchWorkforceRuns() async throws -> [WorkforceRun] {
+        try await execute(
+            request(
+                path: "ai_agent_runs",
+                query: [.init(name: "select", value: "*"), .init(name: "order", value: "started_at.desc"), .init(name: "limit", value: "80")]),
+            as: [WorkforceRun].self)
+    }
+
+    func fetchWorkforceProposals() async throws -> [WorkforceProposal] {
+        try await execute(
+            request(
+                path: "ai_action_proposals",
+                query: [.init(name: "select", value: "*"), .init(name: "order", value: "created_at.desc"), .init(name: "limit", value: "80")]),
+            as: [WorkforceProposal].self)
+    }
+
+    func fetchWorkforceConnectors() async throws -> [WorkforceConnector] {
+        try await execute(
+            request(path: "integration_health", query: [.init(name: "select", value: "*"), .init(name: "order", value: "display_name.asc")]),
+            as: [WorkforceConnector].self)
+    }
+
+    func fetchWorkforceSettings() async throws -> WorkforceSettings? {
+        let values: [WorkforceSettings] = try await execute(
+            request(path: "ai_workforce_settings", query: [.init(name: "select", value: "*")]), as: [WorkforceSettings].self)
+        return values.first
+    }
+
+    func fetchWorkforceAcceptance() async throws -> [WorkforceAcceptance] {
+        try await execute(
+            request(path: "ai_agent_acceptance", query: [.init(name: "select", value: "*"), .init(name: "order", value: "activation_order.asc")]),
+            as: [WorkforceAcceptance].self)
+    }
+
+    func fetchWorkforceActions() async throws -> [WorkforceAction] {
+        try await execute(
+            request(
+                path: "ai_agent_actions",
+                query: [.init(name: "select", value: "*"), .init(name: "order", value: "created_at.desc"), .init(name: "limit", value: "60")]),
+            as: [WorkforceAction].self)
+    }
+
+    private func aiControl(_ payload: [String: Any]) async throws -> WorkforceControlReply {
+        guard let token = KeychainStore.get("supabaseAccessToken") else { throw SupabaseSessionExpired() }
+        var call = URLRequest(url: functionsURL.appending(path: "ai-agent-control"))
+        call.httpMethod = "POST"
+        call.timeoutInterval = 25
+        call.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        call.setValue(anonKey, forHTTPHeaderField: "apikey")
+        call.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        call.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (data, _) = try await authenticatedData(for: call)
+        return try decoder.decode(WorkforceControlReply.self, from: data)
+    }
+
+    func runWorkforceAgent(id: String) async throws -> WorkforceControlReply {
+        try await aiControl(["action": "run_agent", "agent_id": id])
+    }
+
+    func reviewWorkforceProposal(id: String, approved: Bool) async throws -> WorkforceControlReply {
+        try await aiControl(["action": "review_proposal", "proposal_id": id, "decision": approved ? "approved" : "rejected"])
+    }
+
+    func updateWorkforceAcceptance(agentID: String, checks: WorkforceAcceptanceChecks, finalize: Bool) async throws
+        -> WorkforceControlReply
+    {
+        try await aiControl([
+            "action": "update_acceptance", "agent_id": agentID, "finalize": finalize,
+            "remote_run_confirmed": checks.remoteRunConfirmed,
+            "correct_organisation_confirmed": checks.correctOrganisationConfirmed,
+            "duplicate_free_confirmed": checks.duplicateFreeConfirmed,
+            "approval_boundaries_confirmed": checks.approvalBoundariesConfirmed,
+            "concise_reports_confirmed": checks.conciseReportsConfirmed,
+        ])
+    }
+
+    func activateWorkforceAgent(id: String) async throws -> WorkforceControlReply {
+        try await aiControl(["action": "activate_agent", "agent_id": id])
+    }
+
+    func recordWorkforceUsage(percent: Double, plan: String = "premium", note: String = "") async throws -> WorkforceControlReply {
+        try await aiControl([
+            "action": "record_usage", "weekly_usage_percent": percent, "target_plan": plan, "note": note,
+        ])
+    }
+
     func generateQuoteDraft(lead: Lead, survey: RoofSurvey?, brief: String, photos: [AssistantAttachment]) async throws
         -> GeneratedQuoteDraft
     {

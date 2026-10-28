@@ -52,7 +52,15 @@ export const TOOLS = [
 // records operational telemetry. The remaining tools stay hidden until the
 // pilot passes and PROLINE_AGENT_WRITES_ENABLED is explicitly set. None can
 // send, purchase, delete, move money or alter a live job.
-export const AGENT_WRITE_TOOLS = [
+export const PILOT_TOOLS = [
+  tool(
+    "proline_check_for_changes",
+    "Check whether the current organisation data relevant to this agent has materially changed since its last successful report. Use this before a scheduled full review to conserve usage.",
+    schema({
+      agent_slug: { ...text, minLength: 1, maxLength: 80 },
+      workflow: { ...text, minLength: 1, maxLength: 80 },
+    }, ["agent_slug", "workflow"]),
+  ),
   tool(
     "proline_agent_checkin",
     "Record one concise agent run in the ProLine Virtual Office. Maximum eight findings; makes no customer-facing change.",
@@ -65,10 +73,15 @@ export const AGENT_WRITE_TOOLS = [
       trigger: { type: "string", enum: ["scheduled", "manual", "webhook", "comparison"] },
       next_run_at: { ...text, maxLength: 40 },
       error: { ...text, maxLength: 500 },
+      snapshot_fingerprint: { ...text, maxLength: 80 },
     }, ["agent_slug", "provider_run_id", "status", "summary", "items"]),
     false,
     true,
   ),
+];
+
+export const AGENT_WRITE_TOOLS = [
+  ...PILOT_TOOLS,
   tool(
     "proline_create_internal_task",
     "Create one idempotent internal ProLine task owned by the calling agent. Cannot change jobs or contact customers.",
@@ -98,6 +111,89 @@ export const AGENT_WRITE_TOOLS = [
     true,
   ),
   tool(
+    "proline_add_job_note",
+    "Add one attributed internal AI note to an existing job. Cannot contact customers or change job stage, owner, dates, schedule or finances.",
+    schema({
+      agent_slug: { ...text, minLength: 1, maxLength: 80 },
+      job_id: { ...text, minLength: 1, maxLength: 100 },
+      note: { ...text, minLength: 1, maxLength: 2000 },
+      evidence: { ...text, minLength: 5, maxLength: 1000 },
+    }, ["agent_slug", "job_id", "note", "evidence"]),
+    false,
+    false,
+  ),
+  tool(
+    "proline_complete_job_task",
+    "Mark one existing task on a job complete after verifying evidence. Optionally records a short completion note. Does not change the job itself.",
+    schema({
+      agent_slug: { ...text, minLength: 1, maxLength: 80 },
+      job_id: { ...text, minLength: 1, maxLength: 100 },
+      task_id: { ...text, minLength: 1, maxLength: 100 },
+      completion_note: { ...text, maxLength: 1000 },
+      evidence: { ...text, minLength: 5, maxLength: 1000 },
+    }, ["agent_slug", "job_id", "task_id", "evidence"]),
+    false,
+    true,
+  ),
+  tool(
+    "proline_complete_general_task",
+    "Mark one existing internal CRM task complete after verifying evidence. Optionally records an attributed completion note.",
+    schema({
+      agent_slug: { ...text, minLength: 1, maxLength: 80 },
+      task_id: { ...text, minLength: 1, maxLength: 100 },
+      completion_note: { ...text, maxLength: 1000 },
+      evidence: { ...text, minLength: 5, maxLength: 1000 },
+    }, ["agent_slug", "task_id", "evidence"]),
+    false,
+    true,
+  ),
+  tool(
+    "proline_create_verified_lead",
+    "Create one deduplicated New Lead from a verified website enquiry or a MyBuilder enquiry after contact details were officially shared. Never expresses interest, incurs a fee or contacts the customer.",
+    schema({
+      agent_slug: { ...text, minLength: 1, maxLength: 80 },
+      source: { type: "string", enum: ["website", "mybuilder_shortlisted"] },
+      source_event_id: { ...text, minLength: 3, maxLength: 180 },
+      customer_name: { ...text, minLength: 1, maxLength: 180 },
+      phone: { ...text, maxLength: 80 },
+      email: { ...text, maxLength: 254 },
+      address: { ...text, maxLength: 500 },
+      job_type: { ...text, minLength: 1, maxLength: 180 },
+      source_url: { ...text, maxLength: 1000 },
+      evidence: { ...text, minLength: 5, maxLength: 1000 },
+    }, ["agent_slug", "source", "source_event_id", "customer_name", "job_type", "evidence"]),
+    false,
+    true,
+  ),
+  tool(
+    "proline_suggest_job_materials",
+    "Prepare a structured materials suggestion for an existing job and place it in the administrator approval queue. Never orders materials, selects a supplier or commits spending.",
+    schema({
+      agent_slug: { ...text, minLength: 1, maxLength: 80 },
+      job_id: { ...text, minLength: 1, maxLength: 100 },
+      summary: { ...text, minLength: 1, maxLength: 1200 },
+      materials: {
+        type: "array",
+        minItems: 1,
+        maxItems: 25,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            name: { ...text, minLength: 1, maxLength: 160 },
+            quantity: { type: "number", exclusiveMinimum: 0 },
+            unit: { ...text, minLength: 1, maxLength: 40 },
+            reason: { ...text, minLength: 1, maxLength: 500 },
+            basis: { type: "string", enum: ["crm_evidence", "estimate"] },
+          },
+          required: ["name", "quantity", "unit", "reason", "basis"],
+        },
+      },
+    }, ["agent_slug", "job_id", "summary", "materials"]),
+    false,
+    false,
+  ),
+  tool(
     "proline_submit_action_proposal",
     "Submit a proposed consequential action for administrator review. This records a proposal only and never executes it.",
     schema({
@@ -116,7 +212,7 @@ export const AGENT_WRITE_TOOLS = [
 
 export function toolsForConfig(checkinsEnabled = false, writesEnabled = false) {
   if (writesEnabled) return [...TOOLS, ...AGENT_WRITE_TOOLS];
-  if (checkinsEnabled) return [...TOOLS, AGENT_WRITE_TOOLS[0]];
+  if (checkinsEnabled) return [...TOOLS, ...PILOT_TOOLS];
   return TOOLS;
 }
 
@@ -188,6 +284,25 @@ export function validateArguments(name, args, definitions = [...TOOLS, ...AGENT_
   for (const key of definition.inputSchema.required) {
     if (!(key in args)) throw new Error(`Missing argument: ${key}`);
   }
+  for (const [key, value] of Object.entries(args)) {
+    const property = definition.inputSchema.properties[key];
+    if (property.type === "string" && !(name === "proline_find_jobs" && key === "query")) {
+      if (typeof value !== "string") throw new Error(`${key} must be a string.`);
+      if (property.minLength !== undefined && value.length < property.minLength) throw new Error(`${key} is too short.`);
+      if (property.maxLength !== undefined && value.length > property.maxLength) throw new Error(`${key} is too long.`);
+    }
+    if (property.type === "boolean" && typeof value !== "boolean") throw new Error(`${key} must be a boolean.`);
+    if (property.type === "array" && !(name === "proline_agent_checkin" && key === "items")) {
+      if (!Array.isArray(value)) throw new Error(`${key} must be an array.`);
+      if (property.minItems !== undefined && value.length < property.minItems) throw new Error(`${key} has too few items.`);
+      if (property.maxItems !== undefined && value.length > property.maxItems) throw new Error(`${key} has too many items.`);
+    }
+    if (property.type === "number" && (typeof value !== "number" || !Number.isFinite(value))) throw new Error(`${key} must be a number.`);
+    if (property.type === "object" && (!value || typeof value !== "object" || Array.isArray(value))) {
+      throw new Error(`${key} must be an object.`);
+    }
+    if (property.enum && !property.enum.includes(value)) throw new Error(`${key} is invalid.`);
+  }
   if (name === "proline_find_jobs" &&
     (typeof args.query !== "string" || !args.query.trim() || args.query.length > 150)) {
     throw new Error("Query must contain between 1 and 150 characters.");
@@ -201,6 +316,7 @@ export function validateArguments(name, args, definitions = [...TOOLS, ...AGENT_
   if (name === "proline_agent_checkin") {
     if (!Array.isArray(args.items) || args.items.length > 8) throw new Error("A check-in may contain no more than eight items.");
     if (typeof args.summary !== "string" || args.summary.length > 3000) throw new Error("Check-in summary is too long.");
+    if (args.summary.trim().split(/\s+/).filter(Boolean).length > 300) throw new Error("A check-in summary may contain no more than 300 words.");
     if (args.next_run_at !== undefined && Number.isNaN(Date.parse(args.next_run_at))) throw new Error("next_run_at must be an ISO timestamp.");
   }
 }
