@@ -51,3 +51,4 @@ src-tauri/target/
 # Python release helper cache
 __pycache__/
 *.pyc
+.wrangler/
