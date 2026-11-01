@@ -34,6 +34,14 @@ test('worker cannot remove another employee access', async () => {
   assert.equal((await h.run({ action: 'deactivate', user_id: adminId })).status, 403);
   assert.ok(!h.calls.some(c => c.method === 'PATCH'));
 });
+test('browser preflight permits Supabase client headers', async () => {
+  let handler;
+  vm.runInNewContext(code, { Deno: { env: { get: () => '' }, serve: fn => { handler = fn; } }, TextEncoder, Response, Request, crypto, Uint8Array, Date });
+  const response = await handler(new Request('https://test.invalid/worker-invite', { method: 'OPTIONS', headers: { origin: 'https://proline-crm.pages.dev', 'access-control-request-method': 'POST', 'access-control-request-headers': 'authorization,apikey,content-type,x-client-info' } }));
+  assert.equal(response.status, 200);
+  assert.ok(response.headers.get('access-control-allow-headers').includes('x-client-info'));
+  assert.ok(response.headers.get('access-control-allow-methods').includes('POST'));
+});
 test('inactive administrator cannot remove employee access', async () => {
   const h = harness({ id: adminId, active: false, role: 'admin', organisation_id: organisation });
   assert.equal((await h.run({ action: 'deactivate', user_id: workerId })).status, 403);

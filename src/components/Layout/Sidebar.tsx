@@ -22,10 +22,10 @@ const ALL_NAV = [
 
 
 export default function Sidebar() {
-  const { currentPage, setCurrentPage, users, currentUserId, logout } = useStore();
+  const { currentPage, setCurrentPage, users, currentUserId, logout, simpleMode, setSimpleMode } = useStore();
   const currentUser = users.find(u => u.id === currentUserId);
   const isAdmin = currentUser?.role === 'admin';
-  const nav = ALL_NAV.filter(n => isAdmin || !n.adminOnly);
+  const nav = ALL_NAV.filter(n => (isAdmin && !simpleMode) || !n.adminOnly);
   const initial = currentUser?.name?.[0]?.toUpperCase() ?? '?';
   const [showMenu, setShowMenu] = useState(false);
 
@@ -76,9 +76,16 @@ export default function Sidebar() {
                 <p className="text-white/50 text-xs capitalize">@{currentUser?.username} · {currentUser?.role}</p>
               </div>
               <button
+                onClick={() => { setSimpleMode(!simpleMode); setShowMenu(false); }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-white/70 hover:bg-white/10 hover:text-white text-sm transition-colors"
+                hidden={!isAdmin}
+              >
+                {simpleMode ? 'Turn off simple mode' : 'Turn on simple mode'}
+              </button>
+              <button
                 onClick={() => { setShowMenu(false); setCurrentPage('settings'); }}
                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-white/70 hover:bg-white/10 hover:text-white text-sm transition-colors"
-              >
+                hidden={!isAdmin || simpleMode}>
                 <Settings size={14} /> Settings
               </button>
               <button

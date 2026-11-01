@@ -91,6 +91,8 @@ interface Store {
   apiKey: string;
   selectedId: string | null;
   currentPage: string;
+  simpleMode: boolean;
+  setSimpleMode: (enabled: boolean) => void;
   searchQuery: string;
   toast: { message: string; type: 'success' | 'info' | 'error' } | null;
 
@@ -269,6 +271,8 @@ export const useStore = create<Store>()(
       },
       selectedId: null,
       currentPage: 'pipeline',
+      simpleMode: false,
+      setSimpleMode: (enabled) => set({ simpleMode: enabled, currentPage: 'pipeline', selectedId: null }),
       searchQuery: '',
       toast: null,
 
@@ -895,6 +899,7 @@ export const useStore = create<Store>()(
       partialize: (state) => ({
         apiKey: state.apiKey,
         currentPage: state.currentPage,
+        simpleMode: state.simpleMode,
         pushEnabled: state.pushEnabled,
         pushPreferences: state.pushPreferences,
       }),

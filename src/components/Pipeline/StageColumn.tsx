@@ -22,18 +22,19 @@ interface Props {
   leads: Lead[];
   onCardClick: (id: string) => void;
   onAddLead?: () => void;
+  fullWidth?: boolean;
 }
 
-export default function StageColumn({ stage, leads, onCardClick, onAddLead }: Props) {
-  const { users, currentUserId } = useStore();
-  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
+export default function StageColumn({ stage, leads, onCardClick, onAddLead, fullWidth = false }: Props) {
+  const { users, currentUserId, simpleMode } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin' && !simpleMode;
   const cfg = stageConfig[stage];
   const total = leads.reduce((s, l) => s + l.value, 0);
 
   const { setNodeRef, isOver } = useDroppable({ id: stage });
 
   return (
-    <div className="flex flex-col w-56 shrink-0 rounded-xl overflow-hidden shadow-sm border border-gray-100">
+    <div className={`flex flex-col ${fullWidth ? 'w-full h-full' : 'w-56'} shrink-0 rounded-xl overflow-hidden shadow-sm border border-gray-100`}>
       {/* Header */}
       <div className={`${cfg.header} px-3 py-2.5 flex items-center justify-between`}>
         <div className="flex items-center gap-2">
@@ -75,7 +76,7 @@ export default function StageColumn({ stage, leads, onCardClick, onAddLead }: Pr
       </div>
 
       {/* Add button */}
-      {(stage === 'New Lead' || stage === 'Survey Booked') && (
+      {isAdmin && (stage === 'New Lead' || stage === 'Survey Booked') && (
         <button
           onClick={onAddLead}
           className="bg-white border-t border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-1 py-2 text-xs text-gray-500 hover:text-orange-600 transition-colors"
