@@ -43,6 +43,8 @@ export default function TopBar({ onNewLead }: Props) {
     jobs: 'Jobs', tasks: 'Tasks', calendar: 'Calendar', timesheet: 'Timesheet',
     contacts: 'Contacts', files: 'Files', reports: 'Reports', settings: 'Settings',
     office: 'Virtual Office',
+    cis: 'CIS', banking: 'Banking',
+    tools: 'Roofing tools',
   };
 
   const openLead = (id: string) => {
