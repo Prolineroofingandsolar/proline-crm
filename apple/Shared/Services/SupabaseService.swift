@@ -523,9 +523,28 @@ actor SupabaseService {
         return try JSONDecoder().decode(StaffDirectory.self, from: data)
     }
 
-    func updateStaffMember(id: String, role: String, dayRate: Double?, cisRate: Int) async throws {
-        _ = try await staffManagementRequest(["action": "update_staff", "user_id": id, "role": role,
+    func updateStaffMember(id: String, name: String, role: String, dayRate: Double?, cisRate: Int) async throws {
+        _ = try await staffManagementRequest(["action": "update_staff_details", "user_id": id, "name": name, "role": role,
                                              "day_rate": dayRate.map { $0 as Any } ?? NSNull(), "cis_rate": cisRate])
+    }
+
+    func updateStaffEmail(id: String, email: String) async throws {
+        _ = try await staffManagementRequest(["action": "update_staff_email", "user_id": id, "email": email])
+    }
+
+    func fetchStaffPay(id: String) async throws -> StaffPayDetails {
+        struct Reply: Decodable { let details: StaffPayDetails }
+        let data = try await staffManagementRequest(["action": "get_pay_details", "user_id": id])
+        return try JSONDecoder().decode(Reply.self, from: data).details
+    }
+
+    func updateStaffPay(id: String, details: StaffPayDetails, expected: StaffPayDetails) async throws {
+        func object(_ d: StaffPayDetails) -> [String: Any] {
+            ["utr_number": d.utrNumber as Any? ?? NSNull(), "bank_name": d.bankName as Any? ?? NSNull(),
+             "bank_account_number": d.account as Any? ?? NSNull(), "bank_sort_code": d.sortCode as Any? ?? NSNull()]
+        }
+        var body = object(details); body["expected"] = object(expected); body["user_id"] = id; body["action"] = "update_pay_details"
+        _ = try await staffManagementRequest(body)
     }
 
     func restoreStaffMember(id: String) async throws {
@@ -1013,6 +1032,16 @@ private extension DateFormatter {
 struct StaffDirectory: Decodable, Sendable {
     let staff: [StaffMember]
     let invitations: [StaffInvitationSummary]
+}
+
+struct StaffPayDetails: Decodable, Sendable {
+    var utrNumber: String?
+    var bankName: String?
+    var account: String?
+    var sortCode: String?
+    enum CodingKeys: String, CodingKey {
+        case utrNumber = "utr_number", bankName = "bank_name", account = "bank_account_number", sortCode = "bank_sort_code"
+    }
 }
 
 struct StaffMember: Decodable, Identifiable, Sendable {
