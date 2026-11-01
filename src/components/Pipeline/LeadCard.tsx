@@ -14,8 +14,8 @@ interface Props {
 }
 
 export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
-  const { moveToStage, markAsWon, deleteTask, toggleTask, users, currentUserId } = useStore();
-  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
+  const { moveToStage, markAsWon, deleteTask, toggleTask, users, currentUserId, simpleMode } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin' && !simpleMode;
   const [tasksOpen, setTasksOpen] = useState(false);
 
   const {

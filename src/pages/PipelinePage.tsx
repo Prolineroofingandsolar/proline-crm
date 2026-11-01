@@ -18,10 +18,12 @@ import AddLeadModal from '../components/Pipeline/AddLeadModal';
 import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 
 export default function PipelinePage() {
-  const { leads, selectedId, setSelectedId, searchQuery, moveToStage } = useStore();
+  const { leads, selectedId, setSelectedId, searchQuery, moveToStage, users, currentUserId, simpleMode } = useStore();
+  const canMove = users.find(user => user.id === currentUserId)?.role === 'admin' && !simpleMode;
   const [showAddModal, setShowAddModal] = useState(false);
   const [addStage, setAddStage] = useState<Stage>('New Lead');
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [mobileStage, setMobileStage] = useState<Stage>('New Lead');
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -52,7 +54,7 @@ export default function PipelinePage() {
     const { active, over } = event;
     setActiveId(null);
 
-    if (!over) return;
+    if (!over || !canMove) return;
 
     const draggedId = String(active.id);
     const draggedLead = leads.find(l => l.id === draggedId);
@@ -99,8 +101,14 @@ export default function PipelinePage() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        {/* Board */}
-        <div className="flex-1 overflow-x-auto overflow-y-hidden p-4">
+        {/* On phones show one stage at a time; the full board remains available on wider screens. */}
+        <div className="sm:hidden flex flex-1 min-h-0 flex-col gap-3 p-3">
+          <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Pipeline stages">
+            {STAGES.map(stage => <button key={stage} onClick={() => setMobileStage(stage as Stage)} aria-pressed={mobileStage === stage} className={`shrink-0 rounded-xl px-3 py-2 text-sm font-semibold ${mobileStage === stage ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700'}`}>{stage} <span className="ml-1 opacity-75">{filtered.filter(lead => lead.stage === stage).length}</span></button>)}
+          </div>
+          <div className="flex-1 min-h-0"><StageColumn stage={mobileStage} leads={filtered.filter(lead => lead.stage === mobileStage)} onCardClick={setSelectedId} onAddLead={() => handleAddForStage(mobileStage)} fullWidth /></div>
+        </div>
+        <div className="hidden sm:block flex-1 overflow-x-auto overflow-y-hidden p-4">
           <div className="flex gap-3 h-full" style={{ minWidth: 'max-content' }}>
             {STAGES.map(stage => (
               <StageColumn

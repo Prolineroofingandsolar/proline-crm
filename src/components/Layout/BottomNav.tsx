@@ -34,10 +34,10 @@ const USER_MORE = [
 ];
 
 export default function BottomNav() {
-  const { currentPage, setCurrentPage, users, currentUserId } = useStore();
+  const { currentPage, setCurrentPage, users, currentUserId, simpleMode, setSimpleMode } = useStore();
   const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
-  const MAIN = isAdmin ? ADMIN_MAIN : USER_MAIN;
-  const MORE  = isAdmin ? ADMIN_MORE : USER_MORE;
+  const MAIN = isAdmin && !simpleMode ? ADMIN_MAIN : USER_MAIN;
+  const MORE  = isAdmin && !simpleMode ? ADMIN_MORE : USER_MORE;
   const [showMore, setShowMore] = useState(false);
 
   const go = (id: string) => { setCurrentPage(id); setShowMore(false); };
@@ -62,6 +62,7 @@ export default function BottomNav() {
                 </button>
               ))}
             </div>
+            {isAdmin && <div className="mt-4 border-t pt-4"><label className="flex items-center justify-between gap-3 text-sm font-semibold text-gray-800">Simple mode<input type="checkbox" checked={simpleMode} onChange={e => { setSimpleMode(e.target.checked); setShowMore(false); }} className="h-5 w-5 accent-orange-600"/></label><p className="mt-1 text-xs text-gray-500">Shows a simpler layout. Your account permissions stay the same.</p></div>}
           </div>
         </>
       )}

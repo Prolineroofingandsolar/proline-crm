@@ -7,8 +7,8 @@ interface Props {
 }
 
 export default function TopBar({ onNewLead }: Props) {
-  const { currentPage, searchQuery, setSearchQuery, setSelectedId, setCurrentPage, users, currentUserId, leads } = useStore();
-  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
+  const { currentPage, searchQuery, setSearchQuery, setSelectedId, setCurrentPage, users, currentUserId, leads, simpleMode } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin' && !simpleMode;
   const [showNotifs, setShowNotifs] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
