@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, user_id: user.id, login_enabled: loginEnabled });
     }
 
-    if (["list_staff", "update_staff", "restore", "cancel_invite"].includes(action)) {
+    if (["list_staff", "update_staff", "update_staff_details", "update_staff_email", "get_pay_details", "update_pay_details", "restore", "cancel_invite"].includes(action)) {
       const profile = await authenticatedProfile(req);
       if (!profile?.active || profile.role !== "admin") return json({ error: "Only administrators can manage staff." }, 403);
       const headers = { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json", Prefer: "return=representation" };
@@ -98,6 +98,53 @@ Deno.serve(async (req) => {
         if (!response.ok) return json({ error: "Invitation could not be cancelled." }, 502);
         const rows = await response.json();
         return rows.length === 1 ? json({ ok: true }) : json({ error: "Invitation is no longer available." }, 404);
+      }
+      if (action === "get_pay_details" || action === "update_pay_details") {
+        const fields = ["utr_number", "bank_name", "bank_account_number", "bank_sort_code"];
+        if (action === "get_pay_details") {
+          const response = await fetch(`${url}/rest/v1/profiles?id=eq.${id}&${scope}&select=${fields.join(",")}`, { headers });
+          if (!response.ok) return json({ error: "Pay details could not be loaded." }, 502);
+          const rows = await response.json();
+          return rows.length === 1 ? json({ details: rows[0] }) : json({ error: "Employee not found in your organisation." }, 404);
+        }
+        if (id === profile.id) return json({ error: "Ask another administrator to change your pay details." }, 400);
+        const clean = (key: string) => String(payload[key] ?? "").trim() || null;
+        const utr = clean("utr_number"), bank = clean("bank_name"), account = clean("bank_account_number"), sort = clean("bank_sort_code");
+        if ((utr && !/^\d{10}$/.test(utr)) || (bank && bank.length > 120) || (account && !/^\d{8}$/.test(account)) || (sort && !/^\d{2}-?\d{2}-?\d{2}$/.test(sort))) return json({ error: "Check the UTR, bank account and sort code." }, 400);
+        const expected = payload.expected;
+        if (!expected || typeof expected !== "object" || fields.some(key => !(key in expected) || (expected[key] !== null && typeof expected[key] !== "string"))) return json({ error: "Reload pay details before saving." }, 400);
+        const response = await fetch(`${url}/rest/v1/rpc/update_staff_pay_safe`, { method: "POST", headers, body: JSON.stringify({ p_org: profile.organisation_id, p_id: id, p_expected: expected, p_details: { utr_number: utr, bank_name: bank, bank_account_number: account, bank_sort_code: sort } }) });
+        if (!response.ok) return json({ error: "Pay details could not be saved." }, 502);
+        return await response.json() === true ? json({ ok: true }) : json({ error: "Pay details changed or staff member is unavailable. Reload and review before saving." }, 409);
+      }
+      if (action === "update_staff_email" || action === "update_staff_details") {
+        if (id === profile.id) return json({ error: "Ask another administrator to update your account." }, 400);
+        const lookup = await fetch(`${url}/rest/v1/profiles?id=eq.${id}&${scope}&select=id,name,email`, { headers });
+        if (!lookup.ok) return json({ error: "Staff details could not be checked." }, 502);
+        const rows = await lookup.json();
+        if (rows.length !== 1) return json({ error: "Employee not found in your organisation." }, 404);
+        if (action === "update_staff_email") {
+          const email = String(payload.email ?? "").trim().toLowerCase();
+          if (!rows[0].email) return json({ error: "Payroll-only staff do not have a login. Create an invitation for app access." }, 400);
+          if (!/^\S+@\S+\.\S+$/.test(email) || email.length > 254) return json({ error: "Enter a valid email address." }, 400);
+          if (email === String(rows[0].email).toLowerCase()) return json({ ok: true });
+          const ready = await fetch(`${url}/rest/v1/rpc/staff_email_sync_ready`, { method: "POST", headers, body: "{}" });
+          if (!ready.ok || await ready.json() !== true) return json({ error: "Email changes are not available until the account update is installed." }, 503);
+          const updated = await fetch(`${url}/auth/v1/admin/users/${id}`, { method: "PUT", headers, body: JSON.stringify({ email, email_confirm: true }) });
+          if (!updated.ok) return json({ error: "Email could not be changed. Check that it is not already in use." }, 409);
+          return json({ ok: true });
+        }
+        const name = String(payload.name ?? "").trim();
+        const role = String(payload.role ?? "");
+        const rate = payload.day_rate === null || payload.day_rate === "" ? null : Number(payload.day_rate);
+        const cis = Number(payload.cis_rate);
+        if (!name || name.length > 120 || !["admin", "worker", "labourer"].includes(role) || (rate !== null && (!Number.isFinite(rate) || rate < 0 || rate > 10000)) || ![20, 30].includes(cis)) return json({ error: "Enter valid staff details." }, 400);
+        const result = await fetch(`${url}/rest/v1/rpc/update_staff_details_safe`, { method: "POST", headers, body: JSON.stringify({ p_org: profile.organisation_id, p_id: id, p_name: name, p_role: role, p_rate: rate, p_cis: cis }) });
+        if (!result.ok) {
+          const detail = await result.json().catch(() => ({}));
+          return json({ error: String(detail.message ?? "Staff details could not be saved.") }, 409);
+        }
+        return json({ ok: true });
       }
       const updates: Record<string, unknown> = {};
       if (action === "restore") {

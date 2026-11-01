@@ -9,7 +9,7 @@ const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTa
 const adminId = '11111111-1111-1111-1111-111111111111';
 const workerId = '22222222-2222-2222-2222-222222222222';
 const organisation = '33333333-3333-3333-3333-333333333333';
-function harness(profile, affected = [{ id: workerId }]) {
+function harness(profile, affected = [{ id: workerId }], syncReady = true) {
   let handler;
   const calls = [];
   vm.runInNewContext(code, {
@@ -18,6 +18,11 @@ function harness(profile, affected = [{ id: workerId }]) {
     fetch: async (url, options = {}) => {
       calls.push({ url, ...options });
       if (url.endsWith('/auth/v1/user')) return Response.json({ id: profile?.id ?? workerId });
+      if (url.includes('/profiles?id=eq.') && url.includes('select=id,name,email')) return Response.json(affected.map(row => ({ ...row, name: 'Test Worker', email: 'old@example.invalid' })));
+      if (url.endsWith('/rpc/staff_email_sync_ready')) return Response.json(syncReady);
+      if (url.endsWith('/rpc/update_staff_details_safe')) return Response.json(null);
+      if (url.endsWith('/rpc/update_staff_pay_safe')) return Response.json(true);
+      if (url.includes('/auth/v1/admin/users/') && options.method === 'PUT') return Response.json({ id: workerId });
       if (options.method === 'PATCH') return Response.json(affected);
       return Response.json(profile ? [profile] : []);
     },
@@ -100,4 +105,56 @@ test('invitation cancellation cannot remove accepted invitations or invitations 
   const deletion = h.calls.find(c => c.method === 'DELETE');
   assert.ok(deletion.url.includes(`organisation_id=eq.${organisation}`));
   assert.ok(deletion.url.includes('accepted_at=is.null'));
+});
+test('employee cannot change another employee identity', async () => {
+  for (const action of ['update_staff_email', 'update_staff_details']) {
+    const h = harness({ id: workerId, active: true, role: 'worker', organisation_id: organisation });
+    assert.equal((await h.run({ action, user_id: adminId, email: 'new@example.invalid', name: 'Other', role: 'admin', day_rate: 100, cis_rate: 20 })).status, 403);
+    assert.ok(!h.calls.some(c => c.method === 'PUT' || c.url.includes('/rpc/')));
+  }
+});
+test('email update checks company membership and trigger readiness before auth change', async () => {
+  const h = harness({ id: adminId, active: true, role: 'admin', organisation_id: organisation });
+  assert.equal((await h.run({ action: 'update_staff_email', user_id: workerId, email: 'NEW@example.invalid' })).status, 200);
+  const lookup = h.calls.find(c => c.url.includes('select=id,name,email'));
+  assert.ok(lookup.url.includes(`organisation_id=eq.${organisation}`));
+  assert.ok(h.calls.findIndex(c => c.url.endsWith('/rpc/staff_email_sync_ready')) < h.calls.findIndex(c => c.method === 'PUT'));
+  assert.deepEqual(JSON.parse(h.calls.find(c => c.method === 'PUT').body), { email: 'new@example.invalid', email_confirm: true });
+});
+test('identity update for a different organisation never changes auth', async () => {
+  const h = harness({ id: adminId, active: true, role: 'admin', organisation_id: organisation }, []);
+  assert.equal((await h.run({ action: 'update_staff_email', user_id: workerId, email: 'new@example.invalid' })).status, 404);
+  assert.ok(!h.calls.some(c => c.method === 'PUT'));
+});
+test('email update fails closed when the email synchronisation trigger is unavailable', async () => {
+  const h = harness({ id: adminId, active: true, role: 'admin', organisation_id: organisation }, [{ id: workerId }], false);
+  assert.equal((await h.run({ action: 'update_staff_email', user_id: workerId, email: 'new@example.invalid' })).status, 503);
+  assert.ok(!h.calls.some(c => c.method === 'PUT'));
+});
+test('staff rename uses scoped transactional RPC with validated fields', async () => {
+  const h = harness({ id: adminId, active: true, role: 'admin', organisation_id: organisation });
+  assert.equal((await h.run({ action: 'update_staff_details', user_id: workerId, name: ' New Name ', role: 'worker', day_rate: 150, cis_rate: 20 })).status, 200);
+  assert.deepEqual(JSON.parse(h.calls.find(c => c.url.endsWith('/rpc/update_staff_details_safe')).body), { p_org: organisation, p_id: workerId, p_name: 'New Name', p_role: 'worker', p_rate: 150, p_cis: 20 });
+});
+test('employees cannot load or change another person’s bank details', async () => {
+  for (const action of ['get_pay_details', 'update_pay_details']) {
+    const h = harness({ id: workerId, active: true, role: 'worker', organisation_id: organisation });
+    assert.equal((await h.run({ action, user_id: adminId })).status, 403);
+  }
+});
+test('bank updates reject invalid data before any mutation', async () => {
+  const h = harness({ id: adminId, active: true, role: 'admin', organisation_id: organisation });
+  const result = await h.run({ action: 'update_pay_details', user_id: workerId, bank_account_number: '123', expected: {} });
+  assert.equal(result.status, 400);
+  assert.ok(!h.calls.some(c => c.url.endsWith('/rpc/update_staff_pay_safe')));
+});
+test('bank details are sent in the request body and compared before updating', async () => {
+  const h = harness({ id: adminId, active: true, role: 'admin', organisation_id: organisation });
+  const expected = { utr_number: null, bank_name: null, bank_account_number: null, bank_sort_code: null };
+  const result = await h.run({ action: 'update_pay_details', user_id: workerId, utr_number: '1234567890', bank_name: 'Example', bank_account_number: '12345678', bank_sort_code: '12-34-56', expected });
+  assert.equal(result.status, 200);
+  const rpc = h.calls.find(c => c.url.endsWith('/rpc/update_staff_pay_safe'));
+  assert.equal(JSON.parse(rpc.body).p_org, organisation);
+  assert.deepEqual(JSON.parse(rpc.body).p_expected, expected);
+  assert.ok(!h.calls.some(c => c.url.includes('12345678')));
 });
