@@ -4,7 +4,7 @@ import { useStore } from '../../store/useStore';
 
 const ALL_NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, adminOnly: true },
-  { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
+  { id: 'pipeline',  label: 'Pipeline',  icon: Kanban,          adminOnly: true },
   { id: 'leads',     label: 'Leads',     icon: Users,           adminOnly: true },
   { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
   { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },

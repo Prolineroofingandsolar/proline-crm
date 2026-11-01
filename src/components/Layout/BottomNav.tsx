@@ -9,10 +9,10 @@ const ADMIN_MAIN = [
   { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
 ];
 const USER_MAIN = [
-  { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
   { id: 'jobs',      label: 'Jobs',      icon: Briefcase },
   { id: 'timesheet', label: 'Timesheet', icon: Clock },
   { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
+  { id: 'calendar',  label: 'Calendar',  icon: Calendar },
 ];
 
 const ADMIN_MORE = [
@@ -29,7 +29,6 @@ const ADMIN_MORE = [
   { id: 'tools', label: 'Roofing tools', icon: Ruler },
 ];
 const USER_MORE = [
-  { id: 'calendar',  label: 'Calendar',  icon: Calendar },
   { id: 'tools', label: 'Roofing tools', icon: Ruler },
 ];
 
