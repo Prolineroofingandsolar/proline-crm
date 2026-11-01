@@ -37,6 +37,20 @@ try {
   const admin = await account('admin', 'admin');
   const worker = await account('worker', 'worker');
   pass('isolated admin and employee sign in');
+  async function mcp(client) {
+    const session = must(await client.auth.getSession()).session;
+    return fetch(`${url}/functions/v1/proline-mcp/mcp`, {
+      method: 'POST', signal: AbortSignal.timeout(20000),
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
+    });
+  }
+  const mcpHealth = await fetch(`${url}/functions/v1/proline-mcp/health`, { signal: AbortSignal.timeout(20000) });
+  assert.equal(mcpHealth.status, 200);
+  assert.equal((await mcpHealth.json()).connector_version, '0.5.0');
+  assert.equal((await mcp(admin.client)).status, 200);
+  assert.equal((await mcp(worker.client)).status, 403);
+  pass('deployed Grok connector accepts active admins and rejects employee access');
   must(await admin.client.from('organisations').update({ phone: '07000000000', address: 'Disposable test address' }).eq('id', org).select('id').single());
   const company = must(await worker.client.from('organisations').select('id,phone').single());
   assert.equal(company.id, org); assert.equal(company.phone, '07000000000');
@@ -119,6 +133,7 @@ try {
   const refreshed = must(await admin.client.auth.refreshSession({ refresh_token: session.session.refresh_token }));
   assert.ok(refreshed.session.access_token);
   must(await staff(admin.client, { action: 'list_staff' }));
+  assert.equal((await mcp(admin.client)).status, 200);
   pass('account refresh keeps authenticated staff management working');
 } finally {
   let cleanupError = false;

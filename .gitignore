@@ -47,3 +47,7 @@ src-tauri/target/
 *.njsproj
 *.sln
 *.sw?
+
+# Python release helper cache
+__pycache__/
+*.pyc

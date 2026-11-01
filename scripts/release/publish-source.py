@@ -15,12 +15,16 @@ def api(path, body=None, method=None):
     result = subprocess.run(command, input=json.dumps(body) if body is not None else None, text=True, capture_output=True, check=True)
     return json.loads(result.stdout) if result.stdout.strip() else None
 base = git('rev-parse', 'HEAD').decode().strip()
+last_release = ROOT / 'docs/last-published-release.json'
+if last_release.is_file():
+    base = json.loads(last_release.read_text())['sha']
 head = api(REPO + '/commits/main')
 changes = api(REPO + f'/compare/{base}...{head["sha"]}')
 remote_changed = {f['filename'] for f in changes.get('files', [])}
 paths = set(git('diff', '--name-only', '-z', 'HEAD').decode().split('\0'))
 paths |= set(git('ls-files', '--others', '--exclude-standard', '-z').decode().split('\0'))
 paths.discard('')
+paths.discard('docs/last-published-release.json')
 # The newer main only made the same local-sign-out fix retained in this release.
 for path in remote_changed & paths:
     if path != 'src/store/useStore.ts':
