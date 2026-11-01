@@ -22,7 +22,7 @@ export default function TopBar({ onNewLead }: Props) {
   );
   // Incomplete tasks on active jobs
   const pendingTasks = leads
-    .filter(l => ['Won', 'In Progress'].includes(l.stage))
+    .filter(l => ['Won', 'Scheduled', 'In Progress'].includes(l.stage))
     .flatMap(l => l.tasks.filter(t => !t.completed).map(t => ({ task: t, lead: l })))
     .slice(0, 5);
 

@@ -1,4 +1,4 @@
-﻿import { Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Lead, Stage } from '../../types';
@@ -9,11 +9,14 @@ import LeadCard from './LeadCard';
 const stageConfig: Record<Stage, { header: string; dot: string; bg: string; dropBg: string }> = {
   'New Lead':      { header: 'bg-violet-500',  dot: 'bg-violet-400', bg: 'bg-violet-50',  dropBg: 'bg-violet-100' },
   'Survey Booked': { header: 'bg-sky-500',       dot: 'bg-sky-400',    bg: 'bg-sky-50',     dropBg: 'bg-sky-100' },
+  'Quote Preparing': { header: 'bg-purple-500', dot: 'bg-purple-400', bg: 'bg-purple-50', dropBg: 'bg-purple-100' },
   'Quote Sent':    { header: 'bg-amber-500',    dot: 'bg-amber-400',  bg: 'bg-amber-50',   dropBg: 'bg-amber-100' },
   'Won':           { header: 'bg-green-500',    dot: 'bg-green-400',  bg: 'bg-green-50',   dropBg: 'bg-green-100' },
+  'Scheduled':     { header: 'bg-teal-500', dot: 'bg-teal-400', bg: 'bg-teal-50', dropBg: 'bg-teal-100' },
   'In Progress':   { header: 'bg-orange-600',   dot: 'bg-orange-400', bg: 'bg-orange-50',  dropBg: 'bg-orange-100' },
   'Completed':     { header: 'bg-emerald-600',  dot: 'bg-emerald-400',bg: 'bg-emerald-50', dropBg: 'bg-emerald-100' },
   'Waiting for Payment': { header: 'bg-indigo-600', dot: 'bg-indigo-400', bg: 'bg-indigo-50', dropBg: 'bg-indigo-100' },
+  'Lost':          { header: 'bg-gray-500', dot: 'bg-gray-400', bg: 'bg-gray-50', dropBg: 'bg-gray-100' },
   'Paid':          { header: 'bg-teal-600',     dot: 'bg-teal-400',   bg: 'bg-teal-50',    dropBg: 'bg-teal-100' },
 };
 

@@ -17,7 +17,7 @@ export default function DashboardPage() {
     totalLeads: leads.filter(l => ['New Lead', 'Survey Booked', 'Quote Sent'].includes(l.stage)).length,
     activeJobs: leads.filter(l => l.stage === 'In Progress').length,
     revenue: leads.filter(l => l.stage === 'Paid').reduce((s, l) => s + l.value, 0),
-    pipeline: leads.filter(l => ['Won', 'In Progress', 'Completed', 'Waiting for Payment'].includes(l.stage)).reduce((s, l) => s + l.value, 0),
+    pipeline: leads.filter(l => ['Won', 'Scheduled', 'In Progress', 'Completed', 'Waiting for Payment'].includes(l.stage)).reduce((s, l) => s + l.value, 0),
     won: leads.filter(l => l.stage === 'Won').length,
     completed: leads.filter(l => ['Completed', 'Waiting for Payment'].includes(l.stage)).length,
     convRate: leads.length ? Math.round(leads.filter(l => ['Won','In Progress','Completed','Waiting for Payment','Paid'].includes(l.stage)).length / leads.length * 100) : 0,
@@ -36,7 +36,7 @@ export default function DashboardPage() {
     return days >= 7;
   });
   const unpaidDeposits = leads.filter(l =>
-    ['Won', 'In Progress'].includes(l.stage) && !l.depositPaid && l.deposit > 0
+    ['Won', 'Scheduled', 'In Progress'].includes(l.stage) && !l.depositPaid && l.deposit > 0
   );
 
   const automations = [
