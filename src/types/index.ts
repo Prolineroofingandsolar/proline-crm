@@ -11,12 +11,15 @@ export type JobType =
 export type Stage =
   | 'New Lead'
   | 'Survey Booked'
+  | 'Quote Preparing'
   | 'Quote Sent'
   | 'Won'
+  | 'Scheduled'
   | 'In Progress'
   | 'Completed'
   | 'Waiting for Payment'
-  | 'Paid';
+  | 'Paid'
+  | 'Lost';
 
 export interface Task {
   id: string;

@@ -118,6 +118,12 @@ export default function LeadDetailPanel() {
               </button>
             )}
             {lead.stage === 'Survey Booked' && (
+              <button onClick={() => moveToStage(lead.id, 'Quote Preparing')}
+                className="w-full flex items-center justify-center gap-1.5 text-sm bg-purple-600 text-white hover:bg-purple-700 px-4 py-2 rounded-xl font-medium transition-colors">
+                <ChevronRight size={15} /> Survey done
+              </button>
+            )}
+            {lead.stage === 'Quote Preparing' && (
               <button onClick={() => moveToStage(lead.id, 'Quote Sent')}
                 className="w-full flex items-center justify-center gap-1.5 text-sm bg-amber-600 text-white hover:bg-amber-700 px-4 py-2 rounded-xl font-medium transition-colors">
                 <ChevronRight size={15} /> Send Quote
@@ -129,7 +135,7 @@ export default function LeadDetailPanel() {
                 <Trophy size={15} /> Mark as Won
               </button>
             )}
-            {lead.stage === 'Won' && (
+            {(lead.stage === 'Won' || lead.stage === 'Scheduled') && (
               <button onClick={() => moveToStage(lead.id, 'In Progress')}
                 className="w-full flex items-center justify-center gap-1.5 text-sm bg-orange-600 text-white hover:bg-orange-700 px-4 py-2 rounded-xl font-medium transition-colors">
                 <Play size={15} /> Start Job
