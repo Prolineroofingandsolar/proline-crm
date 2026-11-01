@@ -80,6 +80,20 @@ final class AppState {
         generalTasks.filter { !FleetTaskPolicy.isRetiredReminder($0) }
     }
     var timesheets: [TimesheetEntry] = []
+    /// Active jobs any worker can log time against (name and reference only).
+    var timesheetJobOptions: [TimesheetJobOption] = []
+    var timesheetJobs: [TimesheetJobOption] {
+        let active: Set<LeadStage> = [.won, .scheduled, .inProgress, .completed]
+        var byID = Dictionary(timesheetJobOptions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for lead in leads where active.contains(lead.stage) {
+            byID[lead.id] = TimesheetJobOption(id: lead.id, name: lead.name, jobRef: lead.jobRef, stage: lead.stage.rawValue)
+        }
+        return byID.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+    func timesheetJobLabel(_ id: String) -> String? {
+        if let lead = leads.first(where: { $0.id == id }) { return "\(lead.name) · \(lead.jobRef)" }
+        return timesheetJobOptions.first { $0.id == id }?.label
+    }
     var adminTimesheetChecks: [TimesheetEntry] = []
     var paymentRuns: [PaymentRun] = []
     var workerPayments: [WorkerPayment] = []
@@ -606,6 +620,7 @@ final class AppState {
         async let fetchedQuotes = attempt { try await service.fetchQuotes() }
         async let fetchedMessages = attempt { try await service.fetchTeamMessages() }
         async let fetchedPlans = attempt { try await service.fetchTeamDayPlans() }
+        async let fetchedJobOptions = attempt { try await service.fetchTimesheetJobOptions() }
 
         var failures: [String] = []
         func adopt<T>(_ result: Result<T, Error>, _ label: String, _ apply: (T) -> Void) {
@@ -635,6 +650,8 @@ final class AppState {
         adopt(await fetchedRuns, "Pay runs") { paymentRuns = PaymentAccessScope.visible($0, for: currentUser) }
         adopt(await fetchedPayments, "Payments") { workerPayments = PaymentAccessScope.visible($0, for: currentUser) }
         adopt(await fetchedQuotes, "Quotes") { quotes = WorkflowAccessScope.visible($0, leads: leads) }
+        // Optional until the server function is deployed; assigned jobs still appear without it.
+        if case .success(let options) = await fetchedJobOptions { timesheetJobOptions = options }
         switch (await fetchedMessages, await fetchedPlans) {
         case (.success(let messages), .success(let plans)): adoptTeam(messages: messages, plans: plans)
         default: failures.append("Team Hub")

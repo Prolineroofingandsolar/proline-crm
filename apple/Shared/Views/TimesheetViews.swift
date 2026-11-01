@@ -148,7 +148,7 @@ private struct WorkerWeeklyPayView: View {
                 Text(entry.map { $0.type == "half" ? "Half day" : $0.type == "off" ? "Off" : "Full day" } ?? "Add work day").fontWeight(
                     .semibold)
                 if let entry, entry.type != "off" {
-                    Text(appState.leads.first { $0.id == entry.leadID }.map { "\($0.name) · \($0.jobRef)" } ?? "Job not found").font(
+                    Text(appState.timesheetJobLabel(entry.leadID) ?? "Job not found").font(
                         .caption
                     ).foregroundStyle(.secondary).lineLimit(1)
                 } else {
@@ -180,9 +180,7 @@ private struct WorkerDayEntrySheet: View {
     init(day: WorkerWeekDay) {
         self.day = day; _kind = State(initialValue: day.entry?.type ?? "full"); _leadID = State(initialValue: day.entry?.leadID ?? "")
     }
-    private var jobs: [Lead] {
-        appState.leads.filter { [.won, .scheduled, .inProgress, .completed].contains($0.stage) }.sorted { $0.name < $1.name }
-    }
+    private var jobs: [TimesheetJobOption] { appState.timesheetJobs }
     var body: some View {
         NavigationStack {
             Form {
@@ -194,7 +192,7 @@ private struct WorkerDayEntrySheet: View {
                 if kind != "off" {
                     Section("Job worked on") {
                         Picker("Job", selection: $leadID) {
-                            Text("Choose job").tag(""); ForEach(jobs) { Text("\($0.name) · \($0.jobRef)").tag($0.id) }
+                            Text("Choose job").tag(""); ForEach(jobs) { Text($0.label).tag($0.id) }
                         }
                     }
                 }
