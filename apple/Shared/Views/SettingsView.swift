@@ -294,15 +294,24 @@ private struct StaffMemberSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     let person: StaffMember
+    @State private var name: String
+    @State private var email: String
     @State private var role: String
     @State private var rate: String
     @State private var cis: Int
     @State private var busy = false
     @State private var error: String?
     @State private var confirmingRemoval = false
+    @State private var originalPay: StaffPayDetails?
+    @State private var utr = ""
+    @State private var bank = ""
+    @State private var account = ""
+    @State private var sortCode = ""
 
     init(person: StaffMember) {
         self.person = person
+        _name = State(initialValue: person.name)
+        _email = State(initialValue: person.email ?? "")
         _role = State(initialValue: ["admin", "labourer"].contains(person.role) ? person.role : "worker")
         _rate = State(initialValue: person.dayRate.map { String($0) } ?? "")
         _cis = State(initialValue: person.cisRate ?? 20)
@@ -313,13 +322,23 @@ private struct StaffMemberSheet: View {
         NavigationStack {
             Form {
                 Section("Staff member") {
-                    LabeledContent("Name", value: person.name)
+                    if ownAccount { LabeledContent("Name", value: person.name) }
+                    else { TextField("Full name", text: $name) }
                     LabeledContent("Email", value: person.email ?? "Payroll only · no login")
                     LabeledContent("Status", value: person.active ? "Active" : "Access removed")
                 }
                 if ownAccount {
                     Section { Text("Another administrator must change your role or pay settings. You cannot remove your own access.").foregroundStyle(.secondary) }
                 } else {
+                    if person.email != nil {
+                        Section {
+                            TextField("Sign-in email", text: $email)
+                            Button("Update sign-in email") { updateEmail() }
+                                .disabled(busy || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || email.lowercased() == person.email?.lowercased())
+                        } header: { Text("Sign-in email") } footer: {
+                            Text("The employee signs in with the new email and their existing password. Share the new address with them securely.")
+                        }
+                    }
                     Section {
                         Picker("Role", selection: $role) {
                             Text("Worker").tag("worker"); Text("Labourer").tag("labourer"); Text("Administrator").tag("admin")
@@ -330,6 +349,17 @@ private struct StaffMemberSheet: View {
                     Section("Pay settings") {
                         TextField("Day rate (£)", text: $rate)
                         Picker("CIS deduction", selection: $cis) { Text("20%").tag(20); Text("30%").tag(30) }
+                    }
+                    Section("Bank and tax details") {
+                        if originalPay == nil {
+                            Button("Load bank and tax details") { loadPay() }.disabled(busy)
+                        } else {
+                            TextField("UTR (10 digits)", text: $utr)
+                            TextField("Bank name", text: $bank)
+                            TextField("Account number (8 digits)", text: $account)
+                            TextField("Sort code (6 digits)", text: $sortCode)
+                            Button("Save bank and tax details") { savePay() }.disabled(busy)
+                        }
                     }
                     Section {
                         Button(person.active ? "Remove access" : "Restore staff access", role: person.active ? .destructive : nil) {
@@ -343,7 +373,7 @@ private struct StaffMemberSheet: View {
             .formStyle(.grouped).navigationTitle(person.name)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.disabled(busy) }
-                if !ownAccount { ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(busy || !validRate) } }
+                if !ownAccount { ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(busy || !validRate || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }
             }
             .confirmationDialog("Remove app access for \(person.name)?", isPresented: $confirmingRemoval, titleVisibility: .visible) {
                 Button("Remove access", role: .destructive) { save(accessOnly: true) }
@@ -363,8 +393,41 @@ private struct StaffMemberSheet: View {
                 if accessOnly {
                     if person.active { try await SupabaseService.shared.deactivateEmployee(id: person.id) }
                     else { try await SupabaseService.shared.restoreStaffMember(id: person.id) }
-                } else { try await SupabaseService.shared.updateStaffMember(id: person.id, role: role, dayRate: Double(rate), cisRate: cis) }
+                } else { try await SupabaseService.shared.updateStaffMember(id: person.id, name: name.trimmingCharacters(in: .whitespacesAndNewlines), role: role, dayRate: Double(rate), cisRate: cis) }
                 appState.users = try await SupabaseService.shared.fetchUsers()
+                dismiss()
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+    private func updateEmail() {
+        busy = true; error = nil
+        Task {
+            defer { busy = false }
+            do {
+                try await SupabaseService.shared.updateStaffEmail(id: person.id, email: email.trimmingCharacters(in: .whitespacesAndNewlines))
+                dismiss()
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+    private func loadPay() {
+        busy = true; error = nil
+        Task {
+            defer { busy = false }
+            do {
+                let pay = try await SupabaseService.shared.fetchStaffPay(id: person.id)
+                originalPay = pay; utr = pay.utrNumber ?? ""; bank = pay.bankName ?? ""
+                account = pay.account ?? ""; sortCode = pay.sortCode ?? ""
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+    private func savePay() {
+        guard let expected = originalPay else { return }
+        busy = true; error = nil
+        Task {
+            defer { busy = false }
+            do {
+                let pay = StaffPayDetails(utrNumber: utr, bankName: bank, account: account, sortCode: sortCode)
+                try await SupabaseService.shared.updateStaffPay(id: person.id, details: pay, expected: expected)
                 dismiss()
             } catch { self.error = error.localizedDescription }
         }
