@@ -21,6 +21,7 @@ import TimesheetPage from './pages/TimesheetPage';
 import CISPage from './pages/CISPage';
 import BankingPage from './pages/BankingPage';
 import VirtualOfficePage from './pages/VirtualOfficePage';
+import ToolsPage from './pages/ToolsPage';
 import AddLeadModal from './components/Pipeline/AddLeadModal';
 import AIAssistant from './components/AI/AIAssistant';
 import { isMacApp, sendDeviceNotification } from './utils/push';
@@ -145,6 +146,7 @@ export default function App() {
     office: <VirtualOfficePage />,
     settings: <SettingsPage />,
     timesheet: <TimesheetPage />,
+    tools: <ToolsPage />,
   };
 
   return (
