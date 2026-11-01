@@ -11,6 +11,94 @@ struct GmailConnectionStatus: Decodable {
     }
 }
 
+struct AIAgentRecord: Decodable, Identifiable, Sendable {
+    let id: String
+    let slug: String
+    let name: String
+    let title: String
+    let provider: String
+    let status: String
+    let active: Bool
+    let pilot: Bool
+    let colour: String
+    let accessory: String
+    let instructions: String
+    let scheduleLabel: String?
+    let currentWork: String?
+    let nextRunAt: String?
+    let lastCheckinAt: String?
+    let lastSuccessAt: String?
+    let lastError: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, slug, name, title, provider, status, active, pilot, colour, accessory, instructions
+        case scheduleLabel = "schedule_label"
+        case currentWork = "current_work"
+        case nextRunAt = "next_run_at"
+        case lastCheckinAt = "last_checkin_at"
+        case lastSuccessAt = "last_success_at"
+        case lastError = "last_error"
+    }
+}
+
+struct AIAgentRunRecord: Decodable, Identifiable, Sendable {
+    let id: String
+    let agentID: String
+    let triggerType: String
+    let status: String
+    let summary: String?
+    let itemCount: Int
+    let error: String?
+    let startedAt: String
+    let finishedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, status, summary, error
+        case agentID = "agent_id"
+        case triggerType = "trigger_type"
+        case itemCount = "item_count"
+        case startedAt = "started_at"
+        case finishedAt = "finished_at"
+    }
+}
+
+struct AIActionProposalRecord: Decodable, Identifiable, Sendable {
+    let id: String
+    let agentID: String
+    let category: String
+    let title: String
+    let summary: String
+    let riskLevel: String
+    let status: String
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, category, title, summary, status
+        case agentID = "agent_id"
+        case riskLevel = "risk_level"
+        case createdAt = "created_at"
+    }
+}
+
+struct IntegrationHealthRecord: Decodable, Identifiable, Sendable {
+    let id: String
+    let connector: String
+    let displayName: String
+    let provider: String
+    let status: String
+    let lastCheckedAt: String?
+    let lastSuccessAt: String?
+    let lastError: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, connector, provider, status
+        case displayName = "display_name"
+        case lastCheckedAt = "last_checked_at"
+        case lastSuccessAt = "last_success_at"
+        case lastError = "last_error"
+    }
+}
+
 actor SupabaseService {
     static let shared = SupabaseService()
     private let baseURL = URL(string: "https://qzvdzzvkocmulcfujyea.supabase.co/rest/v1")!
@@ -24,9 +112,7 @@ actor SupabaseService {
     }()
 
     private func request(path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil) throws -> URLRequest {
-        var components = URLComponents(url: baseURL.appending(path: path), resolvingAgainstBaseURL: false)!
-        components.queryItems = query
-        var request = URLRequest(url: components.url!)
+        var request = URLRequest(url: SupabaseWriteCondition.url(baseURL: baseURL.appending(path: path), query: query))
         request.httpMethod = method
         request.httpBody = body
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
@@ -99,6 +185,12 @@ actor SupabaseService {
         return try decodeLeads(from: data)
     }
 
+    func fetchLead(id: String) async throws -> Lead? {
+        let (data, _) = try await authenticatedData(for: request(
+            path: "leads", query: [.init(name: "select", value: "*"), .init(name: "id", value: "eq.\(id)")]))
+        return try decodeLeads(from: data).first
+    }
+
     /// Decodes lead rows written by any ProLine client. Older web builds sometimes
     /// saved JSONB arrays as JSON strings, and other clients may leave optional
     /// columns null; normalise so one odd row cannot blank the whole pipeline.
@@ -152,6 +244,51 @@ actor SupabaseService {
             request(
                 path: "team_day_plans", query: [.init(name: "select", value: "*"), .init(name: "order", value: "day.asc,start_time.asc")]),
             as: [TeamDayPlan].self)
+    }
+
+    func fetchAIAgents() async throws -> [AIAgentRecord] {
+        try await execute(
+            request(
+                path: "ai_agents",
+                query: [
+                    .init(
+                        name: "select",
+                        value: "id,slug,name,title,provider,status,active,pilot,colour,accessory,instructions,schedule_label,current_work,next_run_at,last_checkin_at,last_success_at,last_error"),
+                    .init(name: "order", value: "name.asc"),
+                ]), as: [AIAgentRecord].self)
+    }
+
+    func fetchAIAgentRuns() async throws -> [AIAgentRunRecord] {
+        try await execute(
+            request(
+                path: "ai_agent_runs",
+                query: [
+                    .init(name: "select", value: "id,agent_id,trigger_type,status,summary,item_count,error,started_at,finished_at"),
+                    .init(name: "order", value: "started_at.desc"),
+                    .init(name: "limit", value: "60"),
+                ]), as: [AIAgentRunRecord].self)
+    }
+
+    func fetchPendingAIActionProposals() async throws -> [AIActionProposalRecord] {
+        try await execute(
+            request(
+                path: "ai_action_proposals",
+                query: [
+                    .init(name: "select", value: "id,agent_id,category,title,summary,risk_level,status,created_at"),
+                    .init(name: "status", value: "eq.pending"),
+                    .init(name: "order", value: "created_at.desc"),
+                    .init(name: "limit", value: "20"),
+                ]), as: [AIActionProposalRecord].self)
+    }
+
+    func fetchIntegrationHealth() async throws -> [IntegrationHealthRecord] {
+        try await execute(
+            request(
+                path: "integration_health",
+                query: [
+                    .init(name: "select", value: "id,connector,display_name,provider,status,last_checked_at,last_success_at,last_error"),
+                    .init(name: "order", value: "display_name.asc"),
+                ]), as: [IntegrationHealthRecord].self)
     }
 
     func lookupMOT(registration: String) async throws -> MOTVehicleLookup {
@@ -316,6 +453,35 @@ actor SupabaseService {
         return try decoder.decode(GeneratedQuoteDraft.self, from: data)
     }
 
+    /// Recovery uses an emailed code, so it works without a browser callback on either Apple platform.
+    func requestPasswordRecovery(email: String) async throws {
+        _ = try await recoveryRequest(path: "recover", body: ["email": email])
+    }
+
+    func completePasswordRecovery(email: String, code: String, password: String) async throws {
+        guard password.count >= 8 else { throw SupabaseHTTPError(statusCode: 400, message: "Use a password of at least eight characters.") }
+        let data = try await recoveryRequest(path: "verify", body: ["email": email, "token": code, "type": "recovery"])
+        guard let session = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = session["access_token"] as? String else { throw SupabaseSessionExpired() }
+        _ = try await recoveryRequest(path: "user", method: "PUT", body: ["password": password], token: token)
+    }
+
+    private func recoveryRequest(path: String, method: String = "POST", body: [String: String], token: String? = nil) async throws -> Data {
+        var call = URLRequest(url: authURL.appending(path: path))
+        call.httpMethod = method
+        call.timeoutInterval = 30
+        call.setValue(anonKey, forHTTPHeaderField: "apikey")
+        call.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token { call.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        call.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: call)
+        guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard (200..<300).contains(response.statusCode) else {
+            throw SupabaseHTTPError(statusCode: response.statusCode, message: "Password recovery failed. Check your email address and recovery code, then try again.")
+        }
+        return data
+    }
+
     func signInWithPassword(email: String, password: String) async throws -> CRMUser {
         var request = URLRequest(
             url: authURL.appending(path: "token").appending(queryItems: [.init(name: "grant_type", value: "password")]))
@@ -339,6 +505,57 @@ actor SupabaseService {
         call.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, _) = try await authenticatedData(for: call)
         return try decoder.decode(WorkerInvitation.self, from: data)
+    }
+
+    func fetchCompanyDetails() async throws -> CompanyDetails {
+        let (data, _) = try await authenticatedData(for: request(path: "organisations", query: [.init(name: "select", value: "id,name,phone,email,address,vat")]))
+        guard let details = try JSONDecoder().decode([CompanyDetails].self, from: data).first else { throw SupabaseSessionExpired() }
+        return details
+    }
+
+    func saveCompanyDetails(_ details: CompanyDetails) async throws {
+        let (data, _) = try await authenticatedData(for: request(path: "organisations", method: "PATCH", query: [.init(name: "id", value: "eq.\(details.id)")], body: try JSONSerialization.data(withJSONObject: ["name": details.name, "phone": details.phone, "email": details.email, "address": details.address, "vat": details.vat])))
+        guard try JSONDecoder().decode([CompanyDetails].self, from: data).count == 1 else { throw SupabaseLeadWriteRejected() }
+    }
+
+    func fetchStaffDirectory() async throws -> StaffDirectory {
+        let data = try await staffManagementRequest(["action": "list_staff"])
+        return try JSONDecoder().decode(StaffDirectory.self, from: data)
+    }
+
+    func updateStaffMember(id: String, role: String, dayRate: Double?, cisRate: Int) async throws {
+        _ = try await staffManagementRequest(["action": "update_staff", "user_id": id, "role": role,
+                                             "day_rate": dayRate.map { $0 as Any } ?? NSNull(), "cis_rate": cisRate])
+    }
+
+    func restoreStaffMember(id: String) async throws {
+        _ = try await staffManagementRequest(["action": "restore", "user_id": id])
+    }
+
+    func cancelStaffInvitation(id: String) async throws {
+        _ = try await staffManagementRequest(["action": "cancel_invite", "invitation_id": id])
+    }
+
+    private func staffManagementRequest(_ body: [String: Any]) async throws -> Data {
+        var call = URLRequest(url: functionsURL.appending(path: "worker-invite"))
+        call.httpMethod = "POST"; call.timeoutInterval = 30
+        call.setValue(anonKey, forHTTPHeaderField: "apikey")
+        call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
+        call.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        call.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, _) = try await authenticatedData(for: call)
+        return data
+    }
+
+    func deactivateEmployee(id: String) async throws {
+        var call = URLRequest(url: functionsURL.appending(path: "worker-invite"))
+        call.httpMethod = "POST"
+        call.timeoutInterval = 30
+        call.setValue(anonKey, forHTTPHeaderField: "apikey")
+        call.setValue("Bearer \(KeychainStore.get("supabaseAccessToken") ?? anonKey)", forHTTPHeaderField: "Authorization")
+        call.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        call.httpBody = try JSONSerialization.data(withJSONObject: ["action": "deactivate", "user_id": id])
+        _ = try await authenticatedData(for: call)
     }
 
     func createSecureUser(name: String, email: String, password: String, role: String, dayRate: Double?, cisRate: Int) async throws {
@@ -544,7 +761,13 @@ actor SupabaseService {
         let (data, _) = try await authenticatedData(
             for: request(path: "leads", method: "PATCH", query: query, body: try JSONEncoder().encode(lead)))
         let rows = try decodeLeads(from: data)
-        guard !SupabaseWriteCondition.isConflict(returnedRowCount: rows.count) else { throw SupabaseWriteConflict() }
+        if SupabaseWriteCondition.isConflict(returnedRowCount: rows.count) {
+            guard let latest = try await fetchLead(id: lead.id) else { throw SupabaseLeadUnavailable() }
+            // An unchanged row that cannot be updated is a rejected write, not
+            // evidence that somebody else edited it (for example, an RLS policy).
+            if expectedUpdatedAt == nil || latest.updatedAt == expectedUpdatedAt { throw SupabaseLeadWriteRejected() }
+            throw SupabaseWriteConflict()
+        }
         return rows.first
     }
 
@@ -608,16 +831,93 @@ actor SupabaseService {
         return (bucket, String(url.path.drop(while: { $0 == "/" })))
     }
 
-    static var now: String { ISO8601DateFormatter().string(from: .now) }
+    static var now: String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: .now)
+    }
     static var today: String { localDay(for: .now) }
     nonisolated static func localDay(for date: Date, calendar: Calendar = .current) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
     }
     static func date(from raw: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let value = fractional.date(from: raw) { return value }
         if let value = ISO8601DateFormatter().date(from: raw) { return value }
         return DateFormatter.isoDay.date(from: String(raw.prefix(10)))
     }
+}
+
+/// Three-way merge for an edit sheet. Untouched fields always come from the server.
+/// Collections merge by item ID; conflicting edits to the same item require review.
+enum LeadEditMerge {
+    static func merge(base: Data, edited: Data, latest: Data) throws -> Data {
+        guard let before = try JSONSerialization.jsonObject(with: base) as? [String: Any],
+              let draft = try JSONSerialization.jsonObject(with: edited) as? [String: Any],
+              var server = try JSONSerialization.jsonObject(with: latest) as? [String: Any],
+              equal(before["id"], draft["id"]), equal(before["id"], server["id"])
+        else { throw SupabaseWriteConflict() }
+        let keys = Set(before.keys).union(draft.keys).subtracting(["id", "created_at", "updated_at", "progress"])
+        let changed = keys.filter { !equal(before[$0], draft[$0]) }
+        // Financial fields depend on one another, so merge them as one unit.
+        let money: Set<String> = ["value", "deposit", "deposit_paid", "balance"]
+        if !money.isDisjoint(with: changed) {
+            for key in money where !equal(before[key], server[key]) && !equal(draft[key], server[key]) {
+                throw SupabaseWriteConflict()
+            }
+        }
+        for key in changed {
+            if equal(before[key], server[key]) || equal(draft[key], server[key]) {
+                server[key] = draft[key]
+            } else if ["tasks", "notes", "photos", "files", "materials"].contains(key),
+                      let baseItems = before[key] as? [[String: Any]],
+                      let editedItems = draft[key] as? [[String: Any]],
+                      let serverItems = server[key] as? [[String: Any]] {
+                server[key] = try mergeItems(base: baseItems, edited: editedItems, latest: serverItems)
+            } else {
+                throw SupabaseWriteConflict()
+            }
+        }
+        return try JSONSerialization.data(withJSONObject: server)
+    }
+
+    private static func mergeItems(base: [[String: Any]], edited: [[String: Any]], latest: [[String: Any]]) throws -> [[String: Any]] {
+        func indexed(_ rows: [[String: Any]]) throws -> [String: [String: Any]] {
+            var result: [String: [String: Any]] = [:]
+            for row in rows {
+                guard let id = row["id"] as? String, result[id] == nil else { throw SupabaseWriteConflict() }
+                result[id] = row
+            }
+            return result
+        }
+        let before = try indexed(base), draft = try indexed(edited)
+        var server = try indexed(latest)
+        for id in Set(before.keys).union(draft.keys) where !equal(before[id], draft[id]) {
+            guard equal(before[id], server[id]) || equal(draft[id], server[id]) else { throw SupabaseWriteConflict() }
+            server[id] = draft[id]
+        }
+        let order = latest.compactMap { $0["id"] as? String } + edited.compactMap { row -> String? in
+            guard let id = row["id"] as? String, !latest.contains(where: { $0["id"] as? String == id }) else { return nil }
+            return id
+        }
+        return order.compactMap { server[$0] }
+    }
+
+    private static func equal(_ left: Any?, _ right: Any?) -> Bool {
+        NSDictionary(dictionary: ["value": left ?? NSNull()]).isEqual(to: ["value": right ?? NSNull()])
+    }
+}
+
+struct SupabaseLeadWriteRejected: LocalizedError {
+    var errorDescription: String? {
+        "The server did not accept this job update. Your account may not have permission to edit it. No changes were saved."
+    }
+}
+
+struct SupabaseLeadUnavailable: LocalizedError {
+    var errorDescription: String? { "This job no longer exists or your account cannot access it. Refresh the job list." }
 }
 
 struct SupabaseWriteConflict: LocalizedError {
@@ -637,6 +937,14 @@ struct SupabaseHTTPError: LocalizedError {
 }
 
 enum SupabaseWriteCondition {
+    nonisolated static func url(baseURL: URL, query: [URLQueryItem]) -> URL {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = query
+        // PostgREST interprets unescaped + as a space, including timezone offsets.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        return components.url!
+    }
+
     nonisolated static func query(id: String, expectedUpdatedAt: String?) -> [URLQueryItem] {
         var result = [URLQueryItem(name: "id", value: "eq.\(id)")]
         if let expectedUpdatedAt, !expectedUpdatedAt.isEmpty {
@@ -700,4 +1008,42 @@ private extension DateFormatter {
         let value = DateFormatter(); value.calendar = Calendar(identifier: .iso8601); value.locale = Locale(identifier: "en_US_POSIX");
         value.dateFormat = "yyyy-MM-dd"; return value
     }()
+}
+
+struct StaffDirectory: Decodable, Sendable {
+    let staff: [StaffMember]
+    let invitations: [StaffInvitationSummary]
+}
+
+struct StaffMember: Decodable, Identifiable, Sendable {
+    let id: String
+    let name: String
+    let email: String?
+    let role: String
+    let active: Bool
+    let dayRate: Double?
+    let cisRate: Int?
+    enum CodingKeys: String, CodingKey {
+        case id, name, email, role, active
+        case dayRate = "day_rate", cisRate = "cis_rate"
+    }
+    var roleLabel: String { role == "admin" ? "Administrator" : role == "labourer" ? "Labourer" : "Worker" }
+}
+
+struct StaffInvitationSummary: Decodable, Identifiable, Sendable {
+    let id: String
+    let email: String
+    let role: String
+    let expiresAt: String
+    enum CodingKeys: String, CodingKey { case id, email, role; case expiresAt = "expires_at" }
+    var expired: Bool { (SupabaseService.date(from: expiresAt) ?? .distantPast) < .now }
+}
+
+struct CompanyDetails: Codable, Sendable {
+    var id: String
+    var name: String
+    var phone: String
+    var email: String
+    var address: String
+    var vat: String
 }

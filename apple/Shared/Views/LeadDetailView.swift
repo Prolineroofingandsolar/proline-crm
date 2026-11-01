@@ -84,6 +84,7 @@ struct LeadDetailView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let leadID: String
     @State private var showingEdit = false
     @State private var showingSurveySchedule = false
@@ -96,15 +97,32 @@ struct LeadDetailView: View {
 
     var body: some View {
         if let lead {
-            Form {
-                overview(lead)
-                contact(lead)
-                job(lead)
-                dates(lead)
-                if appState.isAdmin { costs(lead) }
-                more(lead)
+            GeometryReader { geometry in
+                #if os(iOS)
+                if geometry.size.width >= 620 && !dynamicTypeSize.isAccessibilitySize {
+                    HStack(spacing: 0) {
+                        Form {
+                            overview(lead)
+                            contact(lead)
+                            job(lead)
+                        }
+                        .formStyle(.grouped)
+                        .frame(maxWidth: .infinity)
+                        Form {
+                            dates(lead)
+                            if appState.isAdmin { costs(lead) }
+                            more(lead)
+                        }
+                        .formStyle(.grouped)
+                        .frame(maxWidth: .infinity)
+                    }
+                } else {
+                    singleColumnForm(lead)
+                }
+                #else
+                singleColumnForm(lead)
+                #endif
             }
-            .formStyle(.grouped)
             .navigationTitle(lead.name)
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
@@ -150,6 +168,18 @@ struct LeadDetailView: View {
         } else {
             ContentUnavailableView("Lead not found", systemImage: "person.crop.circle.badge.questionmark")
         }
+    }
+
+    private func singleColumnForm(_ lead: Lead) -> some View {
+        Form {
+            overview(lead)
+            contact(lead)
+            job(lead)
+            dates(lead)
+            if appState.isAdmin { costs(lead) }
+            more(lead)
+        }
+        .formStyle(.grouped)
     }
 
     // MARK: Sections
@@ -1265,6 +1295,8 @@ private struct EditLeadView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State var lead: Lead
+    @State private var original: Lead
+    @State private var saveError: String?
     @State private var depositPlan: DepositPlan
     @State private var addressSearch = AddressSearchService()
     @State private var selectedAddress = ""
@@ -1283,6 +1315,7 @@ private struct EditLeadView: View {
 
     init(lead: Lead) {
         _lead = State(initialValue: lead)
+        _original = State(initialValue: lead)
         _depositPlan = State(initialValue: DepositPlan.matching(total: lead.value, deposit: lead.deposit))
     }
 
@@ -1335,6 +1368,30 @@ private struct EditLeadView: View {
                 } footer: {
                     if !validDates { Text("One of the saved dates is invalid. Please select it again.").foregroundStyle(.red) }
                 }
+                if let saveError {
+                    Section("Could not save") {
+                        Text(saveError).foregroundStyle(.red)
+                        Button("Load latest job details") {
+                            isSaving = true
+                            Task {
+                                do {
+                                    guard let latest = try await SupabaseService.shared.fetchLead(id: lead.id) else {
+                                        throw SupabaseWriteConflict()
+                                    }
+                                    lead = latest
+                                    original = latest
+                                    depositPlan = DepositPlan.matching(total: latest.value, deposit: latest.deposit)
+                                    self.saveError = nil
+                                } catch {
+                                    self.saveError = "The latest job could not be loaded. Check your connection and try again."
+                                }
+                                isSaving = false
+                            }
+                        }
+                        Text("Loading replaces your unsaved edits with the latest saved job. Review it before editing again.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
             }
             .formStyle(.grouped)
             .disabled(isSaving)
@@ -1348,7 +1405,13 @@ private struct EditLeadView: View {
                     Button(isSaving ? "Saving…" : "Save") {
                         isSaving = true
                         Task {
-                            if await appState.saveLead(lead) { dismiss() }; isSaving = false
+                            saveError = nil
+                            if await appState.saveLead(lead, basedOn: original) {
+                                dismiss()
+                            } else {
+                                saveError = appState.errorMessage ?? "Changes could not be saved."
+                            }
+                            isSaving = false
                         }
                     }.disabled(!canSave)
                 }
@@ -1463,9 +1526,9 @@ struct ScheduleSurveySheet: View {
                 format: "%02d:%02d", Calendar.current.component(.hour, from: surveyTime),
                 Calendar.current.component(.minute, from: surveyTime))
             if lead.stage == .newLead { changed.stage = .surveyBooked }
-            await appState.saveLead(changed)
+            let saved = await appState.saveLead(changed, basedOn: lead)
             saving = false
-            if appState.leads.first(where: { $0.id == lead.id })?.surveyDate == changed.surveyDate { dismiss() }
+            if saved { dismiss() }
         }
     }
 }

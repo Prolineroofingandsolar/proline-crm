@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { TrendingUp, Briefcase, PoundSterling, CheckCircle2, Clock, Trophy, Users, Star, AlertTriangle, CalendarClock, Hammer, BadgePoundSterling, Bell } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate, jobTypeColor } from '../utils/helpers';
@@ -7,8 +8,10 @@ import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 export default function DashboardPage() {
   const { leads, setSelectedId, setCurrentPage, selectedId } = useStore();
 
-  const today = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 60_000); return () => window.clearInterval(timer); }, []);
+  const today = new Date(now).toISOString().split('T')[0];
+  const tomorrow = new Date(now + 86400000).toISOString().split('T')[0];
 
   const stats = {
     totalLeads: leads.filter(l => ['New Lead', 'Survey Booked', 'Quote Sent'].includes(l.stage)).length,
@@ -29,7 +32,7 @@ export default function DashboardPage() {
   const overduePayments    = leads.filter(l => {
     if (!['Completed', 'Waiting for Payment'].includes(l.stage)) return false;
     if (!l.completedDate) return false;
-    const days = Math.floor((Date.now() - new Date(l.completedDate).getTime()) / 86400000);
+    const days = Math.floor((now - new Date(l.completedDate).getTime()) / 86400000);
     return days >= 7;
   });
   const unpaidDeposits = leads.filter(l =>

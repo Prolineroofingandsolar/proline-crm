@@ -64,16 +64,73 @@ Deno.serve(async (req) => {
       if (loginEnabled && (!/^\S+@\S+\.\S+$/.test(suppliedEmail) || suppliedPassword.length < 8)) return json({ error: "For app access, enter an email and a temporary password of at least 8 characters—or leave both blank." }, 400);
       if (!new Set(["admin", "worker", "labourer"]).has(role)) return json({ error: "Invalid user role." }, 400);
       if (!loginEnabled && role === "admin") return json({ error: "An administrator needs email and password sign-in details." }, 400);
+      const dayRate = payload.day_rate == null || payload.day_rate === "" ? null : Number(payload.day_rate);
+      const cisRate = Number(payload.cis_rate ?? 20);
+      if ((dayRate !== null && (!Number.isFinite(dayRate) || dayRate < 0 || dayRate > 10000)) || ![20, 30].includes(cisRate)) return json({ error: "Enter a valid day rate and CIS rate." }, 400);
       const internalID = crypto.randomUUID();
       const email = loginEnabled ? suppliedEmail : `timesheet-${internalID}@users.prolinecrm.invalid`;
       const password = loginEnabled ? suppliedPassword : hex(crypto.getRandomValues(new Uint8Array(32)));
       const createUser = await fetch(`${url}/auth/v1/admin/users`, { method: "POST", headers: { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json" }, body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { name } }) });
       if (!createUser.ok) { const detail = await createUser.json().catch(() => ({})); return json({ error: String(detail.msg ?? detail.message ?? "That email already has an account.") }, 409); }
       const user = await createUser.json();
-      const number = (value: unknown) => value === null || value === undefined || value === "" ? null : Number(value);
-      const profileResponse = await fetch(`${url}/rest/v1/profiles`, { method: "POST", headers: { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ id: user.id, organisation_id: profile.organisation_id, email: loginEnabled ? email : null, username: loginEnabled ? email : null, name, role, active: true, day_rate: number(payload.day_rate), cis_rate: Number(payload.cis_rate ?? 20) }) });
+      const profileResponse = await fetch(`${url}/rest/v1/profiles`, { method: "POST", headers: { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ id: user.id, organisation_id: profile.organisation_id, email: loginEnabled ? email : null, username: loginEnabled ? email : null, name, role, active: true, day_rate: dayRate, cis_rate: cisRate }) });
       if (!profileResponse.ok) { await fetch(`${url}/auth/v1/admin/users/${user.id}`, { method: "DELETE", headers: { apikey: service, authorization: `Bearer ${service}` } }); return json({ error: "The user profile could not be created." }, 502); }
       return json({ ok: true, user_id: user.id, login_enabled: loginEnabled });
+    }
+
+    if (["list_staff", "update_staff", "restore", "cancel_invite"].includes(action)) {
+      const profile = await authenticatedProfile(req);
+      if (!profile?.active || profile.role !== "admin") return json({ error: "Only administrators can manage staff." }, 403);
+      const headers = { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json", Prefer: "return=representation" };
+      const scope = `organisation_id=eq.${encodeURIComponent(profile.organisation_id)}`;
+      if (action === "list_staff") {
+        const [people, invites] = await Promise.all([
+          fetch(`${url}/rest/v1/profiles?${scope}&select=id,name,email,role,active,day_rate,cis_rate&order=name.asc`, { headers }),
+          fetch(`${url}/rest/v1/worker_invitations?${scope}&accepted_at=is.null&select=id,email,role,expires_at,created_at&order=created_at.desc`, { headers })
+        ]);
+        if (!people.ok || !invites.ok) return json({ error: "Staff details could not be loaded." }, 502);
+        return json({ staff: await people.json(), invitations: await invites.json() });
+      }
+      const id = String(action === "cancel_invite" ? payload.invitation_id ?? "" : payload.user_id ?? "");
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return json({ error: "Invalid staff or invitation ID." }, 400);
+      if (action === "cancel_invite") {
+        const response = await fetch(`${url}/rest/v1/worker_invitations?id=eq.${id}&${scope}&accepted_at=is.null`, { method: "DELETE", headers });
+        if (!response.ok) return json({ error: "Invitation could not be cancelled." }, 502);
+        const rows = await response.json();
+        return rows.length === 1 ? json({ ok: true }) : json({ error: "Invitation is no longer available." }, 404);
+      }
+      const updates: Record<string, unknown> = {};
+      if (action === "restore") {
+        if (id === profile.id) return json({ error: "Choose another employee." }, 400);
+        updates.active = true;
+      } else {
+        const role = String(payload.role ?? "");
+        if (!["admin", "worker", "labourer"].includes(role)) return json({ error: "Choose a valid staff role." }, 400);
+        if (id === profile.id) return json({ error: "Ask another administrator to change your role or pay settings." }, 400);
+        const rate = payload.day_rate === null || payload.day_rate === "" ? null : Number(payload.day_rate);
+        const cis = Number(payload.cis_rate);
+        if ((rate !== null && (!Number.isFinite(rate) || rate < 0 || rate > 10000)) || ![20, 30].includes(cis)) return json({ error: "Enter a valid day rate and CIS rate." }, 400);
+        updates.role = role; updates.day_rate = rate; updates.cis_rate = cis;
+      }
+      const response = await fetch(`${url}/rest/v1/profiles?id=eq.${id}&${scope}`, { method: "PATCH", headers, body: JSON.stringify(updates) });
+      if (!response.ok) return json({ error: "Staff details could not be updated." }, 502);
+      const rows = await response.json();
+      return rows.length === 1 ? json({ ok: true }) : json({ error: "Employee not found in your organisation." }, 404);
+    }
+
+    if (action === "deactivate") {
+      const profile = await authenticatedProfile(req);
+      if (!profile?.active || profile.role !== "admin") return json({ error: "Only an administrator can remove access." }, 403);
+      const userID = String(payload.user_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(userID) || userID === profile.id) return json({ error: "Choose another employee." }, 400);
+      const response = await fetch(`${url}/rest/v1/profiles?id=eq.${userID}&organisation_id=eq.${profile.organisation_id}`, {
+        method: "PATCH", headers: { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ active: false })
+      });
+      if (!response.ok) return json({ error: "Access could not be removed." }, 502);
+      const rows = await response.json();
+      if (rows.length !== 1) return json({ error: "Employee not found in your organisation." }, 404);
+      return json({ ok: true });
     }
 
     if (action === "accept") {
@@ -96,13 +153,12 @@ Deno.serve(async (req) => {
         return json({ error: String(detail.msg ?? detail.message ?? "That email already has an account.") }, 409);
       }
       const user = await createUser.json();
-      const number = (value: unknown) => value === null || value === undefined || value === "" ? null : Number(value);
       const profileResponse = await fetch(`${url}/rest/v1/profiles`, {
         method: "POST",
         headers: { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify({
           id: user.id, organisation_id: invitation.organisation_id, email, username: email, name,
-          role: invitation.role, active: true, day_rate: number(payload.day_rate), cis_rate: Number(payload.cis_rate ?? 20),
+          role: invitation.role, active: true, day_rate: null, cis_rate: Number(payload.cis_rate ?? 20),
           utr_number: String(payload.utr_number ?? "").trim() || null, bank_name: String(payload.bank_name ?? "").trim() || null,
           bank_account_number: String(payload.bank_account_number ?? "").trim() || null, bank_sort_code: String(payload.bank_sort_code ?? "").trim() || null
         })

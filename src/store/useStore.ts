@@ -1,13 +1,12 @@
+import { mergeLead, LeadConflict } from '../lib/leadMerge';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Lead, Stage, Material, FileItem, Photo, Contact, AppUser, GeneralTask, TimesheetEntry, PaymentRun, WorkerPayment } from '../types';
 import { generateId } from '../utils/helpers';
-import { hashPassword } from '../utils/crypto';
 import { enableDeviceNotifications, getDeviceNotificationPermission, isMacApp, sendDeviceNotification } from '../utils/push';
 import {
   supabase,
   leadToDb, dbToLead,
-  userToDb, dbToUser,
   contactToDb, dbToContact,
   generalTaskToDb, dbToGeneralTask,
   timesheetEntryToDb, dbToTimesheetEntry,
@@ -77,6 +76,9 @@ function profileToUser(row: Record<string, unknown>): AppUser {
 export type { GeneralTask };
 
 interface Store {
+  unsavedLeadIds: string[];
+  retryLeadSaves: () => void;
+  discardLeadDrafts: () => Promise<void>;
   isLoaded: boolean;
   loadData: () => Promise<void>;
 
@@ -173,21 +175,79 @@ let jobCounterN = 1;
 export const useStore = create<Store>()(
   persist(
     (set, get) => {
-      // Sync the current state of a lead to Supabase after a local update.
-      // Uses update (not upsert) so stale local data can never silently insert a duplicate.
+      const snapshots = new Map<string, Record<string, unknown>>();
+      const newLeadIds = new Set<string>();
+      const failedBases = new Map<string, Record<string, unknown>>();
+      const writes = new Map<string, Promise<void>>();
       const syncLead = (leadId: string) => {
         const lead = get().leads.find(l => l.id === leadId);
-        if (!lead) return;
-        supabase.from('leads').update(leadToDb(lead)).eq('id', leadId)
-          .then(({ error }) => {
-            if (error) {
-              console.error('Lead sync error:', error);
-              get().showToast('Save failed — check your connection', 'error');
+        const base = snapshots.get(leadId);
+        if (!lead || !base) { get().showToast('Refresh this job before editing.', 'error'); return; }
+        const draft = leadToDb(lead);
+        const owner = get().currentUserId;
+        snapshots.set(leadId, draft);
+        set(s => ({ unsavedLeadIds: [...new Set([...s.unsavedLeadIds, leadId])] }));
+        const previous = writes.get(leadId) ?? Promise.resolve();
+        const write = previous.then(async () => {
+          try {
+            if (!owner || owner !== get().currentUserId) return;
+            if (failedBases.has(leadId)) throw new Error('Resolve the previous failed save first.');
+            for (let attempt = 0; attempt < 3; attempt++) {
+              let { data: latest, error: readError } = await supabase.from('leads').select('*').eq('id', leadId).maybeSingle();
+              if (!readError && !latest && newLeadIds.has(leadId)) {
+                const inserted = await supabase.from('leads').insert(draft).select('*').single();
+                if (inserted.error?.code === '23505') continue;
+                latest = inserted.data;
+                readError = inserted.error;
+              }
+              if (readError || !latest) throw new Error('Job cannot be loaded. Check your connection and access.');
+              if (owner !== get().currentUserId) return;
+              const merged = mergeLead(base, draft, latest);
+              merged.updated_at = new Date().toISOString();
+              let request = supabase.from('leads').update(merged).eq('id', leadId);
+              request = latest.updated_at == null ? request.is('updated_at', null) : request.eq('updated_at', latest.updated_at);
+              const { data: saved, error } = await request.select('*');
+              if (error) throw error;
+              if (!saved?.length) continue;
+              if (owner !== get().currentUserId) return;
+              newLeadIds.delete(leadId);
+              if (snapshots.get(leadId) === draft) {
+                snapshots.set(leadId, saved[0]);
+                set(s => ({ unsavedLeadIds: s.unsavedLeadIds.filter(id => id !== leadId) }));
+                set(s => ({ leads: s.leads.map(l => l.id === leadId ? dbToLead(saved[0]) : l) }));
+              }
+              return;
             }
-          });
+            throw new LeadConflict();
+          } catch (error) {
+            if (owner !== get().currentUserId) return;
+            if (!failedBases.has(leadId)) failedBases.set(leadId, base);
+            if (snapshots.get(leadId) === draft) snapshots.set(leadId, failedBases.get(leadId)!);
+            get().showToast(error instanceof LeadConflict ? error.message : 'Save failed. Your draft is still on screen; check your connection before refreshing.', 'error');
+          }
+        });
+        writes.set(leadId, write);
+        void write.finally(() => { if (writes.get(leadId) === write) writes.delete(leadId); });
       };
 
       return {
+      unsavedLeadIds: [],
+      retryLeadSaves: () => { for (const id of get().unsavedLeadIds) if (!writes.has(id)) { failedBases.delete(id); syncLead(id); } },
+      discardLeadDrafts: async () => {
+        if (writes.size) { get().showToast('Wait for current saves to finish.', 'info'); return; }
+        for (const id of get().unsavedLeadIds) {
+          const { data, error } = await supabase.from('leads').select('*').eq('id', id).maybeSingle();
+          if (!error && !data && newLeadIds.has(id)) {
+            newLeadIds.delete(id); failedBases.delete(id); snapshots.delete(id);
+            set(s => ({ leads: s.leads.filter(l => l.id !== id), unsavedLeadIds: s.unsavedLeadIds.filter(key => key !== id) }));
+            continue;
+          }
+          if (error || !data) { get().showToast('Latest job could not be loaded.', 'error'); continue; }
+          failedBases.delete(id);
+          snapshots.set(id, data);
+          set(s => ({ leads: s.leads.map(l => l.id === id ? dbToLead(data) : l), unsavedLeadIds: s.unsavedLeadIds.filter(key => key !== id) }));
+        }
+      },
       isLoaded: false,
       users: [],
       currentUserId: null,
@@ -214,11 +274,14 @@ export const useStore = create<Store>()(
 
       // ── Load all data from Supabase ─────────────────────────────────────────
       loadData: async () => {
+        if (get().unsavedLeadIds.length) { get().showToast('Resolve unsaved job changes before refreshing.', 'error'); return; }
         const { data: sessionData } = await supabase.auth.getSession();
         const authUserId = sessionData.session?.user.id ?? null;
-        const usersRequest = authUserId
-          ? supabase.from('profiles').select('*').eq('active', true)
-          : supabase.from('app_users').select('*');
+        if (!authUserId) {
+          set({ unsavedLeadIds: [], currentUserId: null, users: [], leads: [], contacts: [], generalTasks: [], timesheetEntries: [], paymentRuns: [], workerPayments: [], isLoaded: true });
+          return;
+        }
+        const usersRequest = supabase.from('profiles').select('*').eq('active', true);
         const [leadsRes, usersRes, contactsRes, tasksRes, timesheetRes, paymentRunsRes, workerPaymentsRes] = await Promise.all([
           supabase.from('leads').select('*').order('updated_at', { ascending: false }),
           usersRequest,
@@ -236,8 +299,12 @@ export const useStore = create<Store>()(
           return;
         }
 
+        snapshots.clear();
+        failedBases.clear();
+        for (const row of leadsRes.data ?? []) snapshots.set(row.id, row);
         const leads = (leadsRes.data ?? []).map(r => dbToLead(r as Record<string, unknown>));
-        const users = (usersRes.data ?? []).map(r => authUserId ? profileToUser(r as Record<string, unknown>) : dbToUser(r as Record<string, unknown>));
+        const users = (usersRes.data ?? []).map(r => profileToUser(r as Record<string, unknown>));
+        if (!users.some(u => u.id === authUserId)) { get().logout(); set({ isLoaded: true }); return; }
         const contacts = (contactsRes.data ?? []).map(r => dbToContact(r as Record<string, unknown>));
         if (tasksRes.error) {
           console.error('loadData tasks error:', tasksRes.error);
@@ -255,28 +322,17 @@ export const useStore = create<Store>()(
         }, 0);
         jobCounterN = maxNum + 1;
 
-        // Backfill contacts for any existing lead that doesn't have one yet
-        const now = new Date().toISOString().split('T')[0];
-        const existingPhones = new Set(contacts.map(c => c.phone));
-        const missingContacts: Contact[] = [];
-        for (const lead of leads) {
-          if (!lead.phone || existingPhones.has(lead.phone)) continue;
-          existingPhones.add(lead.phone);
-          missingContacts.push({ id: generateId(), name: lead.name, phone: lead.phone, email: lead.email, address: lead.address, createdAt: now });
-        }
-        if (missingContacts.length > 0) {
-          supabase.from('contacts').insert(missingContacts.map(contactToDb)).then(({ error }) => {
-            if (error) console.error('Contact backfill error:', error);
-          });
-        }
-        const allContacts = [...contacts, ...missingContacts];
+        const allContacts = contacts;
 
         set({ leads, users, contacts: allContacts, generalTasks, timesheetEntries, paymentRuns, workerPayments, currentUserId: authUserId ?? get().currentUserId, isLoaded: true });
 
+        await supabase.removeAllChannels();
         // Real-time: keep leads in sync across devices/tabs without refresh
         supabase
           .channel('leads-realtime')
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, ({ new: row }) => {
+            if (writes.has(String(row.id)) || get().unsavedLeadIds.includes(String(row.id))) return;
+            snapshots.set(String(row.id), row as Record<string, unknown>);
             const lead = dbToLead(row as Record<string, unknown>);
             const isNew = !get().leads.some(l => l.id === lead.id);
             set(s => {
@@ -288,6 +344,8 @@ export const useStore = create<Store>()(
             }
           })
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, ({ new: row }) => {
+            if (writes.has(String(row.id)) || get().unsavedLeadIds.includes(String(row.id))) return;
+            snapshots.set(String(row.id), row as Record<string, unknown>);
             const lead = dbToLead(row as Record<string, unknown>);
             const previous = get().leads.find(l => l.id === lead.id);
             set(s => ({ leads: s.leads.map(l => l.id === lead.id ? lead : l) }));
@@ -313,79 +371,63 @@ export const useStore = create<Store>()(
       },
 
       // ── Auth ────────────────────────────────────────────────────────────────
-      login: async (username, password) => {
-        if (username.includes('@')) {
-          const { data, error } = await supabase.auth.signInWithPassword({ email: username, password });
-          if (!error && data.user) {
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).eq('active', true).single();
-            if (profile) {
-              const user = profileToUser(profile as Record<string, unknown>);
-              set(s => ({ currentUserId: user.id, users: s.users.some(existing => existing.id === user.id) ? s.users : [...s.users, user] }));
-              return true;
-            }
-            await supabase.auth.signOut({ scope: 'local' });
-          }
-        }
-        const hash = await hashPassword(password);
-        const user = get().users.find(
-          u => u.username.toLowerCase() === username.toLowerCase() && u.passwordHash === hash
-        );
-        if (user) { set({ currentUserId: user.id }); return true; }
-        return false;
+      login: async (email, password) => {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error || !data.user) return false;
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).eq('active', true).single();
+        if (!profile) { await supabase.auth.signOut({ scope: 'local' }); return false; }
+        await get().loadData();
+        return get().currentUserId === data.user.id;
       },
 
-      logout: () => { void supabase.auth.signOut({ scope: 'local' }); set({ currentUserId: null }); },
+      logout: () => {
+        void supabase.auth.signOut({ scope: 'local' });
+        void supabase.removeAllChannels();
+        set({ unsavedLeadIds: [], currentUserId: null, users: [], leads: [], contacts: [], generalTasks: [], timesheetEntries: [], paymentRuns: [], workerPayments: [] });
+      },
 
-      addUser: async (name, username, password, role) => {
-        const existing = get().users.find(u => u.username.toLowerCase() === username.toLowerCase());
-        if (existing) return { ok: false, error: 'Username already taken' };
-        const hash = await hashPassword(password);
-        const now = new Date().toISOString().split('T')[0];
-        const user: AppUser = { id: generateId(), name, username, passwordHash: hash, role, createdAt: now };
-        set(s => ({ users: [...s.users, user] }));
-        supabase.from('app_users').insert(userToDb(user)).then(({ error }) => {
-          if (error) console.error('addUser sync error:', error);
+      addUser: async (name, email, password, role) => {
+        const { data, error } = await supabase.functions.invoke('worker-invite', {
+          body: { action: 'create_user', name, email, password, role: role === 'user' ? 'worker' : role },
         });
+        if (error || data?.error) return { ok: false, error: data?.error ?? error?.message ?? 'User creation failed' };
+        await get().loadData();
         return { ok: true };
       },
 
       deleteUser: (id) => {
-        set(s => ({ users: s.users.filter(u => u.id !== id) }));
-        supabase.from('app_users').delete().eq('id', id);
-      },
-
-      addCasualWorker: (name, dayRate, cisRate) => {
-        const now = new Date().toISOString().split('T')[0];
-        const id = generateId();
-        const user: AppUser = { id, name, username: `casual_${id.slice(0, 8)}`, passwordHash: '', role: 'casual', createdAt: now, dayRate, cisRate };
-        set(s => ({ users: [...s.users, user] }));
-        supabase.from('app_users').insert(userToDb(user)).then(({ error }) => {
-          if (error) console.error('addCasualWorker error:', error);
+        void supabase.functions.invoke('worker-invite', { body: { action: 'deactivate', user_id: id } }).then(({ data, error }) => {
+          if (error || data?.error) get().showToast(data?.error ?? 'Access removal failed', 'error');
+          else set(s => ({ users: s.users.filter(u => u.id !== id) }));
         });
       },
 
-      removeCasualWorker: (id) => {
-        set(s => ({
-          users: s.users.filter(u => u.id !== id),
-          timesheetEntries: s.timesheetEntries.filter(e => e.userId !== id),
-        }));
-        supabase.from('app_users').delete().eq('id', id);
-        supabase.from('timesheet_entries').delete().eq('user_id', id);
+      addCasualWorker: (name, dayRate, cisRate) => {
+        void supabase.functions.invoke('worker-invite', { body: { action: 'create_user', name, email: '', password: '', role: 'labourer', day_rate: dayRate, cis_rate: cisRate } }).then(async ({ data, error }) => {
+          if (error || data?.error) get().showToast(data?.error ?? 'Worker could not be added', 'error');
+          else await get().loadData();
+        });
       },
 
+      // Deactivate access; preserve historical work and payment records.
+      removeCasualWorker: (id) => { get().deleteUser(id); },
+
       changePassword: async (id, newPassword) => {
-        const hash = await hashPassword(newPassword);
-        set(s => ({ users: s.users.map(u => u.id === id ? { ...u, passwordHash: hash } : u) }));
-        supabase.from('app_users').update({ password_hash: hash }).eq('id', id);
+        if (id !== get().currentUserId) {
+          throw new Error('Employees must reset their own password from the sign-in screen.');
+        }
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
       },
 
       updateUserName: (id, name) => {
-        set(s => ({ users: s.users.map(u => u.id === id ? { ...u, name } : u) }));
-        supabase.from('app_users').update({ name }).eq('id', id);
+        void supabase.from('profiles').update({ name }).eq('id', id).select('id').single().then(({ error }) => {
+          if (error) get().showToast('Name could not be saved', 'error');
+          else set(s => ({ users: s.users.map(u => u.id === id ? { ...u, name } : u) }));
+        });
       },
 
       updateUserProfile: async (id, updates) => {
-        set(s => ({ users: s.users.map(u => u.id === id ? { ...u, ...updates } : u) }));
         const dbUpdates: Record<string, unknown> = {};
         if (updates.dayRate !== undefined) dbUpdates.day_rate = updates.dayRate;
         if (updates.cisRate !== undefined) dbUpdates.cis_rate = updates.cisRate;
@@ -393,12 +435,13 @@ export const useStore = create<Store>()(
         if (updates.bankName !== undefined) dbUpdates.bank_name = updates.bankName;
         if (updates.bankAccountNumber !== undefined) dbUpdates.bank_account_number = updates.bankAccountNumber;
         if (updates.bankSortCode !== undefined) dbUpdates.bank_sort_code = updates.bankSortCode;
-        const { error } = await supabase.from('app_users').update(dbUpdates).eq('id', id);
+        const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', id).select('id').single();
         if (error) {
           console.error('updateUserProfile error:', error);
           get().showToast('Profile save failed — check your connection', 'error');
           return false;
         }
+        set(s => ({ users: s.users.map(u => u.id === id ? { ...u, ...updates } : u) }));
         return true;
       },
 
@@ -602,14 +645,11 @@ export const useStore = create<Store>()(
           tasks: [], photos: [], notes: [], files: [], materials: [],
         };
         set(s => ({ leads: [lead, ...s.leads] }));
-        supabase.from('leads').insert(leadToDb(lead)).then(({ error }) => {
-          if (error) {
-            console.error('addLead sync error:', error);
-            get().showToast('Lead saved locally but failed to sync — check connection', 'error');
-          }
-        });
+        snapshots.set(lead.id, leadToDb(lead));
+        newLeadIds.add(lead.id);
+        syncLead(lead.id);
         get().upsertContact({ name: data.name, phone: data.phone, email: data.email, address: data.address });
-        get().showToast(`New lead added: ${data.name}`);
+        get().showToast(`Saving new lead: ${data.name}`, 'info');
         // Push notification for new leads is handled by the Supabase DB trigger
         // so it fires regardless of whether the lead came from the CRM or another source.
       },
@@ -853,7 +893,6 @@ export const useStore = create<Store>()(
       name: 'proline-crm-auth',
       // Only persist auth state locally — everything else comes from Supabase
       partialize: (state) => ({
-        currentUserId: state.currentUserId,
         apiKey: state.apiKey,
         currentPage: state.currentPage,
         pushEnabled: state.pushEnabled,

@@ -209,7 +209,7 @@ struct DashboardJobsMap: View {
         for lead in targets {
             if let coordinate = await geocode(lead.address) {
                 var changed = lead; changed.lat = coordinate.latitude; changed.lng = coordinate.longitude
-                await appState.saveLead(changed)
+                await appState.saveLead(changed, basedOn: lead)
             } else {
                 failedCount += 1
             }

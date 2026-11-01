@@ -8,7 +8,7 @@ import {
   useSensors,
   closestCorners,
 } from '@dnd-kit/core';
-import type { DragStartEvent, DragOverEvent, DragEndEvent } from '@dnd-kit/core';
+import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core';
 import type { Stage } from '../types';
 import { STAGES } from '../data/mockData';
 import { useStore } from '../store/useStore';
@@ -44,7 +44,7 @@ export default function PipelinePage() {
     setActiveId(String(event.active.id));
   };
 
-  const handleDragOver = (_event: DragOverEvent) => {
+  const handleDragOver = () => {
     // We resolve the final stage in dragEnd for simplicity
   };
 

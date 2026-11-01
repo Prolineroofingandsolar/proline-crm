@@ -600,7 +600,10 @@ export default function BankingPage() {
   }, []);
 
   useEffect(() => {
-    if (connected) fetchData();
+    if (!connected) return;
+    // Begin the external account refresh after the subscription has mounted.
+    const refresh = window.setTimeout(() => { void fetchData(); }, 0);
+    return () => window.clearTimeout(refresh);
   }, [connected, fetchData]);
 
   const handleDisconnect = () => { disconnect(); setConnected(false); setBalance(null); setTransactions([]); };

@@ -177,8 +177,7 @@ export default function LeadDetailPanel() {
             ) : null)}
 
             {/* Start / End dates — always visible for all stages */}
-            {true && (
-              <>
+            {<>
                 <div className="shrink-0 min-w-[130px] md:min-w-0">
                   <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1 flex items-center gap-1">
                     <Calendar size={10} /> Start Date
@@ -201,8 +200,7 @@ export default function LeadDetailPanel() {
                     className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 text-gray-700"
                   />
                 </div>
-              </>
-            )}
+              </>}
 
             {lead.stage === 'In Progress' && (
               <div className="shrink-0 min-w-[120px] md:min-w-0">

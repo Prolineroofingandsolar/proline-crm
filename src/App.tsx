@@ -1,3 +1,4 @@
+import { supabase } from './lib/supabase';
 import { useState, useEffect } from 'react';
 import Sidebar from './components/Layout/Sidebar';
 import BottomNav from './components/Layout/BottomNav';
@@ -48,17 +49,30 @@ function LoadingScreen() {
 }
 
 export default function App() {
-  const { currentPage, setCurrentPage, currentUserId, users, leads, generalTasks, pushEnabled, isLoaded, loadData } = useStore();
+  const { currentPage, setCurrentPage, currentUserId, users, leads, generalTasks, pushEnabled, isLoaded, loadData, unsavedLeadIds, retryLeadSaves, discardLeadDrafts } = useStore();
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (unsavedLeadIds.length) event.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [unsavedLeadIds.length]);
   const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
   const ADMIN_ONLY_PAGES = new Set(['dashboard', 'leads', 'contacts', 'files', 'reports', 'settings', 'cis', 'banking', 'office']);
+  const [recoveringPassword, setRecoveringPassword] = useState(false);
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(event => {
+      if (event === 'PASSWORD_RECOVERY') setRecoveringPassword(true);
+      if (event === 'SIGNED_OUT') useStore.setState({ currentUserId: null, users: [], leads: [], contacts: [], generalTasks: [], timesheetEntries: [], paymentRuns: [], workerPayments: [] });
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   const [showNewLead, setShowNewLead] = useState(false);
 
   useEffect(() => {
     handleOAuthCallback().then(wasCallback => {
       if (wasCallback) setCurrentPage('banking');
     });
-    loadData();
-  }, []);
+    void loadData();
+  }, [loadData, setCurrentPage]);
 
   // Native app: request notification permission + register for push once logged in.
   useEffect(() => {
@@ -112,8 +126,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleShortcut);
   }, [setCurrentPage]);
 
+  if (recoveringPassword) return <LoginPage key="recovery" mode="recovery" />;
   if (!isLoaded) return <LoadingScreen />;
-  if (users.length === 0) return <LoginPage mode="setup" />;
   if (!currentUserId) return <LoginPage mode="login" />;
 
   const page: Record<string, React.ReactNode> = {
@@ -140,6 +154,11 @@ export default function App() {
       </div>
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar onNewLead={() => setShowNewLead(true)} />
+        {unsavedLeadIds.length > 0 && <div role="status" className="bg-amber-100 text-amber-950 p-3 text-sm flex flex-wrap items-center gap-3">
+          <span>{unsavedLeadIds.length} job change(s) awaiting server confirmation. Keep this page open.</span>
+          <button className="underline" onClick={retryLeadSaves}>Retry saves</button>
+          <button className="underline" onClick={() => { if (window.confirm('Discard unsaved job changes and load the latest server records?')) void discardLeadDrafts(); }}>Discard drafts and refresh</button>
+        </div>}
         <main className="flex-1 overflow-hidden">
           <div className="h-full pb-16 sm:pb-0">
             {(!isAdmin && ADMIN_ONLY_PAGES.has(currentPage)) ? <PipelinePage /> : (page[currentPage] ?? <PipelinePage />)}

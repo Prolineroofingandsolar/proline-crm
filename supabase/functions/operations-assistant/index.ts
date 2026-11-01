@@ -1,5 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
+type ContextTask = { id: string; completed?: boolean; [key: string]: unknown };
+type ContextLead = { id: string; tasks?: ContextTask[]; [key: string]: unknown };
+type ProposedAction = { kind: string; lead_id?: string; task_id?: string; value?: string; secondary_value?: string; quantity?: number; unit?: string; [key: string]: unknown };
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type" };
 const allowedKinds = new Set(["add_job_task", "complete_job_task", "create_general_task", "move_job_stage", "schedule_survey", "schedule_job", "draft_email", "record_deposit", "record_final_payment", "set_job_value", "set_deposit_amount", "set_balance", "add_job_note", "add_material"]);
 const allowedStages = new Set(["New Lead", "Survey Booked", "Quote Preparing", "Quote Sent", "Won", "Scheduled", "In Progress", "Completed", "Waiting for Payment", "Paid", "Lost"]);
@@ -27,8 +30,8 @@ Deno.serve(async (req) => {
   const leads = Array.isArray(payload.leads) ? payload.leads.slice(0, 100) : [];
   const tasks = Array.isArray(payload.tasks) ? payload.tasks.slice(0, 100) : [];
   const history = Array.isArray(payload.history) ? payload.history.slice(-6) : [];
-  const relevanceText = `${prompt} ${history.map((turn: any) => String(turn?.text ?? "")).join(" ")}`.toLowerCase();
-  const compactLeads = leads.map((lead: any) => {
+  const relevanceText = `${prompt} ${history.map((turn: Record<string, unknown>) => String(turn?.text ?? "")).join(" ")}`.toLowerCase();
+  const compactLeads = leads.map((lead: ContextLead) => {
     const name = String(lead.customerName ?? "").toLowerCase();
     const reference = String(lead.jobRef ?? "").toLowerCase();
     const nameParts = name.split(/\s+/).filter((part: string) => part.length >= 4);
@@ -39,7 +42,7 @@ Deno.serve(async (req) => {
       balance: lead.balance, assignedTo: lead.assignedTo, surveyDate: lead.surveyDate,
       surveyTime: lead.surveyTime, startDate: lead.startDate, endDate: lead.endDate,
       progress: lead.progress,
-      tasks: Array.isArray(lead.tasks) ? lead.tasks.filter((task: any) => !task.completed).slice(0, relevant ? 12 : 2) : []
+      tasks: Array.isArray(lead.tasks) ? lead.tasks.filter((task: ContextTask) => !task.completed).slice(0, relevant ? 12 : 2) : []
     };
     if (relevant) {
       summary.address = lead.address;
@@ -47,12 +50,12 @@ Deno.serve(async (req) => {
     }
     return summary;
   });
-  const compactTasks = tasks.filter((task: any) => !task.completed).map((task: any) => ({
+  const compactTasks = tasks.filter((task: ContextTask) => !task.completed).map((task: ContextTask) => ({
     id: task.id, title: task.title, dueDate: task.dueDate, priority: task.priority,
     category: task.category, assignedTo: task.assignedTo
   }));
   const attachment = payload.attachment && typeof payload.attachment === "object" ? payload.attachment : null;
-  let attachmentPart: any = null;
+  let attachmentPart: { inlineData: { mimeType: string; data: string } } | null = null;
   if (attachment) {
     const mimeType = String(attachment.mime_type ?? "");
     const data = String(attachment.data ?? "");
@@ -60,7 +63,7 @@ Deno.serve(async (req) => {
     if (!allowed || !data || data.length > 21_000_000) return json({ error: "Use a PDF or image smaller than 15 MB." }, 400);
     attachmentPart = { inlineData: { mimeType, data } };
   }
-  const leadIDs = new Set(leads.map((lead: any) => String(lead.id)));
+  const leadIDs = new Set(leads.map((lead: ContextLead) => String(lead.id)));
   const taskOwners = new Map<string, string>();
   for (const lead of leads) for (const task of (lead.tasks ?? [])) taskOwners.set(String(task.id), String(lead.id));
 
@@ -118,7 +121,7 @@ If ambiguous, ask a question and return no actions. Today: ${String(payload.toda
   if (!text) return json({ error: "Gemini returned an empty answer." }, 502);
   const result = JSON.parse(text);
   result.lead_ids = (result.lead_ids ?? []).filter((id: unknown) => leadIDs.has(String(id))).map(String);
-  result.actions = (result.actions ?? []).filter((action: any) => {
+  result.actions = (result.actions ?? []).filter((action: ProposedAction) => {
     if (!allowedKinds.has(action.kind)) return false;
     const needsLead = ["add_job_task", "complete_job_task", "move_job_stage", "schedule_survey", "schedule_job", "draft_email", "record_deposit", "record_final_payment", "set_job_value", "set_deposit_amount", "set_balance", "add_job_note", "add_material"].includes(action.kind);
     if (needsLead && !leadIDs.has(String(action.lead_id))) return false;
@@ -128,7 +131,7 @@ If ambiguous, ask a question and return no actions. Today: ${String(payload.toda
     if (action.kind === "schedule_survey" && action.secondary_value && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(action.secondary_value))) return false;
     if (action.kind === "schedule_job" && action.secondary_value && !/^\d{4}-\d{2}-\d{2}$/.test(String(action.secondary_value))) return false;
     if (["add_job_task", "create_general_task", "draft_email"].includes(action.kind) && !String(action.value ?? "").trim()) return false;
-    const lead = leads.find((item: any) => String(item.id) === String(action.lead_id));
+    const lead = leads.find((item: ContextLead) => String(item.id) === String(action.lead_id));
     if (action.kind === "record_deposit" && (payload.user?.role !== "admin" || !lead || Number(lead.deposit) <= 0 || lead.depositPaid === true)) return false;
     if (action.kind === "record_final_payment" && (payload.user?.role !== "admin" || !lead || Number(lead.balance) <= 0)) return false;
     if (["set_job_value", "set_deposit_amount", "set_balance"].includes(action.kind)) {
@@ -140,6 +143,6 @@ If ambiguous, ask a question and return no actions. Today: ${String(payload.toda
     if (action.kind === "add_job_note" && !String(action.value ?? "").trim()) return false;
     if (action.kind === "add_material" && (!String(action.value ?? "").trim() || !String(action.unit ?? "").trim() || !Number.isFinite(Number(action.quantity)) || Number(action.quantity) <= 0)) return false;
     return true;
-  }).map((action: any) => ({ ...action, requires_approval: true }));
+  }).map((action: ProposedAction) => ({ ...action, requires_approval: true }));
   return json(result);
 });

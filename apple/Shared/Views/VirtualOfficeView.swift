@@ -5,7 +5,8 @@ import SwiftUI
     import AppKit
 #endif
 
-/// Live state of the user's Paperclip agents, polled while the Virtual Office is open.
+/// Provider-neutral AI control-room state. Cloud workforce records are authoritative;
+/// Paperclip is polled separately as a comparison/fallback and may be offline.
 @MainActor @Observable
 final class VirtualOffice {
     enum Connection { case connecting, connected, failed(String) }
@@ -17,12 +18,80 @@ final class VirtualOffice {
     var runs: [PaperclipRun] = []
     var activity: [PaperclipActivity] = []
     var issues: [PaperclipIssue] = []
+    var workforceAgents: [AIAgentRecord] = []
+    var workforceRuns: [AIAgentRunRecord] = []
+    var proposals: [AIActionProposalRecord] = []
+    var integrations: [IntegrationHealthRecord] = []
+    var cloudError: String?
+    var isLoadingCloud = true
     var lastUpdated: Date?
     var busyAgentIDs: Set<String> = []
 
     var names: [String: String] { Dictionary(agents.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first }) }
 
+    private static let plannedAgents: [AIAgentRecord] = [
+        .init(
+            id: "local-bruce", slug: "bruce", name: "Bruce", title: "Chief of Staff", provider: "grok", status: "planned",
+            active: false, pilot: false, colour: "#1e3a8a", accessory: "clipboard",
+            instructions: "Prepare concise weekday plans and exception summaries. Coordinate the other roles. Never send, purchase, delete, change schedules, alter CRM records or make financial commitments without administrator approval.",
+            scheduleLabel: "Weekdays 07:30 and 16:30", currentWork: nil, nextRunAt: nil, lastCheckinAt: nil, lastSuccessAt: nil,
+            lastError: nil),
+        .init(
+            id: "local-stace", slug: "stace", name: "Stace", title: "Live Jobs Controller", provider: "grok",
+            status: "setup_required", active: true, pilot: true, colour: "#f97316", accessory: "calendar_headset",
+            instructions: "Own live-job visibility and scheduling exceptions. Flag overdue jobs, missing assignments, unpaid deposits, schedule clashes and decisions. Return no more than eight short items or 300 words and ask one clear question when human input is needed. Never contact customers or change CRM records.",
+            scheduleLabel: "Weekdays 07:00, then every 30 minutes until 18:00", currentWork: nil, nextRunAt: nil, lastCheckinAt: nil,
+            lastSuccessAt: nil, lastError: nil),
+        .init(
+            id: "local-rodney", slug: "rodney", name: "Rodney", title: "Growth Controller", provider: "grok", status: "planned",
+            active: false, pilot: false, colour: "#16a34a", accessory: "quote_sheet",
+            instructions: "Own website and MyBuilder leads, quote follow-ups, reviews and referrals. Prepare drafts only. Never send a customer message or commit a price without approval.",
+            scheduleLabel: "07:00–21:00, five-minute fallback", currentWork: nil, nextRunAt: nil, lastCheckinAt: nil, lastSuccessAt: nil,
+            lastError: nil),
+        .init(
+            id: "local-derrick", slug: "derrick", name: "Derrick", title: "Finance Controller", provider: "grok", status: "planned",
+            active: false, pilot: false, colour: "#0f766e", accessory: "ledger_pound",
+            instructions: "Own deposits, balances, invoices, CIS and payroll exceptions, and cash collection. Never move money, issue refunds or alter financial records without approval.",
+            scheduleLabel: "Weekdays 09:00 and 15:00; Friday cash report", currentWork: nil, nextRunAt: nil, lastCheckinAt: nil,
+            lastSuccessAt: nil, lastError: nil),
+        .init(
+            id: "local-big-john", slug: "big-john", name: "Big John", title: "Site Readiness Controller", provider: "grok",
+            status: "planned", active: false, pilot: false, colour: "#ca8a04", accessory: "hard_hat_hammer",
+            instructions: "Own materials, scaffolding, fleet, MOT, suppliers and next-day site readiness. Never place orders or commit supplier spend without approval.",
+            scheduleLabel: "Weekdays 06:45 and 15:30", currentWork: nil, nextRunAt: nil, lastCheckinAt: nil, lastSuccessAt: nil,
+            lastError: nil),
+    ]
+
+    private static let fallbackIntegrations: [IntegrationHealthRecord] = [
+        .init(
+            id: "local-proline", connector: "proline_mcp", displayName: "ProLine CRM", provider: "proline", status: "available",
+            lastCheckedAt: nil, lastSuccessAt: nil, lastError: nil),
+        .init(
+            id: "local-grok", connector: "grok_bot", displayName: "Grok Bot", provider: "grok", status: "setup_required",
+            lastCheckedAt: nil, lastSuccessAt: nil, lastError: nil),
+        .init(
+            id: "local-paperclip", connector: "paperclip", displayName: "Paperclip fallback", provider: "paperclip", status: "available",
+            lastCheckedAt: nil, lastSuccessAt: nil, lastError: nil),
+    ]
+
     func refresh() async {
+        do {
+            workforceAgents = try await SupabaseService.shared.fetchAIAgents()
+            workforceRuns = try await SupabaseService.shared.fetchAIAgentRuns()
+            proposals = try await SupabaseService.shared.fetchPendingAIActionProposals()
+            integrations = try await SupabaseService.shared.fetchIntegrationHealth()
+            cloudError = nil
+        } catch {
+            if workforceAgents.isEmpty { workforceAgents = Self.plannedAgents }
+            if integrations.isEmpty { integrations = Self.fallbackIntegrations }
+            cloudError = "The secure AI control room could not be refreshed. Your existing CRM data is still available."
+        }
+        isLoadingCloud = false
+        await refreshPaperclip()
+        lastUpdated = .now
+    }
+
+    private func refreshPaperclip() async {
         do {
             let companies = try await PaperclipService.companies()
             var companyID = self.companyID
@@ -32,7 +101,6 @@ final class VirtualOffice {
             guard !companyID.isEmpty else {
                 agents = []; runs = []; activity = []; issues = []
                 connection = .connected
-                lastUpdated = .now
                 return
             }
             // Swift 6 treats sharing one local String across several `async let`
@@ -43,9 +111,8 @@ final class VirtualOffice {
             self.activity = try await PaperclipService.activity(company: companyID)
             self.issues = try await PaperclipService.openIssues(company: companyID)
             connection = .connected
-            lastUpdated = .now
         } catch {
-            connection = .failed(error.localizedDescription)
+            connection = .failed("Paperclip is not running or cannot be reached.")
         }
     }
 
@@ -161,8 +228,10 @@ private func initials(_ name: String) -> String {
 // MARK: - Office
 
 struct VirtualOfficeView: View {
+    @Environment(AppState.self) private var appState
     @State private var office = VirtualOffice()
     @State private var selectedAgent: PaperclipAgent?
+    @State private var selectedWorkforceAgent: AIAgentRecord?
     @State private var showingSettings = false
     #if os(iOS)
         @Environment(\.horizontalSizeClass) private var sizeClass
@@ -179,66 +248,132 @@ struct VirtualOfficeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                switch office.connection {
-                case .failed(let message):
-                    PaperclipOfflineCard(message: message) { showingSettings = true }
-                case .connecting where office.agents.isEmpty:
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, 80)
-                default:
-                    if office.agents.isEmpty {
+                controlRoomHeader
+
+                if let cloudError = office.cloudError {
+                    Label(cloudError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                }
+
+                ControlRoomBoard(
+                    approvals: proposalItems,
+                    urgent: urgentItems,
+                    waiting: waitingItems,
+                    money: moneyItems,
+                    openLead: appState.openLead)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Your AI team").font(.title2.bold())
+                        Spacer()
+                        Text("\(orderedAgents.filter(\.active).count) active")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if office.isLoadingCloud && orderedAgents.isEmpty {
+                        ProgressView("Loading the office…")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 24)
+                    } else if orderedAgents.isEmpty {
                         ContentUnavailableView(
-                            "The office is empty", systemImage: "building.2",
-                            description: Text("Hire your first agent in Paperclip and they'll appear here at their desk."))
+                            "AI team unavailable", systemImage: "person.3.sequence",
+                            description: Text("Only administrators can see the secure workforce control room."))
                     } else {
-                        let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 20)) : AnyLayout(VStackLayout(spacing: 20))
-                        layout {
-                            VStack(spacing: 20) {
-                                ForEach(Array(office.rooms.enumerated()), id: \.offset) { _, room in roomView(room.name, room.agents) }
+                        ForEach(orderedAgents) { agent in
+                            Button { selectedWorkforceAgent = agent } label: {
+                                WorkforceAgentRow(agent: agent)
                             }
-                            .frame(maxWidth: .infinity)
-                            Noticeboard(office: office)
-                                .frame(maxWidth: wide ? 300 : .infinity)
+                            .buttonStyle(.plain)
                         }
                     }
                 }
+
+                if !office.integrations.isEmpty {
+                    ConnectorHealthStrip(integrations: office.integrations)
+                }
+
+                if appState.isAdmin, !office.workforceRuns.isEmpty {
+                    DisclosureGroup("Administrator run history") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(office.workforceRuns.prefix(12)) { run in
+                                WorkforceRunRow(run: run, agentName: workforceName(run.agentID))
+                            }
+                        }
+                        .padding(.top, 10)
+                    }
+                    .padding(16)
+                    .background(.background, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.quaternary))
+                }
+
+                DisclosureGroup("Paperclip fallback") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        switch office.connection {
+                        case .failed(let message):
+                            PaperclipOfflineCard(message: message) { showingSettings = true }
+                        case .connecting:
+                            ProgressView("Checking Paperclip…")
+                        case .connected:
+                            if office.agents.isEmpty {
+                                Text("Paperclip is connected but has no agents in this company.")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ForEach(office.agents) { agent in
+                                    Button { selectedAgent = agent } label: {
+                                        HStack {
+                                            Image(systemName: "shippingbox.fill").foregroundStyle(.secondary)
+                                            Text(agent.name).fontWeight(.semibold)
+                                            Text(office.deskState(agent).label).foregroundStyle(.secondary)
+                                            Spacer()
+                                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.top, 10)
+                }
+                .padding(16)
+                .background(.background, in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.quaternary))
             }
             .padding()
         }
         .background(Color.gray.opacity(0.06))
         .navigationTitle("Virtual Office")
         .toolbar {
-            ToolbarItem { statusPill }
-            if office.companies.count > 1 {
-                ToolbarItem {
-                    Menu {
-                        ForEach(office.companies) { company in
-                            Button(company.name) { office.select(company: company.id) }
-                        }
-                    } label: {
-                        Label(office.companies.first { $0.id == office.companyID }?.name ?? "Company", systemImage: "building.2")
-                    }
+            ToolbarItem {
+                Button { Task { await office.refresh() } } label: {
+                    Label("Refresh office", systemImage: "arrow.clockwise")
                 }
             }
             ToolbarItem {
-                Button { Task { await office.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-            }
-            ToolbarItem {
-                Button { showingSettings = true } label: { Label("Connection", systemImage: "gearshape") }
-            }
-            if let url = URL(string: PaperclipSettings.baseURL) {
-                ToolbarItem {
-                    Link(destination: url) { Label("Open Paperclip", systemImage: "arrow.up.right.square") }
+                Button { showingSettings = true } label: {
+                    Label("Connection", systemImage: "gearshape")
                 }
             }
         }
         .task {
             while !Task.isCancelled {
                 await office.refresh()
-                try? await Task.sleep(for: .seconds(8))
+                try? await Task.sleep(for: .seconds(15))
             }
         }
         .sheet(item: $selectedAgent) { agent in
             AgentDetailSheet(office: office, agentID: agent.id)
+        }
+        .sheet(item: $selectedWorkforceAgent) { agent in
+            WorkforceAgentDetailSheet(
+                agent: agent,
+                runs: office.workforceRuns.filter { $0.agentID == agent.id },
+                integrations: office.integrations)
         }
         .sheet(isPresented: $showingSettings, onDismiss: { Task { await office.refresh() } }) {
             NavigationStack { PaperclipConnectionForm() }
@@ -248,39 +383,392 @@ struct VirtualOfficeView: View {
         }
     }
 
-    private var statusPill: some View {
-        let (text, color): (String, Color) =
-            switch office.connection {
-            case .connected:
-                ("\(office.agents.filter { office.deskState($0) == .working }.count) of \(office.agents.count) working", .green)
-            case .failed: ("Paperclip not running", .red)
-            case .connecting: ("Connecting…", .gray)
-            }
-        return Label { Text(text) } icon: { Circle().fill(color).frame(width: 7, height: 7) }
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(color.opacity(0.12), in: Capsule())
+    private var orderedAgents: [AIAgentRecord] {
+        let order = ["bruce", "stace", "rodney", "derrick", "big-john"]
+        return office.workforceAgents.sorted {
+            (order.firstIndex(of: $0.slug) ?? 99, $0.name) < (order.firstIndex(of: $1.slug) ?? 99, $1.name)
+        }
     }
 
-    private func roomView(_ name: String, _ agents: [PaperclipAgent]) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(name.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14, alignment: .top)], spacing: 26) {
-                ForEach(agents) { agent in
-                    Button { selectedAgent = agent } label: {
-                        AgentDeskCard(
-                            agent: agent, state: office.deskState(agent), currentIssue: office.currentIssue(for: agent.id))
+    private var controlRoomHeader: some View {
+        HStack(alignment: .top, spacing: 14) {
+            BotAvatar(slug: "stace", size: 58)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Business control room").font(.title.bold())
+                Text("Everything needing attention, followed by the bots responsible for it.")
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if let lastUpdated = office.lastUpdated {
+                Text("Updated \(lastUpdated.formatted(date: .omitted, time: .shortened))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var proposalItems: [ControlRoomItem] {
+        office.proposals.prefix(8).map {
+            ControlRoomItem(id: $0.id, title: $0.title, detail: $0.summary, leadID: nil)
+        }
+    }
+
+    private var urgentItems: [ControlRoomItem] {
+        appState.companyActions.filter { $0.priority >= .urgent && ![.deposit, .balance].contains($0.kind) }.prefix(8).map {
+            ControlRoomItem(id: $0.id, title: $0.title, detail: "\($0.detail) · \($0.reason)", leadID: $0.leadID)
+        }
+    }
+
+    private var waitingItems: [ControlRoomItem] {
+        let jobs = appState.leads.filter {
+            [.won, .scheduled, .inProgress].contains($0.stage) && $0.assignedTo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.map {
+            ControlRoomItem(id: "job-\($0.id)", title: "\($0.name) has no owner", detail: "\($0.jobRef) · \($0.stage.displayName)", leadID: $0.id)
+        }
+        let tasks = appState.visibleGeneralTasks.filter { !$0.completed && $0.assignedTo.isEmpty }.prefix(8).map {
+            ControlRoomItem(id: "task-\($0.id)", title: $0.title, detail: "Unassigned · \($0.category)", leadID: nil)
+        }
+        return Array((jobs + tasks).prefix(8))
+    }
+
+    private var moneyItems: [ControlRoomItem] {
+        appState.companyActions.filter { [.deposit, .balance].contains($0.kind) }.prefix(8).map {
+            ControlRoomItem(id: $0.id, title: $0.title, detail: $0.detail, leadID: $0.leadID)
+        }
+    }
+
+    private func workforceName(_ id: String) -> String {
+        office.workforceAgents.first { $0.id == id }?.name ?? "Agent"
+    }
+}
+
+private struct ControlRoomItem: Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+    let leadID: String?
+}
+
+private struct ControlRoomBoard: View {
+    let approvals: [ControlRoomItem]
+    let urgent: [ControlRoomItem]
+    let waiting: [ControlRoomItem]
+    let money: [ControlRoomItem]
+    let openLead: (String) -> Void
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 14, alignment: .top)], spacing: 14) {
+            ControlRoomQueueCard(
+                title: "Needs your approval", icon: "checkmark.seal.fill", tint: .purple,
+                items: approvals, emptyMessage: "Nothing is waiting for approval.", openLead: openLead)
+            ControlRoomQueueCard(
+                title: "Urgent today", icon: "exclamationmark.triangle.fill", tint: .red,
+                items: urgent, emptyMessage: "No urgent exceptions right now.", openLead: openLead)
+            ControlRoomQueueCard(
+                title: "Waiting on someone", icon: "person.crop.circle.badge.clock", tint: .orange,
+                items: waiting, emptyMessage: "Nothing is stuck or unassigned.", openLead: openLead)
+            ControlRoomQueueCard(
+                title: "Money to chase", icon: "sterlingsign.circle.fill", tint: .teal,
+                items: money, emptyMessage: "No deposits or balances need chasing.", openLead: openLead)
+        }
+    }
+}
+
+private struct ControlRoomQueueCard: View {
+    let title: String
+    let icon: String
+    let tint: Color
+    let items: [ControlRoomItem]
+    let emptyMessage: String
+    let openLead: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label(title, systemImage: icon).font(.headline).foregroundStyle(tint)
+                Spacer()
+                Text("\(items.count)")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(tint.opacity(0.12), in: Capsule())
+            }
+            if items.isEmpty {
+                Text(emptyMessage).font(.subheadline).foregroundStyle(.secondary)
+            } else {
+                ForEach(items.prefix(4)) { item in
+                    Group {
+                        if let leadID = item.leadID {
+                            Button { openLead(leadID) } label: { itemRow(item, showsChevron: true) }
+                                .buttonStyle(.plain)
+                        } else {
+                            itemRow(item, showsChevron: false)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    if item.id != items.prefix(4).last?.id { Divider() }
+                }
+                if items.count > 4 {
+                    Text("+ \(items.count - 4) more")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(tint)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(tint.opacity(0.18)))
+    }
+
+    private func itemRow(_ item: ControlRoomItem, showsChevron: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle().fill(tint).frame(width: 6, height: 6).padding(.top, 6)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                Text(item.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer(minLength: 4)
+            if showsChevron { Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary) }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct WorkforceAgentRow: View {
+    let agent: AIAgentRecord
+
+    var body: some View {
+        HStack(spacing: 14) {
+            BotAvatar(slug: agent.slug, size: 54)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text(agent.name).font(.headline)
+                    if agent.pilot {
+                        Text("PILOT").font(.caption2.bold()).foregroundStyle(.orange)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.12), in: Capsule())
+                    }
+                }
+                Text(agent.title).font(.subheadline).foregroundStyle(.secondary)
+                Text(agent.currentWork ?? defaultWork(agent))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 10)
+            VStack(alignment: .trailing, spacing: 5) {
+                AgentStatusPill(status: agent.status)
+                Text("Next: \(futureLabel(agent.nextRunAt))")
+                Text("Checked in: \(timeAgo(agent.lastCheckinAt))")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(botColor(agent.slug).opacity(0.20)))
+        .contentShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func defaultWork(_ agent: AIAgentRecord) -> String {
+        if agent.status == "setup_required" { return "Waiting for the secure Grok Bot connection." }
+        if agent.status == "planned" { return "Planned for after Stace passes the five-day pilot." }
+        return "Waiting for the next scheduled check."
+    }
+}
+
+private struct BotAvatar: View {
+    let slug: String
+    let size: CGFloat
+
+    var body: some View {
+        let tint = botColor(slug)
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.24)
+                .fill(tint.gradient)
+                .frame(width: size, height: size)
+            VStack(spacing: size * 0.04) {
+                HStack(spacing: size * 0.12) {
+                    Circle().fill(.white).frame(width: size * 0.10, height: size * 0.10)
+                    Circle().fill(.white).frame(width: size * 0.10, height: size * 0.10)
+                }
+                Capsule().fill(.white.opacity(0.85)).frame(width: size * 0.30, height: size * 0.06)
+                Image(systemName: botAccessory(slug))
+                    .font(.system(size: size * 0.20, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            Capsule().fill(tint).frame(width: size * 0.08, height: size * 0.20).offset(y: -size * 0.55)
+            Circle().fill(tint).frame(width: size * 0.16, height: size * 0.16).offset(y: -size * 0.66)
+        }
+        .frame(width: size, height: size)
+        .padding(.top, size * 0.10)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct AgentStatusPill: View {
+    let status: String
+    var body: some View {
+        let tint = agentStatusColor(status)
+        HStack(spacing: 5) {
+            Circle().fill(tint).frame(width: 7, height: 7)
+            Text(readableStatus(status)).font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(tint.opacity(0.11), in: Capsule())
+    }
+}
+
+private struct ConnectorHealthStrip: View {
+    let integrations: [IntegrationHealthRecord]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Connections").font(.headline)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], spacing: 10) {
+                ForEach(integrations) { integration in
+                    HStack(spacing: 8) {
+                        Circle().fill(integrationColor(integration.status)).frame(width: 8, height: 8)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(integration.displayName).font(.subheadline.weight(.semibold)).lineLimit(1)
+                            Text(readableStatus(integration.status)).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(10)
+                    .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
                 }
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.opacity(0.6), in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])).foregroundStyle(.quaternary))
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.quaternary))
     }
+}
+
+private struct WorkforceRunRow: View {
+    let run: AIAgentRunRecord
+    let agentName: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle().fill(agentStatusColor(run.status)).frame(width: 8, height: 8).padding(.top, 5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(agentName) · \(readableStatus(run.status))").font(.subheadline.weight(.semibold))
+                Text(run.summary ?? run.error ?? "No summary supplied.").font(.caption).foregroundStyle(.secondary).lineLimit(3)
+            }
+            Spacer()
+            Text(timeAgo(run.startedAt)).font(.caption2).foregroundStyle(.tertiary)
+        }
+    }
+}
+
+private struct WorkforceAgentDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let agent: AIAgentRecord
+    let runs: [AIAgentRunRecord]
+    let integrations: [IntegrationHealthRecord]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing: 14) {
+                        BotAvatar(slug: agent.slug, size: 62)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(agent.title).foregroundStyle(.secondary)
+                            AgentStatusPill(status: agent.status)
+                            Text(agent.provider.capitalized).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Section("Current work") {
+                    Text(agent.currentWork ?? (agent.status == "planned" ? "Waiting for the Stace pilot to pass." : "Waiting for setup or the next scheduled check."))
+                    LabeledContent("Schedule", value: agent.scheduleLabel ?? "Not scheduled")
+                    LabeledContent("Next run", value: futureLabel(agent.nextRunAt))
+                    LabeledContent("Last check-in", value: timeAgo(agent.lastCheckinAt))
+                    if let lastError = agent.lastError { Label(lastError, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red) }
+                }
+                Section("Instructions") {
+                    Text(agent.instructions).textSelection(.enabled)
+                }
+                Section("Safety") {
+                    Label("Customer messages require approval", systemImage: "checkmark.shield.fill")
+                    Label("Schedule and CRM changes require approval", systemImage: "checkmark.shield.fill")
+                    Label("Payments and purchases require approval", systemImage: "checkmark.shield.fill")
+                }
+                if !runs.isEmpty {
+                    Section("Recent check-ins") {
+                        ForEach(runs.prefix(12)) { run in WorkforceRunRow(run: run, agentName: agent.name) }
+                    }
+                }
+                if agent.slug == "stace", integrations.first(where: { $0.connector == "grok_bot" })?.status == "setup_required" {
+                    Section("Pilot setup") {
+                        Label("Grok Bot connection still required", systemImage: "link.badge.plus")
+                            .foregroundStyle(.orange)
+                        Text("No subscription or API billing has been activated from ProLine.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(agent.name)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        #if os(macOS)
+            .frame(minWidth: 500, minHeight: 620)
+        #endif
+    }
+}
+
+private func botColor(_ slug: String) -> Color {
+    switch slug {
+    case "bruce": Color(red: 0.12, green: 0.23, blue: 0.54)
+    case "stace": .orange
+    case "rodney": .green
+    case "derrick": .teal
+    case "big-john": Color(red: 0.82, green: 0.60, blue: 0.04)
+    default: .gray
+    }
+}
+
+private func botAccessory(_ slug: String) -> String {
+    switch slug {
+    case "bruce": "list.clipboard.fill"
+    case "stace": "calendar.badge.clock"
+    case "rodney": "doc.text.fill"
+    case "derrick": "sterlingsign.circle.fill"
+    case "big-john": "hammer.fill"
+    default: "gearshape.fill"
+    }
+}
+
+private func readableStatus(_ value: String) -> String {
+    value.replacingOccurrences(of: "_", with: " ").capitalized
+}
+
+private func agentStatusColor(_ status: String) -> Color {
+    switch status {
+    case "running", "succeeded", "connected", "available": .green
+    case "setup_required", "partial", "queued": .orange
+    case "error", "failed", "degraded": .red
+    case "paused": .yellow
+    default: .gray
+    }
+}
+
+private func integrationColor(_ status: String) -> Color { agentStatusColor(status) }
+
+private func futureLabel(_ raw: String?) -> String {
+    guard let date = PaperclipService.date(raw) else { return "Not scheduled" }
+    if date <= .now { return "Due now" }
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .short
+    return formatter.localizedString(for: date, relativeTo: .now)
 }
 
 private struct AgentDeskCard: View {
@@ -409,49 +897,27 @@ private struct PaperclipOfflineCard: View {
     let openSettings: () -> Void
 
     var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 12) {
-                Label(message, systemImage: "wifi.slash").font(.headline).foregroundStyle(.red)
-                #if os(macOS)
-                    Text("Paperclip is the engine that runs your agents, so it has to be running on this Mac. To make it start on its own whenever your Mac starts, do this once in Terminal:")
-                    CopyableCommand(step: "1", command: "npx paperclipai@latest install --yes")
-                    CopyableCommand(step: "2", note: "Open a new Terminal window, then:", command: "paperclipai service install")
-                    Text("This page reconnects on its own once Paperclip is running.").font(.caption).foregroundStyle(.secondary)
-                #else
-                    Text("Your agents run in Paperclip on your Mac. To see them from here, set Paperclip's address to your Mac's network or Tailscale address, and add a board API key.")
-                #endif
-                Button("Connection settings…", action: openSettings)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 12) {
+            Label(message, systemImage: "wifi.slash")
+                .font(.headline)
+                .foregroundStyle(.red)
+            #if os(macOS)
+                Text("Paperclip is not running on this Mac. Start Paperclip, or open Connection settings to use a different address.")
+                Text("The Virtual Office reconnects automatically when Paperclip becomes available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            #else
+                Text("Your agents run in Paperclip on your Mac. To see them from here, set Paperclip's address to your Mac's network or Tailscale address, and add a board API key.")
+            #endif
+            Button("Connection settings…", action: openSettings)
         }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.quaternary))
+        .accessibilityElement(children: .contain)
     }
 }
-
-#if os(macOS)
-    private struct CopyableCommand: View {
-        let step: String
-        var note: String?
-        let command: String
-        @State private var copied = false
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(note.map { "Step \(step): \($0)" } ?? "Step \(step)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                HStack {
-                    Text(command).font(.system(.body, design: .monospaced)).textSelection(.enabled)
-                    Spacer()
-                    Button(copied ? "Copied" : "Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(command, forType: .string)
-                        copied = true
-                    }
-                }
-                .padding(10)
-                .background(Color.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-            }
-        }
-    }
-#endif
 
 // MARK: - Agent detail
 

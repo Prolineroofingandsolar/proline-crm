@@ -16,6 +16,7 @@ struct CRMCalendarView: View {
 #if os(iOS)
     private struct MobileScheduleCalendar: View {
         @Environment(AppState.self) private var appState
+        @Environment(\.dynamicTypeSize) private var dynamicTypeSize
         @Binding var selected: Date
         private var days: [Date] {
             (0..<14).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: Calendar.current.startOfDay(for: .now)) }
@@ -24,44 +25,107 @@ struct CRMCalendarView: View {
             days.flatMap { day in events(day).map { (day, $0, $0.surveyDate == PayrollMath.key(day)) } }
         }
         var body: some View {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Label("Survey", systemImage: "circle.fill").foregroundStyle(Color.accentColor);
-                        Label("Booked", systemImage: "circle.fill").foregroundStyle(.blue);
-                        Label("In progress", systemImage: "circle.fill").foregroundStyle(.green); Spacer();
-                        DatePicker("Choose date", selection: $selected, displayedComponents: .date).labelsHidden()
-                    }.font(.caption.bold())
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 9) { ForEach(days, id: \.self) { day in dayButton(day) } }
+            GeometryReader { geometry in
+                if geometry.size.width >= 760 && !dynamicTypeSize.isAccessibilitySize {
+                    HStack(alignment: .top, spacing: 16) {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                DatePicker("Choose date", selection: $selected, displayedComponents: .date)
+                                    .datePickerStyle(.graphical)
+                                    .padding(12)
+                                    .background(.background, in: RoundedRectangle(cornerRadius: 16))
+                                legend
+                                upcomingAgenda
+                            }
+                            .padding(.vertical, 16)
+                        }
+                        .frame(maxWidth: .infinity)
+                        ScrollView {
+                            selectedAgenda.padding(.vertical, 16)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    Text("Next 14 days").font(.title2.bold())
-                    if allUpcoming.isEmpty {
-                        ContentUnavailableView(
-                            "Nothing booked", systemImage: "calendar",
-                            description: Text("Scheduled surveys and jobs will appear here without needing to select each day."))
+                    .padding(.horizontal, 16)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            DatePicker("Choose date", selection: $selected, displayedComponents: .date)
+                            legend
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 9) { ForEach(days, id: \.self) { day in dayButton(day) } }
+                            }
+                            selectedAgenda
+                            upcomingAgenda
+                        }
+                        .padding(16)
                     }
-                    ForEach(Array(allUpcoming.enumerated()), id: \.offset) { _, item in
-                        NavigationLink {
-                            LeadDetailView(leadID: item.1.id)
-                        } label: {
-                            HStack(spacing: 12) {
-                                RoundedRectangle(cornerRadius: 3).fill(
-                                    item.2 ? Color.accentColor : (item.1.stage == .inProgress ? Color.green : Color.blue)
-                                ).frame(width: 5, height: 48);
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(item.1.name).fontWeight(.semibold);
-                                    Text(
-                                        "\(item.0.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))) · \(item.2 ? "Survey" : item.1.jobType)"
-                                    ).font(.caption).foregroundStyle(.secondary)
-                                }; Spacer(); Text(item.1.jobRef).font(.caption2.bold()).foregroundStyle(.secondary);
-                                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
-                            }.padding(13).background(.background, in: RoundedRectangle(cornerRadius: 12)).overlay(
-                                RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
-                        }.buttonStyle(.plain)
+                }
+            }
+            .background(Color(.systemGroupedBackground))
+        }
+
+        private var legend: some View {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { legendLabels }
+                VStack(alignment: .leading, spacing: 8) { legendLabels }
+            }
+            .font(.caption.bold())
+        }
+
+        @ViewBuilder private var legendLabels: some View {
+            Label("Survey", systemImage: "circle.fill").foregroundStyle(Color.accentColor)
+            Label("Booked", systemImage: "circle.fill").foregroundStyle(.blue)
+            Label("In progress", systemImage: "circle.fill").foregroundStyle(.green)
+        }
+
+        private var selectedAgenda: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(selected.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
+                    .font(.title2.bold())
+                let selectedEvents = events(selected)
+                if selectedEvents.isEmpty {
+                    ContentUnavailableView("No bookings on this day", systemImage: "calendar", description: Text("Choose another day to see its surveys and jobs."))
+                }
+                ForEach(selectedEvents) { lead in
+                    appointment(day: selected, lead: lead, survey: lead.surveyDate == PayrollMath.key(selected))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        private var upcomingAgenda: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Next 14 days").font(.headline)
+                if allUpcoming.isEmpty {
+                    ContentUnavailableView("Nothing booked", systemImage: "calendar", description: Text("Scheduled surveys and jobs will appear here."))
+                }
+                ForEach(Array(allUpcoming.enumerated()), id: \.offset) { _, item in
+                    appointment(day: item.0, lead: item.1, survey: item.2)
+                }
+            }
+        }
+
+        private func appointment(day: Date, lead: Lead, survey: Bool) -> some View {
+            NavigationLink(value: LeadRoute(id: lead.id)) {
+                HStack(spacing: 12) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(survey ? Color.accentColor : (lead.stage == .inProgress ? Color.green : Color.blue))
+                        .frame(width: 5)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(lead.name).fontWeight(.semibold).foregroundStyle(.primary)
+                        Text("\(day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))) · \(survey ? "Survey" : lead.jobType)")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text(lead.jobRef).font(.caption2).foregroundStyle(.secondary)
                     }
-                }.padding()
-            }.background(Color(.systemGroupedBackground))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                }
+                .padding(14)
+                .frame(minHeight: 72)
+                .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
+            }
+            .buttonStyle(.plain)
         }
         private func events(_ day: Date) -> [Lead] {
             let key = PayrollMath.key(day);

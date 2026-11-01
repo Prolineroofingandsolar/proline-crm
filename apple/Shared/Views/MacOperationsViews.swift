@@ -220,7 +220,7 @@
             appState.leads.filter { ![.paid, .lost].contains($0.stage) }.reduce(0) { $0 + $1.value }
         }
         private var outstanding: Double {
-            appState.leads.filter { $0.stage != .lost }.reduce(0) { $0 + $1.balance }
+            CustomerMoneyPolicy.summary(leads: appState.leads).due
         }
         private var average: Double {
             let valued = appState.leads.filter { $0.value > 0 }
@@ -296,7 +296,7 @@
                     reportPanel("Outstanding balances") {
                         VStack(spacing: 0) {
                             ForEach(
-                                appState.leads.filter { $0.balance > 0 && $0.stage != .lost }.sorted {
+                                appState.leads.filter { $0.balance > 0 && CustomerMoneyPolicy.activeStages.contains($0.stage) }.sorted {
                                     $0.balance > $1.balance
                                 }.prefix(12)
                             ) { lead in
@@ -315,7 +315,7 @@
                                     }.padding(.vertical, 9).overlay(alignment: .bottom) { Divider() }
                                 }.buttonStyle(.plain)
                             }
-                            if appState.leads.allSatisfy({ $0.balance <= 0 || $0.stage == .lost }) {
+                            if appState.leads.allSatisfy({ $0.balance <= 0 || !CustomerMoneyPolicy.activeStages.contains($0.stage) }) {
                                 ContentUnavailableView(
                                     "Nothing outstanding", systemImage: "checkmark.seal",
                                     description: Text("All recorded balances are clear."))

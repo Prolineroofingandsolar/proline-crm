@@ -3,7 +3,8 @@ import { Plus, Trash2, Image as ImageIcon } from 'lucide-react';
 import type { Lead } from '../../types';
 import { useStore } from '../../store/useStore';
 import { formatDateShort } from '../../utils/helpers';
-import { StorageImage, removeStoredObject, uploadStoredObject } from '../StorageAsset';
+import { StorageImage } from '../StorageAsset';
+import { removeStoredObject, uploadStoredObject } from '../../lib/storage';
 
 type Cat = 'Before' | 'During' | 'After';
 
