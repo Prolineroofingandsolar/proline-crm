@@ -325,6 +325,11 @@ export function validateArguments(name, args, definitions = [...TOOLS, ...AGENT_
   if (args.due_date !== undefined && !validDay(args.due_date)) {
     throw new Error("Use a valid YYYY-MM-DD due date.");
   }
+  if (name === "proline_update_job_dates") {
+    if (!validDay(args.start_date) || !validDay(args.end_date)) throw new Error("Use valid YYYY-MM-DD job dates.");
+    if (args.end_date < args.start_date) throw new Error("End date cannot precede start date.");
+    if (Number.isNaN(Date.parse(args.expected_updated_at))) throw new Error("expected_updated_at must be an ISO timestamp.");
+  }
   if (name === "proline_agent_checkin") {
     if (!Array.isArray(args.items) || args.items.length > 8) throw new Error("A check-in may contain no more than eight items.");
     if (typeof args.summary !== "string" || args.summary.length > 3000) throw new Error("Check-in summary is too long.");
