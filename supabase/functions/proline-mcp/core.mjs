@@ -194,6 +194,18 @@ export const AGENT_WRITE_TOOLS = [
     false,
   ),
   tool(
+    "proline_update_job_dates",
+    "Update an existing job's dates when explicitly instructed by the authenticated administrator. Requires a current version timestamp to avoid overwriting other changes.",
+    schema({
+      job_id: { ...text, minLength: 1, maxLength: 100 },
+      start_date: { ...text, minLength: 10, maxLength: 10 },
+      end_date: { ...text, minLength: 10, maxLength: 10 },
+      expected_updated_at: { ...text, minLength: 10, maxLength: 80 },
+    }, ["job_id", "start_date", "end_date", "expected_updated_at"]),
+    false,
+    false,
+  ),
+  tool(
     "proline_submit_action_proposal",
     "Submit a proposed consequential action for administrator review. This records a proposal only and never executes it.",
     schema({
