@@ -94,3 +94,12 @@ test("accepts email enquiries without mislabelling their source and rejects unkn
   assert.throws(() => validateArguments("proline_create_verified_lead", { ...lead, source: "spam" }, enabled));
   assert.equal(toolsForConfig(true, false).some(tool => tool.name === "proline_create_verified_lead"), false);
 });
+
+test("date changes are only exposed with agent writes and reject unsafe dates", () => {
+  assert.equal(toolsForConfig(true, false).some(t => t.name === "proline_update_job_dates"), false);
+  const enabled = toolsForConfig(true, true);
+  const args = { job_id: "job-1", start_date: "2026-11-13", end_date: "2026-11-17", expected_updated_at: "2026-11-04T10:00:00Z" };
+  assert.doesNotThrow(() => validateArguments("proline_update_job_dates", args, enabled));
+  assert.throws(() => validateArguments("proline_update_job_dates", { ...args, end_date: "2026-11-12" }, enabled), /End date/);
+  assert.throws(() => validateArguments("proline_update_job_dates", { ...args, start_date: "2026-11-31" }, enabled), /valid YYYY-MM-DD/);
+});
