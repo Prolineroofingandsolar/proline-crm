@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X, Clock, Landmark, Bot, Ruler, Receipt } from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { staffVisible } from '../../lib/navAccess';
 
 const ADMIN_MAIN = [
   { id: 'pipeline',  label: 'Pipeline',  icon: Kanban },
@@ -35,8 +36,8 @@ const USER_MORE = [
 export default function BottomNav() {
   const { currentPage, setCurrentPage, users, currentUserId, simpleMode, setSimpleMode } = useStore();
   const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
-  const MAIN = isAdmin && !simpleMode ? ADMIN_MAIN : USER_MAIN;
-  const MORE  = isAdmin && !simpleMode ? ADMIN_MORE : USER_MORE;
+  const MAIN = isAdmin && !simpleMode ? ADMIN_MAIN : staffVisible(USER_MAIN);
+  const MORE  = isAdmin && !simpleMode ? ADMIN_MORE : staffVisible(USER_MORE);
   const [showMore, setShowMore] = useState(false);
 
   const go = (id: string) => { setCurrentPage(id); setShowMore(false); };

@@ -1,4 +1,5 @@
 import { supabase } from './lib/supabase';
+import { ADMIN_ONLY_PAGES } from './lib/navAccess';
 import { useState, useEffect } from 'react';
 import Sidebar from './components/Layout/Sidebar';
 import BottomNav from './components/Layout/BottomNav';
@@ -57,7 +58,6 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [unsavedLeadIds.length]);
   const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
-  const ADMIN_ONLY_PAGES = new Set(['dashboard', 'pipeline', 'leads', 'contacts', 'files', 'reports', 'settings', 'cis', 'banking', 'office']);
   const staffOnAdminPage = users.some(u => u.id === currentUserId) && !isAdmin && ADMIN_ONLY_PAGES.has(currentPage);
   useEffect(() => { if (staffOnAdminPage) setCurrentPage('jobs'); }, [staffOnAdminPage, setCurrentPage]);
   const [recoveringPassword, setRecoveringPassword] = useState(false);
