@@ -37,7 +37,8 @@ struct DeckCard: Identifiable {
 /// next customer, left to go back. Swiping never changes data.
 struct CustomerDeckView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var index = 0
     @State private var offset: CGSize = .zero
     @State private var showingAll = false
@@ -103,11 +104,15 @@ struct CustomerDeckView: View {
     private var chosenKey: String { SupabaseService.localDay(for: chosenDay) }
 
     var body: some View {
-        ScrollView {
-            if horizontalSizeClass == .regular {
-                openDisplayLayout
-            } else {
-                compactDisplayLayout
+        GeometryReader { geometry in
+            ScrollView {
+                // Measure the content area: an open display may still have a narrow
+                // window when a sidebar or another app takes part of the screen.
+                if geometry.size.width >= 600 && !dynamicTypeSize.isAccessibilitySize {
+                    openDisplayLayout
+                } else {
+                    compactDisplayLayout
+                }
             }
         }
         .background(Color(.systemGroupedBackground))
@@ -136,7 +141,7 @@ struct CustomerDeckView: View {
         .padding(16)
     }
 
-    /// The Duo inner display uses each side for a coherent group so cards do not straddle the fold.
+    /// Use two readable columns when the current window has enough space.
     private var openDisplayLayout: some View {
         VStack(alignment: .leading, spacing: 16) {
             headerRow
@@ -171,6 +176,29 @@ struct CustomerDeckView: View {
             }
             .padding(.horizontal, 2)
             deckContent
+            if !deck.isEmpty {
+                HStack {
+                    Button {
+                        offset = .zero
+                        index = max(0, current - 1)
+                    } label: {
+                        Label("Previous", systemImage: "chevron.left").frame(minHeight: 36)
+                    }
+                    .disabled(current == 0)
+                    Spacer()
+                    Button {
+                        offset = .zero
+                        index = min(deck.count - 1, current + 1)
+                        syncOrder()
+                    } label: {
+                        Label("Next", systemImage: "chevron.right").frame(minHeight: 36)
+                    }
+                    .disabled(current + 1 >= deck.count)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Customer cards")
+            }
         }
     }
 
@@ -181,7 +209,7 @@ struct CustomerDeckView: View {
             DeckCardView(card: deck[current])
                 .offset(offset)
                 .rotationEffect(.degrees(Double(offset.width / 20)))
-                .gesture(dragGesture)
+                .simultaneousGesture(dragGesture)
                 .id(deck[current].id)
                 .background {
                     // A hint that more cards follow, sized to the card in front.
@@ -192,7 +220,7 @@ struct CustomerDeckView: View {
                             .offset(y: 12)
                     }
                 }
-                .animation(.spring(duration: 0.35), value: offset)
+                .animation(reduceMotion ? nil : .spring(duration: 0.35), value: offset)
                 .padding(.bottom, 10)
         }
     }
@@ -236,10 +264,13 @@ struct CustomerDeckView: View {
 
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 12)
-            .onChanged { value in offset = value.translation }
+            .onChanged { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                offset = CGSize(width: value.translation.width, height: 0)
+            }
             .onEnded { value in
                 let width = value.translation.width
-                guard abs(width) > 110 else { offset = .zero; return }
+                guard abs(width) > 110, abs(width) > abs(value.translation.height) else { offset = .zero; return }
                 let forward = width > 0
                 guard forward ? current + 1 < deck.count : current > 0 else { offset = .zero; return }
                 offset = CGSize(width: forward ? 600 : -600, height: value.translation.height)
@@ -540,7 +571,7 @@ struct NumbersRow: View {
     @Environment(AppState.self) private var appState
     private var today: String { SupabaseService.today }
     private var live: [Lead] { appState.leads.filter { ![.paid, .lost].contains($0.stage) } }
-    private var toCollect: Double { live.reduce(0) { $0 + $1.balance } }
+    private var toCollect: Double { CustomerMoneyPolicy.summary(leads: appState.leads).due }
     private var overdue: Double { live.filter { [.completed, .waitingForPayment].contains($0.stage) }.reduce(0) { $0 + $1.balance } }
     private var quotes: [Lead] { appState.leads.filter { $0.stage == .quoteSent } }
     private var workers: [CRMUser] { appState.users.filter { $0.role != "admin" && $0.dayRate != nil } }

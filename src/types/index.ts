@@ -11,12 +11,15 @@ export type JobType =
 export type Stage =
   | 'New Lead'
   | 'Survey Booked'
+  | 'Quote Preparing'
   | 'Quote Sent'
   | 'Won'
+  | 'Scheduled'
   | 'In Progress'
   | 'Completed'
   | 'Waiting for Payment'
-  | 'Paid';
+  | 'Paid'
+  | 'Lost';
 
 export interface Task {
   id: string;
@@ -67,7 +70,7 @@ export interface AppUser {
   name: string;
   username: string;
   passwordHash: string;
-  role: 'admin' | 'user' | 'casual';
+  role: 'admin' | 'user' | 'worker' | 'labourer' | 'casual';
   createdAt: string;
   dayRate?: number;
   cisRate?: 20 | 30;

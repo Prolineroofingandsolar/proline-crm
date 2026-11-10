@@ -16,15 +16,41 @@ struct JobsView: View {
             }
             .sorted { ($0.startDate ?? "9999", $0.name) < ($1.startDate ?? "9999", $1.name) }
     }
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var body: some View {
-        List {
-            ForEach(jobs) { lead in
+        Group {
+            #if os(iOS)
+            GeometryReader { geometry in
+            ScrollView {
+                LazyVGrid(
+                    columns: dynamicTypeSize.isAccessibilitySize
+                        ? [GridItem(.flexible())]
+                        : [GridItem(.adaptive(minimum: min(280, max(1, geometry.size.width - 32))), alignment: .top)],
+                    spacing: 14
+                ) {
+                    ForEach(jobs) { lead in
+                        NavigationLink(value: LeadRoute(id: lead.id)) {
+                            jobCard(lead)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(16)
+                if jobs.isEmpty {
+                    ContentUnavailableView("No jobs", systemImage: "briefcase", description: Text("Try another stage or search."))
+                }
+            }
+            .scrollDismissesKeyboard(.interactively)
+            }
+            .background(Color(.systemGroupedBackground))
+            #else
+            List(jobs) { lead in
                 NavigationLink(value: LeadRoute(id: lead.id)) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(lead.name).fontWeight(.medium)
-                            Text([lead.jobType, lead.address].filter { !$0.isEmpty }.joined(separator: " · ")).font(.subheadline)
-                                .foregroundStyle(.secondary).lineLimit(1)
+                            Text([lead.jobType, lead.address].filter { !$0.isEmpty }.joined(separator: " · "))
+                                .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
@@ -34,9 +60,7 @@ struct JobsView: View {
                     }
                 }
             }
-            if jobs.isEmpty {
-                Text("No jobs").foregroundStyle(.secondary)
-            }
+            #endif
         }
         .searchable(text: $search, prompt: "Customer, job or address")
         .navigationTitle("Jobs")
@@ -47,6 +71,37 @@ struct JobsView: View {
             }
         }
     }
+    private func jobCard(_ lead: Lead) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(lead.name).font(.headline).foregroundStyle(.primary)
+                    Text(lead.jobRef).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+            }
+            Text([lead.jobType, lead.address].filter { !$0.isEmpty }.joined(separator: " · "))
+                .font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Text(lead.stage.displayName).font(.subheadline.weight(.semibold)).foregroundStyle(Color.accentColor)
+                    Spacer()
+                    if let start = lead.startDate { Text(CRMFormat.relativeDay(start)).font(.caption).foregroundStyle(.secondary) }
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(lead.stage.displayName).font(.subheadline.weight(.semibold)).foregroundStyle(Color.accentColor)
+                    if let start = lead.startDate { Text(CRMFormat.relativeDay(start)).font(.caption).foregroundStyle(.secondary) }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.quaternary))
+        .contentShape(RoundedRectangle(cornerRadius: 16))
+    }
+
 }
 
 struct WorkerJobsView: View {

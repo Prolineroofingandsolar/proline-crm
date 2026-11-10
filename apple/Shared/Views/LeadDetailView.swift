@@ -89,6 +89,12 @@ struct LeadDetailView: View {
     @State private var showingSurveySchedule = false
     @State private var showingJobSchedule = false
     @State private var showingJobUpdate = false
+    @State private var showingAddTask = false
+    @State private var showingAddMaterial = false
+    @State private var quickNote = ""
+    @State private var savingQuickNote = false
+    @State private var savingAssignment = false
+    @State private var showingJobTeam = false
     @State private var confirmingDelete = false
     @State private var confirmingDeposit = false
     @State private var confirmingFinalPayment = false
@@ -96,46 +102,11 @@ struct LeadDetailView: View {
 
     var body: some View {
         if let lead {
-            Form {
-                overview(lead)
-                contact(lead)
-                job(lead)
-                dates(lead)
-                if appState.isAdmin { costs(lead) }
-                more(lead)
-            }
-            .formStyle(.grouped)
-            .navigationTitle(lead.name)
-            #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                Button {
-                    showingJobUpdate = true
-                } label: {
-                    Label("Voice update", systemImage: "mic")
-                }
-                Button("Edit") { showingEdit = true }
-                Menu {
-                    StageMenu(lead: lead)
-                    Button(lead.surveyDate == nil ? "Book survey…" : "Edit survey…") { showingSurveySchedule = true }
-                    Button(lead.startDate == nil ? "Schedule job…" : "Edit schedule…") { showingJobSchedule = true }
-                    if appState.isAdmin {
-                        Divider()
-                        Button("Delete Lead", role: .destructive) { confirmingDelete = true }
-                    }
-                } label: {
-                    Label("More", systemImage: "ellipsis.circle")
-                }
-            }
-            .sheet(isPresented: $showingEdit) { EditLeadView(lead: lead) }
-            .sheet(isPresented: $showingSurveySchedule) { ScheduleSurveySheet(lead: lead) }
-            .sheet(isPresented: $showingJobSchedule) { ScheduleJobSheet(lead: lead) }
-            .sheet(isPresented: $showingJobUpdate) { JobUpdateSheet(leadID: lead.id) }
+            leadContent(lead)
             .confirmationDialog("Record deposit payment?", isPresented: $confirmingDeposit, titleVisibility: .visible) {
-                Button("Record \(CRMFormat.money(lead.deposit, pence: true)) deposit") { Task { await appState.recordDeposit(for: lead) } }
+                Button("Record deposit") { Task { await appState.recordDeposit(for: lead) } }
             } message: {
-                Text("This reduces the outstanding balance. You can correct it later by editing the lead.")
+                Text("Record \(CRMFormat.money(lead.deposit, pence: true)). This reduces the outstanding balance.")
             }
             .confirmationDialog("Mark this job as paid?", isPresented: $confirmingFinalPayment, titleVisibility: .visible) {
                 Button("Mark paid") { Task { await appState.recordFinalPayment(for: lead) } }
@@ -152,7 +123,482 @@ struct LeadDetailView: View {
         }
     }
 
+    private func leadContent(_ lead: Lead) -> some View {
+        Group {
+            #if os(macOS)
+                macJobDashboard(lead)
+            #else
+                singleColumnForm(lead)
+            #endif
+        }
+            .navigationTitle(lead.name)
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                detailToolbar(lead)
+            }
+            .sheet(isPresented: $showingEdit) { EditLeadView(lead: lead) }
+            .sheet(isPresented: $showingSurveySchedule) { ScheduleSurveySheet(lead: lead) }
+            .sheet(isPresented: $showingJobSchedule) { ScheduleJobSheet(lead: lead) }
+            .sheet(isPresented: $showingJobUpdate) { JobUpdateSheet(leadID: lead.id) }
+            .sheet(isPresented: $showingAddTask) { AddLeadTaskSheet(lead: lead) }
+            .sheet(isPresented: $showingAddMaterial) { AddMaterialSheet(lead: lead) }
+            .sheet(isPresented: $showingJobTeam) { JobTeamSheet(lead: lead) }
+    }
+
+    @ToolbarContentBuilder
+    private func detailToolbar(_ lead: Lead) -> some ToolbarContent {
+        ToolbarItem {
+            Button { showingJobUpdate = true } label: { Label("Voice update", systemImage: "mic") }
+        }
+        ToolbarItem { Button("Edit") { showingEdit = true } }
+        ToolbarItem {
+            Menu {
+                StageMenu(lead: lead)
+                Button(lead.surveyDate == nil ? "Book survey…" : "Edit survey…") { showingSurveySchedule = true }
+                Button(lead.startDate == nil ? "Schedule job…" : "Edit schedule…") { showingJobSchedule = true }
+                if appState.isAdmin {
+                    Divider()
+                    Button("Delete Lead", role: .destructive) { confirmingDelete = true }
+                }
+            } label: { Label("More", systemImage: "ellipsis.circle") }
+        }
+    }
+
+    #if os(macOS)
+    private func macJobDashboard(_ lead: Lead) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text([lead.jobRef, lead.jobType].filter { !$0.isEmpty }.joined(separator: "  ·  "))
+                            .font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                        Text(lead.name).font(.largeTitle.bold())
+                    }
+                    Spacer()
+                    Text(lead.stage.displayName).font(.subheadline.bold())
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Color.accentColor.opacity(0.14), in: Capsule())
+                }
+                detailCard {
+                    HStack {
+                        Text("Customer details").font(.headline)
+                        Spacer()
+                        Button("Edit details") { showingEdit = true }.font(.subheadline)
+                    }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 24) {
+                            macAddress(lead).frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
+                            macPhone(lead).frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
+                            macEmail(lead).frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
+                        }
+                        VStack(alignment: .leading, spacing: 14) {
+                            macAddress(lead)
+                            macPhone(lead)
+                            macEmail(lead)
+                        }
+                    }
+                }
+                HStack(spacing: 10) {
+                    if let step = AppState.nextStep(for: lead) {
+                        Button { perform(step, for: lead) } label: { Label(step.title, systemImage: step.systemImage) }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    Button { showingJobUpdate = true } label: { Label("Voice update", systemImage: "mic") }
+                    Spacer()
+                    Button("Edit job") { showingEdit = true }
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        macMainColumn(lead).frame(minWidth: 420, maxWidth: .infinity)
+                        macSideColumn(lead).frame(width: 300)
+                    }
+                    VStack(spacing: 16) { macMainColumn(lead); macSideColumn(lead) }
+                }
+            }
+            .frame(maxWidth: 1200, alignment: .leading).padding(24)
+        }
+    }
+
+    private func macAddress(_ lead: Lead) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Label("JOB ADDRESS", systemImage: "mappin.and.ellipse").font(.caption.bold()).foregroundStyle(.secondary)
+            if !lead.address.isEmpty, let maps = ContactLinks.maps(address: lead.address) {
+                Link(lead.address, destination: maps)
+            } else {
+                Text(lead.address.isEmpty ? "Not added" : lead.address).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func macPhone(_ lead: Lead) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Label("PHONE", systemImage: "phone").font(.caption.bold()).foregroundStyle(.secondary)
+            if lead.phone.isEmpty { Text("Not added").foregroundStyle(.secondary) }
+            else { PhoneActionMenu(number: lead.phone, label: lead.phone, lead: lead) }
+        }
+    }
+
+    private func macEmail(_ lead: Lead) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Label("EMAIL", systemImage: "envelope").font(.caption.bold()).foregroundStyle(.secondary)
+            if lead.email.isEmpty { Text("Not added").foregroundStyle(.secondary) }
+            else { EmailActionMenu(address: lead.email) }
+        }
+    }
+
+    private func macMainColumn(_ lead: Lead) -> some View {
+        VStack(spacing: 16) {
+            detailCard {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Job checklist").font(.title3.bold())
+                        Text("\(lead.tasks.filter(\.completed).count) of \(lead.tasks.count) complete")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button { showingAddTask = true } label: { Label("Add task", systemImage: "plus") }
+                    NavigationLink("View all") { LeadTasksView(leadID: lead.id) }
+                }
+                ProgressView(value: Double(lead.tasks.filter(\.completed).count), total: Double(max(lead.tasks.count, 1)))
+                if lead.tasks.isEmpty { Text("No checklist tasks yet").foregroundStyle(.secondary).padding(.vertical, 8) }
+                ForEach(Array(lead.tasks.prefix(6))) { task in
+                    Button { Task { await appState.toggleLeadTask(leadID: lead.id, taskID: task.id) } } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(task.completed ? Color.green : Color.accentColor)
+                            Text(task.title).foregroundStyle(.primary).strikethrough(task.completed)
+                            Spacer()
+                            if let due = task.dueDate { Text("Due \(CRMFormat.relativeDay(due))").font(.caption).foregroundStyle(.secondary) }
+                        }.padding(.vertical, 5).contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                }
+            }
+            detailCard {
+                HStack {
+                    Text("Materials").font(.title3.bold())
+                    Spacer()
+                    Button { showingAddMaterial = true } label: { Label("Add material", systemImage: "plus") }
+                    NavigationLink("View all") { LeadMaterialsView(leadID: lead.id) }
+                }
+                if lead.materials.isEmpty { Text("No materials added yet").foregroundStyle(.secondary).padding(.vertical, 8) }
+                ForEach(Array(lead.materials.prefix(5))) { material in
+                    HStack {
+                        Text(material.name)
+                        Spacer()
+                        Text("\(material.quantity.formatted()) \(material.unit)").foregroundStyle(.secondary)
+                        Text(material.delivered ? "On site" : (material.ordered ? "Ordered" : "Needed"))
+                            .font(.caption.bold()).foregroundStyle(material.delivered || material.ordered ? Color.green : Color.orange)
+                            .frame(width: 65, alignment: .trailing)
+                    }.padding(.vertical, 4)
+                }
+            }
+            detailCard {
+                HStack {
+                    Text("Notes & updates").font(.title3.bold())
+                    Spacer()
+                    NavigationLink("View all") { LeadNotesView(leadID: lead.id) }
+                }
+                TextField("Add a site note…", text: $quickNote, axis: .vertical).lineLimit(2...5).textFieldStyle(.roundedBorder)
+                HStack {
+                    Button { showingJobUpdate = true } label: { Label("Voice update", systemImage: "mic") }
+                    Spacer()
+                    Button(savingQuickNote ? "Saving…" : "Save note") { saveQuickNote(for: lead) }
+                        .disabled(savingQuickNote || quickNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                if let note = lead.notes.first {
+                    Divider()
+                    Text(note.content).lineLimit(4)
+                    Text([note.author, CRMFormat.day(note.date)].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func macSideColumn(_ lead: Lead) -> some View {
+        VStack(spacing: 16) {
+            detailCard {
+                Text("Job responsibility").font(.headline)
+                assignmentControl(lead)
+                Text("Assigned to this job").font(.caption).foregroundStyle(.secondary)
+                jobTeamControl(lead)
+                Divider()
+                Label(lead.startDate.map { CRMFormat.day($0) } ?? "Start date not set", systemImage: "calendar")
+                Button(lead.startDate == nil ? "Schedule job" : "Change dates") { showingJobSchedule = true }
+            }
+            detailCard {
+                Text("Customer & job").font(.headline)
+                NavigationLink("Photos · \(lead.photos.count)") { LeadPhotosView(leadID: lead.id) }
+                NavigationLink("Files · \(lead.files.count)") { LeadFilesView(leadID: lead.id) }
+                NavigationLink("Surveys") { LeadSurveyView(lead: lead).navigationTitle("Surveys") }
+                NavigationLink("Quotes") { LeadQuotesView(lead: lead).navigationTitle("Quotes") }
+                NavigationLink("Job dates and finances") {
+                    Form { contact(lead); dates(lead); if appState.isAdmin { job(lead); costs(lead) } }.formStyle(.grouped)
+                        .navigationTitle("Job details")
+                }
+            }
+        }
+    }
+    #endif
+
+    private func singleColumnForm(_ lead: Lead) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(lead.name).font(.largeTitle.bold())
+                    Text([lead.jobType, lead.jobRef].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    Text(lead.stage.displayName).font(.caption.bold()).padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(Color.accentColor.opacity(0.14), in: Capsule())
+                    if let step = AppState.nextStep(for: lead) {
+                        Button { perform(step, for: lead) } label: { Label(step.title, systemImage: step.systemImage) }
+                            .font(.subheadline).padding(.top, 4)
+                    }
+                }
+                detailCard {
+                    HStack {
+                        Text("Customer details").font(.headline)
+                        Spacer()
+                        Button("Edit details") { showingEdit = true }.font(.subheadline)
+                    }
+                    Text("JOB ADDRESS").font(.caption.bold()).foregroundStyle(.secondary)
+                    if !lead.address.isEmpty, let maps = ContactLinks.maps(address: lead.address) {
+                        Link(destination: maps) { Label(lead.address, systemImage: "mappin.and.ellipse") }
+                    } else {
+                        Label(lead.address.isEmpty ? "Address not added" : lead.address, systemImage: "mappin.and.ellipse")
+                    }
+                    Divider()
+                    Text("PHONE").font(.caption.bold()).foregroundStyle(.secondary)
+                    if lead.phone.isEmpty {
+                        Label("Not added", systemImage: "phone").foregroundStyle(.secondary)
+                    } else {
+                        PhoneActionMenu(number: lead.phone, label: lead.phone, lead: lead)
+                    }
+                    Text("EMAIL").font(.caption.bold()).foregroundStyle(.secondary)
+                    if lead.email.isEmpty {
+                        Label("Not added", systemImage: "envelope").foregroundStyle(.secondary)
+                    } else {
+                        EmailActionMenu(address: lead.email)
+                    }
+                }
+                detailCard {
+                    Label(lead.startDate.map { CRMFormat.day($0) } ?? "Start date not set", systemImage: "calendar")
+                    assignmentControl(lead)
+                    Text("Job assignment").font(.caption).foregroundStyle(.secondary)
+                    jobTeamControl(lead)
+                }
+                detailCard {
+                    HStack {
+                        Label("Job checklist", systemImage: "checklist").font(.headline)
+                        Spacer()
+                        Text("\(lead.tasks.filter(\.completed).count) of \(lead.tasks.count)").font(.caption).foregroundStyle(.secondary)
+                    }
+                    ProgressView(value: Double(lead.tasks.filter(\.completed).count), total: Double(max(lead.tasks.count, 1)))
+                    ForEach(Array(lead.tasks.prefix(4))) { task in
+                        Button { Task { await appState.toggleLeadTask(leadID: lead.id, taskID: task.id) } } label: {
+                            HStack(alignment: .top) {
+                                Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(task.completed ? Color.green : Color.accentColor)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(task.title).foregroundStyle(.primary).strikethrough(task.completed)
+                                    if let due = task.dueDate { Text("Due \(CRMFormat.relativeDay(due))").font(.caption).foregroundStyle(.secondary) }
+                                }
+                                Spacer()
+                            }.contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                    }
+                    if lead.tasks.isEmpty { Text("No checklist tasks yet").foregroundStyle(.secondary) }
+                    HStack {
+                        Button { showingAddTask = true } label: { Label("Add task", systemImage: "plus") }
+                        Spacer()
+                        NavigationLink("View all") { LeadTasksView(leadID: lead.id) }
+                    }.font(.subheadline)
+                }
+                detailCard {
+                    Label("Materials", systemImage: "shippingbox").font(.headline)
+                    ForEach(Array(lead.materials.prefix(3))) { material in
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(material.name)
+                                Text("\(material.quantity.formatted()) \(material.unit)").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(material.delivered ? "On site" : (material.ordered ? "Ordered" : "Needed"))
+                                .font(.caption.bold()).foregroundStyle(material.delivered || material.ordered ? Color.green : Color.orange)
+                        }
+                    }
+                    if lead.materials.isEmpty { Text("No materials added yet").foregroundStyle(.secondary) }
+                    HStack {
+                        Button { showingAddMaterial = true } label: { Label("Add material", systemImage: "plus") }
+                        Spacer()
+                        NavigationLink("View all") { LeadMaterialsView(leadID: lead.id) }
+                    }.font(.subheadline)
+                }
+                detailCard {
+                    Label("Notes & updates", systemImage: "bubble.left").font(.headline)
+                    TextField("Add a site note…", text: $quickNote, axis: .vertical).lineLimit(2...5).textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button { showingJobUpdate = true } label: { Label("Voice update", systemImage: "mic") }
+                        Spacer()
+                        Button(savingQuickNote ? "Saving…" : "Save note") { saveQuickNote(for: lead) }
+                            .disabled(savingQuickNote || quickNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }.font(.subheadline)
+                    if let note = lead.notes.first {
+                        Text(note.content).lineLimit(3)
+                        Text([note.author, CRMFormat.day(note.date)].filter { !$0.isEmpty }.joined(separator: " · "))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    NavigationLink("View all notes") { LeadNotesView(leadID: lead.id) }.font(.subheadline)
+                }
+                detailCard {
+                    Label("More job details", systemImage: "folder").font(.headline)
+                    NavigationLink("Photos · \(lead.photos.count)") { LeadPhotosView(leadID: lead.id) }
+                    NavigationLink("Files · \(lead.files.count)") { LeadFilesView(leadID: lead.id) }
+                    NavigationLink("Surveys") { LeadSurveyView(lead: lead).navigationTitle("Surveys") }
+                    NavigationLink("Quotes") { LeadQuotesView(lead: lead).navigationTitle("Quotes") }
+                    NavigationLink("Job dates and finances") {
+                        Form { contact(lead); dates(lead); if appState.isAdmin { job(lead); costs(lead) } }.formStyle(.grouped)
+                            .navigationTitle("Job details")
+                    }
+                }
+            }.frame(maxWidth: 760).padding()
+        }
+    }
+
+    private func detailCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12, content: content)
+            .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.secondary.opacity(0.18)))
+    }
+
+    private func assignmentControl(_ lead: Lead) -> some View {
+        Group {
+            if appState.isAdmin {
+                Menu {
+                    Button("Unassigned") { changeAssignment("", for: lead) }
+                    ForEach(appState.users) { user in
+                        Button(user.name) { changeAssignment(user.name, for: lead) }
+                    }
+                } label: {
+                    HStack {
+                        Label(lead.assignedTo.isEmpty ? "Needs assigning" : lead.assignedTo, systemImage: "person.crop.circle.badge.checkmark")
+                        if savingAssignment { ProgressView().controlSize(.small) }
+                        else { Image(systemName: "chevron.down").font(.caption) }
+                    }
+                }.disabled(savingAssignment)
+            } else {
+                Label(lead.assignedTo.isEmpty ? "Needs assigning" : lead.assignedTo, systemImage: "person.crop.circle.badge.checkmark")
+            }
+        }
+    }
+
+    private func jobTeamControl(_ lead: Lead) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Job team").font(.caption.bold()).foregroundStyle(.secondary)
+            let names = appState.users.filter { lead.teamMemberIDs.contains($0.id) }.map(\.name)
+            Text(names.isEmpty ? "No team members added" : names.joined(separator: ", "))
+            if appState.isAdmin { Button("Choose team") { showingJobTeam = true } }
+        }
+    }
+
+    private func changeAssignment(_ name: String, for lead: Lead) {
+        guard !savingAssignment, lead.assignedTo != name else { return }
+        savingAssignment = true
+        var changed = lead
+        changed.assignedTo = name
+        Task {
+            await appState.saveLead(changed, basedOn: lead)
+            savingAssignment = false
+        }
+    }
+
+    private func saveQuickNote(for lead: Lead) {
+        let note = quickNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !note.isEmpty, !savingQuickNote else { return }
+        savingQuickNote = true
+        Task {
+            if await appState.addJobNote(leadID: lead.id, content: note) { quickNote = "" }
+            savingQuickNote = false
+        }
+    }
+
     // MARK: Sections
+
+    private func responsibility(_ lead: Lead) -> some View {
+        Section("Job responsibility") {
+            LabeledContent("Assigned to", value: lead.assignedTo.isEmpty ? "Needs assigning" : lead.assignedTo)
+            if appState.isAdmin {
+                Button("Change assignment") { showingEdit = true }
+            }
+        }
+    }
+
+    private func checklistSummary(_ lead: Lead) -> some View {
+        Section {
+            let done = lead.tasks.filter(\.completed).count
+            ProgressView(value: Double(done), total: Double(max(lead.tasks.count, 1)))
+            ForEach(Array(lead.tasks.prefix(4))) { task in
+                Button {
+                    Task { await appState.toggleLeadTask(leadID: lead.id, taskID: task.id) }
+                } label: {
+                    HStack {
+                        Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(task.completed ? Color.green : Color.accentColor)
+                        VStack(alignment: .leading) {
+                            Text(task.title).foregroundStyle(.primary).strikethrough(task.completed)
+                            if let due = task.dueDate { Text("Due \(CRMFormat.relativeDay(due))").font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                }.buttonStyle(.plain)
+            }
+            if lead.tasks.isEmpty { Text("No checklist tasks yet").foregroundStyle(.secondary) }
+            Button { showingAddTask = true } label: { Label("Add task", systemImage: "plus") }
+            NavigationLink("View checklist") { LeadTasksView(leadID: lead.id) }
+        } header: {
+            Text("Job checklist · \(lead.tasks.filter(\.completed).count) of \(lead.tasks.count) done")
+        }
+    }
+
+    private func materialsSummary(_ lead: Lead) -> some View {
+        Section("Materials") {
+            ForEach(Array(lead.materials.prefix(3))) { material in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(material.name)
+                    Text("\(material.quantity.formatted()) \(material.unit) · \(material.delivered ? "On site" : (material.ordered ? "Ordered" : "Needed"))")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if lead.materials.isEmpty { Text("No materials added yet").foregroundStyle(.secondary) }
+            Button { showingAddMaterial = true } label: { Label("Add material", systemImage: "plus") }
+            NavigationLink("View materials") { LeadMaterialsView(leadID: lead.id) }
+        }
+    }
+
+    private func notesSummary(_ lead: Lead) -> some View {
+        Section("Notes & updates") {
+            TextField("Add a site note…", text: $quickNote, axis: .vertical).lineLimit(2...5)
+            Button(savingQuickNote ? "Saving…" : "Save note") {
+                let note = quickNote.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !note.isEmpty, !savingQuickNote else { return }
+                savingQuickNote = true
+                Task {
+                    if await appState.addJobNote(leadID: lead.id, content: note) { quickNote = "" }
+                    savingQuickNote = false
+                }
+            }.disabled(savingQuickNote || quickNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if let note = lead.notes.first {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(note.content).lineLimit(3)
+                    Text([note.author, CRMFormat.day(note.date)].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            NavigationLink("View notes & updates") { LeadNotesView(leadID: lead.id) }
+        }
+    }
 
     private func overview(_ lead: Lead) -> some View {
         Section {
@@ -322,6 +768,59 @@ struct LeadDetailView: View {
 }
 
 // MARK: - Sub-screens
+
+private struct JobTeamSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    let lead: Lead
+    @State private var selected: Set<String>
+    @State private var saving = false
+    @State private var error: String?
+
+    init(lead: Lead) {
+        self.lead = lead
+        _selected = State(initialValue: Set(lead.teamMemberIDs))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("People working on this job") {
+                    ForEach(appState.users) { user in
+                        Toggle(user.name, isOn: Binding(
+                            get: { selected.contains(user.id) },
+                            set: { selectedValue in
+                                if selectedValue { selected.insert(user.id) } else { selected.remove(user.id) }
+                            }))
+                    }
+                }
+                if let error { Text(error).foregroundStyle(.red) }
+            }
+            .navigationTitle("Job team")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? "Saving…" : "Save") {
+                        saving = true
+                        Task {
+                            do {
+                                try await SupabaseService.shared.setJobTeam(leadID: lead.id, userIDs: selected.sorted())
+                                await appState.refresh(showErrors: false)
+                                dismiss()
+                            } catch {
+                                self.error = "The team could not be saved. Please try again."
+                                saving = false
+                            }
+                        }
+                    }.disabled(saving)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 400, minHeight: 350)
+        #endif
+    }
+}
 
 struct LeadTasksView: View {
     @Environment(AppState.self) private var appState
@@ -609,10 +1108,47 @@ private func makeSpeechAudioTap(for sink: SpeechAudioBufferSink) -> AVAudioNodeT
     }
 }
 
+// Speech and microphone permission callbacks may arrive on background queues.
+// Keep these closures outside the main-actor recognizer.
+nonisolated private func requestSpeechAuthorization() async -> Bool {
+    await withCheckedContinuation { continuation in
+        SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0 == .authorized) }
+    }
+}
+
+nonisolated private func makeRecognitionHandler(
+    target: JobUpdateSpeechRecognizer, session: UUID
+) -> (SFSpeechRecognitionResult?, Error?) -> Void {
+    { [weak target] result, error in
+        let text = result?.bestTranscription.formattedString
+        let isFinal = result?.isFinal == true
+        let message = error?.localizedDescription
+        Task { @MainActor in
+            guard let target, target.sessionID == session else { return }
+            if let text { target.transcript = text }
+            if let message {
+                target.finishRecognition()
+                target.errorMessage = "Speech recognition stopped: \(message)"
+            } else if isFinal {
+                target.finishRecognition()
+            }
+        }
+    }
+}
+
+#if os(iOS)
+nonisolated private func requestMicrophoneAuthorization() async -> Bool {
+    await withCheckedContinuation { continuation in
+        AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
+    }
+}
+#endif
+
 @MainActor
 private final class JobUpdateSpeechRecognizer: ObservableObject {
     @Published var transcript = ""
     @Published private(set) var isRecording = false
+    @Published private(set) var isFinishing = false
     @Published var errorMessage: String?
 
     private let audioEngine = AVAudioEngine()
@@ -620,6 +1156,7 @@ private final class JobUpdateSpeechRecognizer: ObservableObject {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var tapInstalled = false
+    fileprivate var sessionID = UUID()
 
     func toggleRecording() async {
         if isRecording { stopRecording() } else { await startRecording() }
@@ -632,14 +1169,14 @@ private final class JobUpdateSpeechRecognizer: ObservableObject {
             errorMessage = "Speech recognition permission is off. Enable it for ProLine CRM in Privacy & Security settings."
             return
         }
-        #if os(iOS)
-            guard await microphoneAccessAllowed() else {
-                errorMessage = "Microphone permission is off. Enable it for ProLine CRM in Privacy & Security settings."
-                return
-            }
-        #endif
+        guard await microphoneAccessAllowed() else {
+            errorMessage = "Microphone permission is off. Enable it for ProLine CRM in Privacy & Security settings."
+            return
+        }
 
-        stopRecording()
+        cancelRecording()
+        let currentSession = UUID()
+        sessionID = currentSession
         let newRequest = SFSpeechAudioBufferRecognitionRequest()
         newRequest.shouldReportPartialResults = true
         request = newRequest
@@ -663,12 +1200,7 @@ private final class JobUpdateSpeechRecognizer: ObservableObject {
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format, block: makeSpeechAudioTap(for: bufferSink))
         tapInstalled = true
         guard let recognizer else { return }
-        recognitionTask = recognizer.recognitionTask(with: newRequest) { [weak self] result, error in
-            Task { @MainActor in
-                if let text = result?.bestTranscription.formattedString { self?.transcript = text }
-                if error != nil || result?.isFinal == true { self?.stopRecording() }
-            }
-        }
+        recognitionTask = recognizer.recognitionTask(with: newRequest, resultHandler: makeRecognitionHandler(target: self, session: currentSession))
         do {
             audioEngine.prepare(); try audioEngine.start(); isRecording = true
         } catch {
@@ -680,10 +1212,25 @@ private final class JobUpdateSpeechRecognizer: ObservableObject {
     func stopRecording() {
         if audioEngine.isRunning { audioEngine.stop() }
         removeInputTapIfNeeded()
-        request?.endAudio(); recognitionTask?.cancel(); request = nil; recognitionTask = nil; isRecording = false
+        if isRecording && recognitionTask != nil { isFinishing = true }
+        request?.endAudio(); request = nil; isRecording = false
         #if os(iOS)
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         #endif
+    }
+
+    fileprivate func finishRecognition() {
+        stopRecording()
+        recognitionTask = nil
+        isFinishing = false
+    }
+
+    func cancelRecording() {
+        sessionID = UUID()
+        stopRecording()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        isFinishing = false
     }
 
     private func removeInputTapIfNeeded() {
@@ -697,26 +1244,28 @@ private final class JobUpdateSpeechRecognizer: ObservableObject {
         case .authorized: return true
         case .denied, .restricted: return false
         case .notDetermined:
-            return await withCheckedContinuation { continuation in
-                SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0 == .authorized) }
-            }
+            return await requestSpeechAuthorization()
         @unknown default: return false
         }
     }
 
-    #if os(iOS)
-        private func microphoneAccessAllowed() async -> Bool {
+    private func microphoneAccessAllowed() async -> Bool {
+        #if os(iOS)
             switch AVAudioApplication.shared.recordPermission {
             case .granted: return true
             case .denied: return false
             case .undetermined:
-                return await withCheckedContinuation { continuation in
-                    AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
-                }
+                return await requestMicrophoneAuthorization()
             @unknown default: return false
             }
-        }
-    #endif
+        #else
+            switch AVCaptureDevice.authorizationStatus(for: .audio) {
+            case .authorized: return true
+            case .notDetermined: return await AVCaptureDevice.requestAccess(for: .audio)
+            default: return false
+            }
+        #endif
+    }
 }
 
 struct JobUpdateSheet: View {
@@ -764,7 +1313,7 @@ struct JobUpdateSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        speech.stopRecording(); dismiss()
+                        speech.cancelRecording(); dismiss()
                     }.disabled(isSaving)
                 }
             }
@@ -788,7 +1337,8 @@ struct JobUpdateSheet: View {
                         } label: {
                             Label("Review proposed changes", systemImage: "sparkles").frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.borderedProminent).controlSize(.large).disabled(cleanTranscript.isEmpty || isAnalysing)
+                        .buttonStyle(.borderedProminent).controlSize(.large).disabled(
+                            cleanTranscript.isEmpty || isAnalysing || speech.isRecording || speech.isFinishing)
                     }
                 }.padding(14).background(.bar)
             }
@@ -796,7 +1346,7 @@ struct JobUpdateSheet: View {
         #if os(macOS)
             .frame(minWidth: 600, minHeight: 700)
         #endif
-        .onDisappear { speech.stopRecording() }
+        .onDisappear { speech.cancelRecording() }
         .onChange(of: speech.transcript) { _, _ in
             if analysis != nil { analysis = nil; selectedSuggestionIDs = []; selectedMaterialIDs = [] }
         }
@@ -828,6 +1378,16 @@ struct JobUpdateSheet: View {
             if let error = speech.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.red)
             }
+            if speech.isFinishing { ProgressView("Finishing transcription…").font(.caption) }
+            Button(isSaving ? "Saving…" : "Save as note") {
+                let note = cleanTranscript
+                guard !note.isEmpty else { return }
+                isSaving = true
+                Task {
+                    if await appState.addJobNote(leadID: leadID, content: note) { dismiss() }
+                    isSaving = false
+                }
+            }.disabled(cleanTranscript.isEmpty || isSaving || speech.isRecording || speech.isFinishing)
             if cleanTranscript.isEmpty {
                 Text("Example: “I’ve felted and battened the front side, and I need 12 packs of batten in the morning.”").font(.caption)
                     .foregroundStyle(.secondary)
@@ -986,7 +1546,9 @@ struct AddLeadTaskSheet: View {
                 }
             }
         }
-        .frame(minWidth: 420, minHeight: 390)
+        #if os(macOS)
+            .frame(minWidth: 420, minHeight: 390)
+        #endif
     }
 }
 
@@ -1265,6 +1827,8 @@ private struct EditLeadView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State var lead: Lead
+    @State private var original: Lead
+    @State private var saveError: String?
     @State private var depositPlan: DepositPlan
     @State private var addressSearch = AddressSearchService()
     @State private var selectedAddress = ""
@@ -1283,6 +1847,7 @@ private struct EditLeadView: View {
 
     init(lead: Lead) {
         _lead = State(initialValue: lead)
+        _original = State(initialValue: lead)
         _depositPlan = State(initialValue: DepositPlan.matching(total: lead.value, deposit: lead.deposit))
     }
 
@@ -1335,6 +1900,30 @@ private struct EditLeadView: View {
                 } footer: {
                     if !validDates { Text("One of the saved dates is invalid. Please select it again.").foregroundStyle(.red) }
                 }
+                if let saveError {
+                    Section("Could not save") {
+                        Text(saveError).foregroundStyle(.red)
+                        Button("Load latest job details") {
+                            isSaving = true
+                            Task {
+                                do {
+                                    guard let latest = try await SupabaseService.shared.fetchLead(id: lead.id) else {
+                                        throw SupabaseWriteConflict()
+                                    }
+                                    lead = latest
+                                    original = latest
+                                    depositPlan = DepositPlan.matching(total: latest.value, deposit: latest.deposit)
+                                    self.saveError = nil
+                                } catch {
+                                    self.saveError = "The latest job could not be loaded. Check your connection and try again."
+                                }
+                                isSaving = false
+                            }
+                        }
+                        Text("Loading replaces your unsaved edits with the latest saved job. Review it before editing again.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
             }
             .formStyle(.grouped)
             .disabled(isSaving)
@@ -1348,7 +1937,13 @@ private struct EditLeadView: View {
                     Button(isSaving ? "Saving…" : "Save") {
                         isSaving = true
                         Task {
-                            if await appState.saveLead(lead) { dismiss() }; isSaving = false
+                            saveError = nil
+                            if await appState.saveLead(lead, basedOn: original) {
+                                dismiss()
+                            } else {
+                                saveError = appState.errorMessage ?? "Changes could not be saved."
+                            }
+                            isSaving = false
                         }
                     }.disabled(!canSave)
                 }
@@ -1463,9 +2058,9 @@ struct ScheduleSurveySheet: View {
                 format: "%02d:%02d", Calendar.current.component(.hour, from: surveyTime),
                 Calendar.current.component(.minute, from: surveyTime))
             if lead.stage == .newLead { changed.stage = .surveyBooked }
-            await appState.saveLead(changed)
+            let saved = await appState.saveLead(changed, basedOn: lead)
             saving = false
-            if appState.leads.first(where: { $0.id == lead.id })?.surveyDate == changed.surveyDate { dismiss() }
+            if saved { dismiss() }
         }
     }
 }

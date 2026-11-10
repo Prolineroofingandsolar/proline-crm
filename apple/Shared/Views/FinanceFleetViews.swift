@@ -3,11 +3,12 @@ import SwiftUI
 struct FinanceCentreView: View {
     @Environment(AppState.self) private var appState
     private var liveJobs: [Lead] {
-        appState.leads.filter { [.won, .scheduled, .inProgress, .completed, .waitingForPayment, .paid].contains($0.stage) }
+        appState.leads.filter { CustomerMoneyPolicy.activeStages.contains($0.stage) }
     }
     private var depositsDue: [Lead] { liveJobs.filter { !$0.depositPaid && $0.deposit > 0 && $0.stage != .paid } }
-    private var collected: Double { liveJobs.reduce(0) { $0 + max(0, $1.value - $1.balance) } }
-    private var outstanding: Double { liveJobs.reduce(0) { $0 + max(0, $1.balance) } }
+    private var customerMoney: (collected: Double, due: Double, depositsWaiting: Double) {
+        CustomerMoneyPolicy.summary(leads: appState.leads)
+    }
     private var materialCost: Double {
         liveJobs.reduce(0) { total, lead in total + lead.materials.reduce(0) { $0 + (($1.cost ?? 0) * $1.quantity) } }
     }
@@ -21,9 +22,9 @@ struct FinanceCentreView: View {
                     Spacer()
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
-                    financeMetric("Collected", collected, "banknote.fill", .green)
-                    financeMetric("To collect", outstanding, "sterlingsign.circle.fill", Color.accentColor)
-                    financeMetric("Deposits due", depositsDue.reduce(0) { $0 + $1.deposit }, "exclamationmark.circle.fill", .red)
+                    financeMetric("Collected", customerMoney.collected, "banknote.fill", .green)
+                    financeMetric("To collect", customerMoney.due, "sterlingsign.circle.fill", Color.accentColor)
+                    financeMetric("Deposits due", customerMoney.depositsWaiting, "exclamationmark.circle.fill", .red)
                     financeMetric("Materials logged", materialCost, "shippingbox.fill", .purple)
                 }
                 financePanel("Outstanding deposits", systemImage: "creditcard") {

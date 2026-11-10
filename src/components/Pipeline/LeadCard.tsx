@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Phone, Calendar, ChevronRight, Trophy, Play, CheckCircle, CreditCard, Clock, MessageSquare, Mail, GripVertical, X, ChevronDown, ChevronUp, ClipboardList } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -14,8 +14,8 @@ interface Props {
 }
 
 export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
-  const { moveToStage, markAsWon, deleteTask, toggleTask, users, currentUserId } = useStore();
-  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
+  const { moveToStage, markAsWon, deleteTask, toggleTask, users, currentUserId, simpleMode } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin' && !simpleMode;
   const [tasksOpen, setTasksOpen] = useState(false);
 
   const {
@@ -212,6 +212,12 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
               </button>
             )}
             {lead.stage === 'Survey Booked' && (
+              <button onClick={stopProp(() => moveToStage(lead.id, 'Quote Preparing'))}
+                className="flex-1 flex items-center justify-center gap-1 text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 py-1 rounded-lg font-medium transition-colors">
+                <ChevronRight size={11} /> Survey done
+              </button>
+            )}
+            {lead.stage === 'Quote Preparing' && (
               <button onClick={stopProp(() => moveToStage(lead.id, 'Quote Sent'))}
                 className="flex-1 flex items-center justify-center gap-1 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 py-1 rounded-lg font-medium transition-colors">
                 <ChevronRight size={11} /> Send Quote
@@ -223,7 +229,7 @@ export default function LeadCard({ lead, onClick, isDragging = false }: Props) {
                 <Trophy size={11} /> Mark as Won
               </button>
             )}
-            {lead.stage === 'Won' && (
+            {(lead.stage === 'Won' || lead.stage === 'Scheduled') && (
               <button onClick={stopProp(() => moveToStage(lead.id, 'In Progress'))}
                 className="flex-1 flex items-center justify-center gap-1 text-xs bg-orange-600 text-white hover:bg-orange-700 py-1 rounded-lg font-medium transition-colors">
                 <Play size={11} /> Start Job

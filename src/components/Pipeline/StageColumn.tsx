@@ -1,4 +1,4 @@
-﻿import { Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Lead, Stage } from '../../types';
@@ -9,11 +9,14 @@ import LeadCard from './LeadCard';
 const stageConfig: Record<Stage, { header: string; dot: string; bg: string; dropBg: string }> = {
   'New Lead':      { header: 'bg-violet-500',  dot: 'bg-violet-400', bg: 'bg-violet-50',  dropBg: 'bg-violet-100' },
   'Survey Booked': { header: 'bg-sky-500',       dot: 'bg-sky-400',    bg: 'bg-sky-50',     dropBg: 'bg-sky-100' },
+  'Quote Preparing': { header: 'bg-purple-500', dot: 'bg-purple-400', bg: 'bg-purple-50', dropBg: 'bg-purple-100' },
   'Quote Sent':    { header: 'bg-amber-500',    dot: 'bg-amber-400',  bg: 'bg-amber-50',   dropBg: 'bg-amber-100' },
   'Won':           { header: 'bg-green-500',    dot: 'bg-green-400',  bg: 'bg-green-50',   dropBg: 'bg-green-100' },
+  'Scheduled':     { header: 'bg-teal-500', dot: 'bg-teal-400', bg: 'bg-teal-50', dropBg: 'bg-teal-100' },
   'In Progress':   { header: 'bg-orange-600',   dot: 'bg-orange-400', bg: 'bg-orange-50',  dropBg: 'bg-orange-100' },
   'Completed':     { header: 'bg-emerald-600',  dot: 'bg-emerald-400',bg: 'bg-emerald-50', dropBg: 'bg-emerald-100' },
   'Waiting for Payment': { header: 'bg-indigo-600', dot: 'bg-indigo-400', bg: 'bg-indigo-50', dropBg: 'bg-indigo-100' },
+  'Lost':          { header: 'bg-gray-500', dot: 'bg-gray-400', bg: 'bg-gray-50', dropBg: 'bg-gray-100' },
   'Paid':          { header: 'bg-teal-600',     dot: 'bg-teal-400',   bg: 'bg-teal-50',    dropBg: 'bg-teal-100' },
 };
 
@@ -22,18 +25,19 @@ interface Props {
   leads: Lead[];
   onCardClick: (id: string) => void;
   onAddLead?: () => void;
+  fullWidth?: boolean;
 }
 
-export default function StageColumn({ stage, leads, onCardClick, onAddLead }: Props) {
-  const { users, currentUserId } = useStore();
-  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
+export default function StageColumn({ stage, leads, onCardClick, onAddLead, fullWidth = false }: Props) {
+  const { users, currentUserId, simpleMode } = useStore();
+  const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin' && !simpleMode;
   const cfg = stageConfig[stage];
   const total = leads.reduce((s, l) => s + l.value, 0);
 
   const { setNodeRef, isOver } = useDroppable({ id: stage });
 
   return (
-    <div className="flex flex-col w-56 shrink-0 rounded-xl overflow-hidden shadow-sm border border-gray-100">
+    <div className={`flex flex-col ${fullWidth ? 'w-full h-full' : 'w-56'} shrink-0 rounded-xl overflow-hidden shadow-sm border border-gray-100`}>
       {/* Header */}
       <div className={`${cfg.header} px-3 py-2.5 flex items-center justify-between`}>
         <div className="flex items-center gap-2">
@@ -75,7 +79,7 @@ export default function StageColumn({ stage, leads, onCardClick, onAddLead }: Pr
       </div>
 
       {/* Add button */}
-      {(stage === 'New Lead' || stage === 'Survey Booked') && (
+      {isAdmin && (stage === 'New Lead' || stage === 'Survey Booked') && (
         <button
           onClick={onAddLead}
           className="bg-white border-t border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-1 py-2 text-xs text-gray-500 hover:text-orange-600 transition-colors"

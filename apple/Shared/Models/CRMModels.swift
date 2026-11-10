@@ -79,6 +79,7 @@ struct JobNoteAnalysis: Codable, Sendable {
 }
 
 enum CRMAssistantActionKind: String, Codable, Sendable {
+    case createLead = "create_lead"
     case addJobTask = "add_job_task", completeJobTask = "complete_job_task", createGeneralTask = "create_general_task"
     case moveJobStage = "move_job_stage", scheduleSurvey = "schedule_survey", scheduleJob = "schedule_job", draftEmail = "draft_email"
     case recordDeposit = "record_deposit", recordFinalPayment = "record_final_payment"
@@ -96,9 +97,16 @@ struct CRMAssistantAction: Codable, Identifiable, Hashable, Sendable {
     var id: String; var kind: CRMAssistantActionKind; var title: String; var explanation: String
     var leadID: String?; var taskID: String?; var value: String?; var secondaryValue: String?; var quantity: Double?; var unit: String?;
     var requiresApproval: Bool
+    var assigneeID: String? = nil
+    var customerPhone: String? = nil
+    var customerEmail: String? = nil
+    var customerAddress: String? = nil
+    var jobType: String? = nil
     enum CodingKeys: String, CodingKey {
         case id, kind, title, explanation, value, quantity, unit; case leadID = "lead_id"; case taskID = "task_id";
         case secondaryValue = "secondary_value"; case requiresApproval = "requires_approval"
+        case assigneeID = "assignee_id"; case customerPhone = "customer_phone"; case customerEmail = "customer_email"
+        case customerAddress = "customer_address"; case jobType = "job_type"
     }
 }
 struct CRMAssistantResponse: Codable, Sendable {
@@ -243,6 +251,8 @@ struct Lead: Codable, Identifiable, Hashable, Sendable {
     var balance: Double
     var source: String
     var assignedTo: String
+    // Loaded separately so older clients cannot overwrite team membership.
+    var teamMemberIDs: [String] = []
     var surveyDate: String?
     var surveyTime: String?
     var startDate: String?

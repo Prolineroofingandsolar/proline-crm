@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { useStore } from '../store/useStore';
 
 function ProLineLogo() {
@@ -19,12 +20,16 @@ function ProLineLogo() {
 }
 
 interface Props {
-  mode: 'login' | 'setup';
+  mode: 'login' | 'recovery';
 }
 
 export default function LoginPage({ mode }: Props) {
-  const { login, addUser } = useStore();
+  const { login } = useStore();
   const [form, setForm] = useState({ name: '', username: '', password: '', confirm: '' });
+  const [recovery, setRecovery] = useState(mode === 'recovery');
+  const [recoverySent, setRecoverySent] = useState(false);
+  const [code, setCode] = useState('');
+  const [joining, setJoining] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -33,25 +38,31 @@ export default function LoginPage({ mode }: Props) {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const ok = await login(form.username.trim(), form.password);
-    if (!ok) setError('Incorrect username or password');
+    try {
+      if (joining) {
+        const { data, error } = await supabase.functions.invoke('worker-invite', { body: { action: 'accept', token: code.trim(), name: form.name.trim(), password: form.password } });
+        if (error || data?.error) throw new Error(data?.error ?? error?.message ?? 'Invitation could not be accepted');
+        if (!await login(data.email, form.password)) throw new Error('Account created. Please sign in with your invited email.');
+      } else if (recovery) {
+        if (mode === 'recovery') {
+          const { error } = await supabase.auth.updateUser({ password: form.password });
+          if (error) throw error;
+          window.location.replace(window.location.origin);
+        } else if (!recoverySent) {
+          const { error } = await supabase.auth.resetPasswordForEmail(form.username.trim(), { redirectTo: window.location.origin });
+          if (error) throw error;
+          setRecoverySent(true);
+        } else {
+          const { error: verifyError } = await supabase.auth.verifyOtp({ email: form.username.trim(), token: code.trim(), type: 'recovery' });
+          if (verifyError) throw verifyError;
+          const { error: updateError } = await supabase.auth.updateUser({ password: form.password });
+          if (updateError) throw updateError;
+          window.location.replace(window.location.origin);
+        }
+      } else if (!await login(form.username.trim(), form.password)) setError('Incorrect email or password, or access has been removed.');
+    } catch (error) { setError(error instanceof Error ? error.message : 'Sign-in failed. Please try again.'); }
     setLoading(false);
   };
-
-  const handleSetup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim()) return setError('Name is required');
-    if (form.username.trim().length < 3) return setError('Username must be at least 3 characters');
-    if (form.password.length < 6) return setError('Password must be at least 6 characters');
-    if (form.password !== form.confirm) return setError('Passwords do not match');
-    setLoading(true);
-    const result = await addUser(form.name.trim(), form.username.trim(), form.password, 'admin');
-    if (!result.ok) { setError(result.error ?? 'Failed to create account'); setLoading(false); return; }
-    await login(form.username.trim(), form.password);
-    setLoading(false);
-  };
-
-  const isSetup = mode === 'setup';
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-6">
@@ -71,14 +82,16 @@ export default function LoginPage({ mode }: Props) {
         {/* Form */}
         <div className="px-8 py-7">
           <h2 className="text-lg font-bold text-gray-800 mb-1">
-            {isSetup ? 'Create your account' : 'Welcome back'}
+            {joining ? 'Accept invitation' : recovery ? 'Reset password' : 'Welcome back'}
           </h2>
           <p className="text-sm text-gray-400 mb-5">
-            {isSetup ? 'Set up the first admin account to get started.' : 'Sign in to continue to your CRM.'}
+            Sign in using your employee email, or accept your administrator’s invitation.
           </p>
 
-          <form onSubmit={isSetup ? handleSetup : handleLogin} className="space-y-4">
-            {isSetup && (
+          {(joining || (recovery && recoverySent)) && <label className="block text-sm mb-4">{joining ? 'Invitation code from your administrator' : 'Recovery code from your email'}<input required value={code} onChange={e => setCode(e.target.value)} className="w-full border rounded-xl p-3 mt-1" /></label>}
+          {recoverySent && <p className="text-sm mb-3">Check your email. Follow the reset link, or enter its recovery code and a new password here.</p>}
+          <form onSubmit={handleLogin} className="space-y-4">
+            {joining && (
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Your Name</label>
                 <input
@@ -92,12 +105,14 @@ export default function LoginPage({ mode }: Props) {
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Email or username</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
               <input
-                required
+                required={mode !== 'recovery' && !joining}
+                type="email"
+                autoComplete="username"
                 value={form.username}
                 onChange={e => set('username', e.target.value)}
-                placeholder={isSetup ? 'Choose a username' : 'you@company.co.uk'}
+                placeholder="you@company.co.uk"
                 autoCapitalize="none"
                 autoCorrect="off"
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
@@ -107,28 +122,15 @@ export default function LoginPage({ mode }: Props) {
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Password</label>
               <input
-                required
+                required={!recovery || recoverySent || mode === 'recovery'}
                 type="password"
+                minLength={(recovery && recoverySent) || mode === 'recovery' || joining ? 8 : undefined}
                 value={form.password}
                 onChange={e => set('password', e.target.value)}
-                placeholder={isSetup ? 'Min. 6 characters' : 'Your password'}
+                placeholder="Your password"
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
             </div>
-
-            {isSetup && (
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Confirm Password</label>
-                <input
-                  required
-                  type="password"
-                  value={form.confirm}
-                  onChange={e => set('confirm', e.target.value)}
-                  placeholder="Repeat password"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                />
-              </div>
-            )}
 
             {error && (
               <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
@@ -139,9 +141,13 @@ export default function LoginPage({ mode }: Props) {
               disabled={loading}
               className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white font-bold py-3 rounded-xl text-sm transition-colors"
             >
-              {loading ? (isSetup ? 'Creating…' : 'Signing in…') : (isSetup ? 'Create Account' : 'Sign In')}
+              {loading ? 'Please wait…' : joining ? 'Join team' : recovery ? (recoverySent || mode === 'recovery' ? 'Save new password' : 'Send recovery email') : 'Sign In'}
             </button>
           </form>
+          <div className="flex flex-wrap gap-3 mt-4 text-sm text-orange-700">
+            <button type="button" onClick={() => { setRecovery(!recovery); setJoining(false); setError(''); }}>{recovery ? 'Back to sign in' : 'Forgot password?'}</button>
+            <button type="button" onClick={() => { setJoining(!joining); setRecovery(false); setError(''); }}>{joining ? 'Back to sign in' : 'Have an invitation?'}</button>
+          </div>
         </div>
       </div>
 

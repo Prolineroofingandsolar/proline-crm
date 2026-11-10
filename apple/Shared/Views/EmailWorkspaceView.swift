@@ -26,7 +26,7 @@ struct EmailWorkspaceView: View {
                 }
                 HStack(spacing: 12) {
                     emailMetric(
-                        appState.gmailConnectionStatus?.connected == true ? "Connected" : "Not connected", "Gmail",
+                        gmailStatusLabel, "Gmail",
                         appState.gmailConnectionStatus?.connected == true ? .green : Color.accentColor)
                     emailMetric("\(emailTasks.filter { !$0.completed }.count)", "Open email actions", .blue)
                     emailMetric(
@@ -36,8 +36,14 @@ struct EmailWorkspaceView: View {
                 if let address = appState.gmailConnectionStatus?.gmailAddress {
                     Label(address, systemImage: "envelope.fill").foregroundStyle(.secondary)
                 }
+                if appState.gmailConnectionStatusUnavailable {
+                    Label("Gmail status could not be refreshed. Showing the last known result.", systemImage: "wifi.exclamationmark")
+                        .foregroundStyle(.secondary)
+                }
                 if let scanSummary { Label(scanSummary, systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
-                if appState.gmailConnectionStatus?.connected != true {
+                if appState.gmailConnectionStatus == nil && appState.gmailConnectionStatusUnavailable {
+                    Button("Retry Gmail status") { Task { await appState.refreshGmailConnectionStatus() } }.buttonStyle(.borderedProminent)
+                } else if appState.gmailConnectionStatus?.connected != true {
                     Button("Connect Gmail") { Task { if let url = await appState.gmailAuthorizationURL() { openURL(url) } } }.buttonStyle(
                         .borderedProminent)
                 }
@@ -76,6 +82,11 @@ struct EmailWorkspaceView: View {
                 }
             }.padding(24)
         }.navigationTitle("Email").task { await appState.refreshGmailConnectionStatus() }
+    }
+    private var gmailStatusLabel: String {
+        if appState.gmailConnectionStatus?.connected == true { return "Connected" }
+        if appState.gmailConnectionStatusUnavailable { return "Unavailable" }
+        return "Not connected"
     }
     private func scan() {
         scanning = true;

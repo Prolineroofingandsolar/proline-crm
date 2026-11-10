@@ -3,21 +3,15 @@ const SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 
 let accessToken: string | null = null;
 
-declare namespace google.accounts.oauth2 {
-  interface TokenClient {
-    requestAccessToken(options?: { prompt?: string }): void;
-  }
-  interface TokenResponse {
-    access_token: string;
-    error?: string;
-  }
-  function initTokenClient(config: {
-    client_id: string;
-    scope: string;
-    callback: (resp: TokenResponse) => void;
-    error_callback?: (err: { type: string }) => void;
-  }): TokenClient;
-}
+declare const google: {
+  accounts: { oauth2: {
+    initTokenClient(config: {
+      client_id: string; scope: string;
+      callback: (response: { access_token: string; error?: string }) => void;
+      error_callback?: (error: { type: string }) => void;
+    }): { requestAccessToken(options?: { prompt?: string }): void };
+  } };
+};
 
 function waitForGoogleScript(timeoutMs = 10000): Promise<void> {
   return new Promise((resolve, reject) => {

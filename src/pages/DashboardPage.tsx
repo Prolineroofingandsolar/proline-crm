@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { TrendingUp, Briefcase, PoundSterling, CheckCircle2, Clock, Trophy, Users, Star, AlertTriangle, CalendarClock, Hammer, BadgePoundSterling, Bell } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate, jobTypeColor } from '../utils/helpers';
@@ -7,14 +8,16 @@ import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 export default function DashboardPage() {
   const { leads, setSelectedId, setCurrentPage, selectedId } = useStore();
 
-  const today = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 60_000); return () => window.clearInterval(timer); }, []);
+  const today = new Date(now).toISOString().split('T')[0];
+  const tomorrow = new Date(now + 86400000).toISOString().split('T')[0];
 
   const stats = {
     totalLeads: leads.filter(l => ['New Lead', 'Survey Booked', 'Quote Sent'].includes(l.stage)).length,
     activeJobs: leads.filter(l => l.stage === 'In Progress').length,
     revenue: leads.filter(l => l.stage === 'Paid').reduce((s, l) => s + l.value, 0),
-    pipeline: leads.filter(l => ['Won', 'In Progress', 'Completed', 'Waiting for Payment'].includes(l.stage)).reduce((s, l) => s + l.value, 0),
+    pipeline: leads.filter(l => ['Won', 'Scheduled', 'In Progress', 'Completed', 'Waiting for Payment'].includes(l.stage)).reduce((s, l) => s + l.value, 0),
     won: leads.filter(l => l.stage === 'Won').length,
     completed: leads.filter(l => ['Completed', 'Waiting for Payment'].includes(l.stage)).length,
     convRate: leads.length ? Math.round(leads.filter(l => ['Won','In Progress','Completed','Waiting for Payment','Paid'].includes(l.stage)).length / leads.length * 100) : 0,
@@ -29,11 +32,11 @@ export default function DashboardPage() {
   const overduePayments    = leads.filter(l => {
     if (!['Completed', 'Waiting for Payment'].includes(l.stage)) return false;
     if (!l.completedDate) return false;
-    const days = Math.floor((Date.now() - new Date(l.completedDate).getTime()) / 86400000);
+    const days = Math.floor((now - new Date(l.completedDate).getTime()) / 86400000);
     return days >= 7;
   });
   const unpaidDeposits = leads.filter(l =>
-    ['Won', 'In Progress'].includes(l.stage) && !l.depositPaid && l.deposit > 0
+    ['Won', 'Scheduled', 'In Progress'].includes(l.stage) && !l.depositPaid && l.deposit > 0
   );
 
   const automations = [

@@ -3,6 +3,134 @@ import XCTest
 @testable import ProLine_CRM
 
 final class CRMLogicTests: XCTestCase {
+    func testQuoteSentMovePreservesNewerChecklistAndContactUpdates() throws {
+        let data = try LeadEditMerge.merge(
+            base: Data(#"{"id":"job","stage":"Quote Preparing","phone":"old","tasks":[],"updated_at":"old"}"#.utf8),
+            edited: Data(#"{"id":"job","stage":"Quote Sent","phone":"old","tasks":[],"updated_at":"old"}"#.utf8),
+            latest: Data(#"{"id":"job","stage":"Quote Preparing","phone":"new","tasks":[{"id":"t","completed":true}],"updated_at":"2026-10-28T12:00:00+00:00"}"#.utf8))
+        let row = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(row["stage"] as? String, "Quote Sent")
+        XCTAssertEqual(row["phone"] as? String, "new")
+        XCTAssertEqual((row["tasks"] as? [[String: Any]])?.first?["completed"] as? Bool, true)
+        XCTAssertEqual(row["updated_at"] as? String, "2026-10-28T12:00:00+00:00")
+    }
+
+    func testMovingAStageCannotUndoAnotherStageMove() {
+        XCTAssertThrowsError(try LeadEditMerge.merge(
+            base: Data(#"{"id":"job","stage":"Quote Preparing"}"#.utf8),
+            edited: Data(#"{"id":"job","stage":"Quote Sent"}"#.utf8),
+            latest: Data(#"{"id":"job","stage":"Lost"}"#.utf8)))
+    }
+
+    func testQueuedChecklistTapsMergeDifferentTasksWithoutProgressConflict() throws {
+        let data = try LeadEditMerge.merge(
+            base: Data(#"{"id":"job","tasks":[{"id":"a","completed":false},{"id":"b","completed":false}],"progress":0}"#.utf8),
+            edited: Data(#"{"id":"job","tasks":[{"id":"a","completed":true},{"id":"b","completed":false}],"progress":50}"#.utf8),
+            latest: Data(#"{"id":"job","tasks":[{"id":"a","completed":false},{"id":"b","completed":true}],"progress":75}"#.utf8))
+        let row = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let tasks = try XCTUnwrap(row["tasks"] as? [[String: Any]])
+        XCTAssertTrue(tasks.allSatisfy { $0["completed"] as? Bool == true })
+        // Progress is derived again from the merged checklist by the write path.
+        XCTAssertEqual(row["progress"] as? Int, 75)
+    }
+
+    func testConcurrentNotesFilesPhotosAndMaterialsAreKept() throws {
+        for field in ["notes", "files", "photos", "materials"] {
+            let base: [String: Any] = ["id": "job", field: []]
+            let edit: [String: Any] = ["id": "job", field: [["id": "mine", "content": "my addition"]]]
+            let server: [String: Any] = ["id": "job", field: [["id": "theirs", "content": "their addition"]]]
+            let data = try LeadEditMerge.merge(
+                base: JSONSerialization.data(withJSONObject: base), edited: JSONSerialization.data(withJSONObject: edit),
+                latest: JSONSerialization.data(withJSONObject: server))
+            let row = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            XCTAssertEqual(Set((row[field] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }), ["mine", "theirs"])
+        }
+    }
+
+    func testTaskDeletionDoesNotEraseSomebodyElsesTaskEdit() {
+        XCTAssertThrowsError(try LeadEditMerge.merge(
+            base: Data(#"{"id":"job","tasks":[{"id":"a","title":"Before"}]}"#.utf8),
+            edited: Data(#"{"id":"job","tasks":[]}"#.utf8),
+            latest: Data(#"{"id":"job","tasks":[{"id":"a","title":"Edited elsewhere"}]}"#.utf8)))
+    }
+
+    func testAlreadyAppliedStageIsSafeToRetry() throws {
+        let data = try LeadEditMerge.merge(
+            base: Data(#"{"id":"job","stage":"Quote Preparing"}"#.utf8),
+            edited: Data(#"{"id":"job","stage":"Quote Sent"}"#.utf8),
+            latest: Data(#"{"id":"job","stage":"Quote Sent","notes":[{"id":"new"}]}"#.utf8))
+        let row = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(row["stage"] as? String, "Quote Sent")
+        XCTAssertEqual((row["notes"] as? [[String: Any]])?.first?["id"] as? String, "new")
+    }
+
+    func testTimestampOffsetSurvivesPostgrestFormDecoding() throws {
+        let timestamp = "2026-10-28T12:30:00.123456+00:00"
+        let url = SupabaseWriteCondition.url(
+            baseURL: URL(string: "https://example.test/rest/v1/leads")!,
+            query: SupabaseWriteCondition.query(id: "job", expectedUpdatedAt: timestamp))
+        let query = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery)
+        XCTAssertTrue(query.contains("%2B"))
+        let formDecoded = query.replacingOccurrences(of: "+", with: " ").removingPercentEncoding
+        XCTAssertTrue(formDecoded?.contains("updated_at=eq." + timestamp) == true)
+    }
+
+    func testJobEditPreservesNewerChecklistAndLocation() throws {
+        let base = Data(#"{"id":"job","name":"Before","tasks":[],"lat":null,"updated_at":"old"}"#.utf8)
+        let edit = Data(#"{"id":"job","name":"After","tasks":[],"lat":null,"updated_at":"old"}"#.utf8)
+        let latest = Data(#"{"id":"job","name":"Before","tasks":[{"completed":true}],"lat":51,"updated_at":"new"}"#.utf8)
+        let data = try LeadEditMerge.merge(base: base, edited: edit, latest: latest)
+        let result = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(result["name"] as? String, "After")
+        XCTAssertEqual(result["lat"] as? Int, 51)
+        XCTAssertEqual(result["updated_at"] as? String, "new")
+        XCTAssertEqual((result["tasks"] as? [[String: Bool]])?.first?["completed"], true)
+    }
+
+    func testJobEditRejectsConflictingCustomerChanges() {
+        XCTAssertThrowsError(try LeadEditMerge.merge(
+            base: Data(#"{"id":"job","name":"Before"}"#.utf8),
+            edited: Data(#"{"id":"job","name":"My edit"}"#.utf8),
+            latest: Data(#"{"id":"job","name":"Their edit"}"#.utf8)))
+    }
+
+    func testJobEditRejectsDepositBasedOnOutdatedJobValue() {
+        XCTAssertThrowsError(try LeadEditMerge.merge(
+            base: Data(#"{"id":"job","value":1000,"deposit":300}"#.utf8),
+            edited: Data(#"{"id":"job","value":1000,"deposit":400}"#.utf8),
+            latest: Data(#"{"id":"job","value":2000,"deposit":300}"#.utf8)))
+    }
+
+    func testJobEditCanClearAnOptionalFieldWithoutRestoringOldNotes() throws {
+        let data = try LeadEditMerge.merge(
+            base: Data(#"{"id":"job","survey_date":"2026-10-28","notes":[]}"#.utf8),
+            edited: Data(#"{"id":"job","notes":[]}"#.utf8),
+            latest: Data(#"{"id":"job","survey_date":"2026-10-28","notes":["new"]}"#.utf8))
+        let result = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNil(result["survey_date"])
+        XCTAssertEqual(result["notes"] as? [String], ["new"])
+    }
+
+    func testPushRegistrationSuccessClearsPreviousFailure() throws {
+        let suite = "PushRegistrationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        PushRegistrationPreferences.recordFailure("Previous Apple error", defaults: defaults)
+        PushRegistrationPreferences.recordSuccess(token: "test-token", defaults: defaults)
+        XCTAssertNil(defaults.string(forKey: "remotePushRegistrationIssue"))
+        XCTAssertEqual(defaults.string(forKey: "nativePushDeviceToken"), "test-token")
+    }
+
+    func testPushRegistrationFailureInvalidatesSavedToken() throws {
+        let suite = "PushRegistrationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        PushRegistrationPreferences.recordSuccess(token: "test-token", defaults: defaults)
+        PushRegistrationPreferences.recordFailure("Connection unavailable", defaults: defaults)
+        XCTAssertNil(defaults.string(forKey: "nativePushDeviceToken"))
+        XCTAssertEqual(defaults.string(forKey: "remotePushRegistrationIssue"), "Connection unavailable")
+    }
+
     func testDailyCompanyPlanRanksOverdueJobsBeforeQuotes() {
         var overdue = lead(id: "late", stage: .inProgress, value: 1000, balance: 500)
         overdue.endDate = "2026-09-05"
@@ -171,6 +299,11 @@ final class CRMLogicTests: XCTestCase {
         lead.assignedTo = ""
         XCTAssertFalse(LeadOwnership.isAssigned(lead, to: will))
         XCTAssertFalse(LeadOwnership.isAssigned(lead, to: nil))
+        lead.teamMemberIDs = ["will"]
+        XCTAssertTrue(LeadOwnership.isAssigned(lead, to: will))
+        XCTAssertEqual(LeadAccessScope.visible([lead], for: will).map(\.id), ["lead"])
+        lead.teamMemberIDs = ["another-worker"]
+        XCTAssertFalse(LeadOwnership.isAssigned(lead, to: will))
     }
 
     func testStaffLeadScopeOnlyIncludesExactlyAssignedCustomers() {
@@ -298,6 +431,23 @@ final class CRMLogicTests: XCTestCase {
         XCTAssertEqual(admin.total, 7_000, accuracy: 0.001)
         XCTAssertEqual(PaymentReminderPolicy.summary(leads: [deposit], isAdmin: false, enabled: true).count, 0)
         XCTAssertEqual(PaymentReminderPolicy.summary(leads: [deposit], isAdmin: true, enabled: false).count, 0)
+    }
+
+    func testCustomerMoneyTotalsOnlyIncludeActiveJobs() {
+        var enquiry = lead(id: "enquiry", stage: .newLead, value: 12_000, balance: 12_000)
+        enquiry.deposit = 1_200
+        var won = lead(id: "won", stage: .won, value: 10_000, balance: 8_000)
+        won.deposit = 2_000
+        won.depositPaid = false
+        let waiting = lead(id: "waiting", stage: .waitingForPayment, value: 7_000, balance: 2_000)
+        let paid = lead(id: "paid", stage: .paid, value: 5_000, balance: 0)
+        let lost = lead(id: "lost", stage: .lost, value: 20_000, balance: 20_000)
+
+        let totals = CustomerMoneyPolicy.summary(leads: [enquiry, won, waiting, paid, lost])
+
+        XCTAssertEqual(totals.collected, 12_000, accuracy: 0.001)
+        XCTAssertEqual(totals.due, 10_000, accuracy: 0.001)
+        XCTAssertEqual(totals.depositsWaiting, 2_000, accuracy: 0.001)
     }
 
     func testEmailIdentifiersNeverUseLegacyAuthenticationFallback() {

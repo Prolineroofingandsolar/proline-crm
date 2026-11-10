@@ -34,6 +34,7 @@ struct StageMenu: View {
 #if os(iOS)
 private struct MobilePipelineBoard: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var stage: LeadStage
     @Binding var showingAdd: Bool
     @State private var search = ""
@@ -43,16 +44,48 @@ private struct MobilePipelineBoard: View {
     private var filtered:[Lead] { appState.leads.filter { search.isEmpty || [$0.name,$0.jobRef,$0.address,$0.jobType].contains { $0.localizedCaseInsensitiveContains(search) } } }
 
     var body: some View {
-        VStack(spacing:0) {
-            ScrollView {
-                VStack(spacing:14) {
-                    Picker("Pipeline", selection: $workflow) { Text("Sales").tag("Sales"); Text("Jobs").tag("Jobs") }
-                        .pickerStyle(.segmented)
-                    searchBar
-                    stageRail
-                    stageColumn(stage)
-                }.padding(.horizontal,14).padding(.bottom,24)
+        GeometryReader { geometry in
+            let wide = geometry.size.width >= 600 && !dynamicTypeSize.isAccessibilitySize
+            VStack(spacing: 14) {
+                Picker("Pipeline", selection: $workflow) {
+                    Text("Sales").tag("Sales")
+                    Text("Jobs").tag("Jobs")
+                }
+                .pickerStyle(.segmented)
+                searchBar
+                if wide {
+                    // Keep stages independently scrollable so long columns do not
+                    // push neighbouring opportunities off the inner display.
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: 14) {
+                            ForEach(stages) { item in
+                                ScrollView {
+                                    stageColumn(item, showsNavigation: false)
+                                }
+                                .frame(width: max(280, (geometry.size.width - 42) / 2))
+                                .id(item)
+                                .scrollDismissesKeyboard(.interactively)
+                            }
+                        }
+                        .scrollTargetLayout()
+                    }
+                    .scrollTargetBehavior(.viewAligned)
+                    .scrollPosition(id: Binding<LeadStage?>(
+                        get: { stage },
+                        set: { if let value = $0 { stage = value } }
+                    ))
+                } else {
+                    ScrollView {
+                        VStack(spacing: 14) {
+                            stageRail
+                            stageColumn(stage)
+                        }
+                        .padding(.bottom, 24)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
+                }
             }
+            .padding(.horizontal, 14)
         }
         .background(Color(.systemGroupedBackground)).navigationTitle("Pipeline").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItemGroup(placement:.topBarTrailing){NavigationLink{CompletedJobsArchiveView()}label:{Image(systemName:"archivebox")};Button{showingAdd=true}label:{Image(systemName:"plus").fontWeight(.bold)}} }
@@ -61,7 +94,52 @@ private struct MobilePipelineBoard: View {
 
     private var searchBar:some View{HStack{Image(systemName:"magnifyingglass").foregroundStyle(.secondary);TextField("Search customer, postcode or job",text:$search);if !search.isEmpty{Button{search=""}label:{Image(systemName:"xmark.circle.fill").foregroundStyle(.secondary)}}}.padding(.horizontal,13).frame(height:46).background(.background,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.quaternary))}
     private var stageRail:some View{ScrollView(.horizontal,showsIndicators:false){HStack(spacing:9){ForEach(stages){item in let count=filtered.filter{$0.stage==item}.count;Button{withAnimation(.snappy){stage=item}}label:{VStack(alignment:.leading,spacing:7){HStack{Image(systemName:stageIconMobile(item));Spacer();Text("\(count)").font(.caption.bold())};Text(item.displayName).font(.caption.bold()).lineLimit(1);Capsule().fill(stageColorMobile(item)).frame(height:3)}.foregroundStyle(stage==item ? Color.white:Color.primary).padding(11).frame(width:118,height:78,alignment:.leading).background(stage==item ? stageColorMobile(item):Color(.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:14))}.buttonStyle(.plain)}}.contentMargins(.horizontal,1)}}
-    private func stageColumn(_ item:LeadStage)->some View{let rows=filtered.filter{$0.stage==item};return VStack(alignment:.leading,spacing:11){HStack{Button{previousStage()}label:{Image(systemName:"chevron.left").frame(width:28,height:28)}.buttonStyle(.plain).disabled(stage==stages.first);VStack(alignment:.leading,spacing:2){Text(item.displayName).font(.title3.bold());Text("\(rows.count) \(workflow == "Sales" ? "opportunities" : "jobs") · \(rows.reduce(0){$0+$1.value}.formatted(.currency(code:"GBP").precision(.fractionLength(0))))").font(.caption).foregroundStyle(.secondary)};Spacer();Button{nextStage()}label:{Image(systemName:"chevron.right").frame(width:28,height:28)}.buttonStyle(.plain).disabled(stage==stages.last);Button{showingAdd=true}label:{Label("Add",systemImage:"plus").font(.caption.bold())}.buttonStyle(.bordered).tint(stageColorMobile(item))};ForEach(rows){lead in MobilePipelineOpportunity(lead:lead,tint:stageColorMobile(item),stages:moveStages)};if rows.isEmpty{ContentUnavailableView("Nothing in \(item.displayName)",systemImage:"rectangle.stack",description:Text(search.isEmpty ? "Add a lead or move one into this stage.":"No matching customers in this stage." )).frame(maxWidth:.infinity).padding(.vertical,35)}}.padding(14).background(Color(.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:18))}
+    private func stageColumn(_ item: LeadStage, showsNavigation: Bool = true) -> some View {
+        let rows = filtered.filter { $0.stage == item }
+        return LazyVStack(alignment: .leading, spacing: 11) {
+            HStack {
+                if showsNavigation {
+                    Button { previousStage() } label: {
+                        Image(systemName: "chevron.left").frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Previous stage")
+                    .disabled(stage == stages.first)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.displayName).font(.title3.bold())
+                    Text("\(rows.count) \(workflow == "Sales" ? "opportunities" : "jobs") · \(rows.reduce(0) { $0 + $1.value }.formatted(.currency(code: "GBP").precision(.fractionLength(0))))")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if showsNavigation {
+                    Button { nextStage() } label: {
+                        Image(systemName: "chevron.right").frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Next stage")
+                    .disabled(stage == stages.last)
+                }
+                Button { stage = item; showingAdd = true } label: {
+                    Label("Add", systemImage: "plus").font(.caption.bold())
+                        .frame(minHeight: 32)
+                }
+                .buttonStyle(.bordered).tint(stageColorMobile(item))
+            }
+            ForEach(rows) { lead in
+                MobilePipelineOpportunity(lead: lead, tint: stageColorMobile(item), stages: moveStages)
+            }
+            if rows.isEmpty {
+                ContentUnavailableView(
+                    "Nothing in \(item.displayName)", systemImage: "rectangle.stack",
+                    description: Text(search.isEmpty ? "Add a lead or move one into this stage." : "No matching customers in this stage.")
+                )
+                .frame(maxWidth: .infinity).padding(.vertical, 35)
+            }
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+    }
     private func previousStage(){guard let index=stages.firstIndex(of:stage),index>0 else{return};withAnimation(.snappy){stage=stages[index-1]}}
     private func nextStage(){guard let index=stages.firstIndex(of:stage),index<stages.count-1 else{return};withAnimation(.snappy){stage=stages[index+1]}}
 }
@@ -185,9 +263,9 @@ struct ScheduleJobSheet: View {
             // Only a won job becomes Scheduled here. Editing dates on a live job, or
             // pencilling dates onto an enquiry, must not move it through the pipeline.
             if changed.stage == .won { changed.stage = .scheduled }
-            await appState.saveLead(changed)
+            let saved = await appState.saveLead(changed, basedOn: lead)
             saving = false
-            if appState.leads.first(where: { $0.id == lead.id })?.startDate == changed.startDate { dismiss() }
+            if saved { dismiss() }
         }
     }
 }
