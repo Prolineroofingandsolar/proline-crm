@@ -19,6 +19,11 @@ struct LoginView: View {
             Image("Logo").resizable().scaledToFit().frame(maxWidth: 240).accessibilityLabel("ProLine Roofing & Solar")
             VStack(spacing: 12) {
                 TextField("Email or username", text: $username).textContentType(.username)
+                    #if os(iOS)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    #endif
                 SecureField("Password", text: $password).textContentType(.password)
             }.textFieldStyle(.roundedBorder)
             if let message = appState.errorMessage { Text(message).font(.callout).foregroundStyle(.red) }
@@ -39,6 +44,10 @@ struct LoginView: View {
                 Form {
                     Section {
                         TextField("Paste invitation code", text: $inviteCode)
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            #endif
                     } footer: {
                         Text("Your administrator can copy this code from the worker invitation.")
                     }
@@ -153,6 +162,11 @@ struct InviteWorkerSheet: View {
                 } else {
                     Section("Worker") {
                         TextField("Email address", text: $email).textContentType(.emailAddress)
+                            #if os(iOS)
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            #endif
                         Picker("Access", selection: $role) {
                             Text("Labourer").tag("labourer")
                             Text("Worker").tag("worker")
@@ -284,9 +298,18 @@ private struct PasswordRecoveryView: View {
         NavigationStack {
             Form {
                 TextField("Employee email", text: $email).textContentType(.emailAddress)
+                    #if os(iOS)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    #endif
                 if sent {
                     Text("Enter the recovery code from your email. If the email contains a reset link instead, use that link in the online CRM.")
                     TextField("Recovery code", text: $code)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    #endif
                     SecureField("New password (at least 8 characters)", text: $password).textContentType(.newPassword)
                 }
                 if let message { Text(message).font(.callout) }

@@ -1,4 +1,4 @@
-import OAuthProvider, { AuthorizationError } from './vendor/workers-oauth-provider/src/oauth-provider';
+import OAuthProvider, { AuthorizationError, type OAuthHelpers } from './vendor/workers-oauth-provider/src/oauth-provider';
 import { createAssertion } from '../supabase/functions/proline-grok-mcp/broker-auth.mjs';
 
 // Independent OAuth issuer. Supabase checks the user only during consent and
@@ -7,6 +7,16 @@ import { createAssertion } from '../supabase/functions/proline-grok-mcp/broker-a
 const ORIGIN = 'https://proline-grok-mcp.royal-art-964b.workers.dev';
 const SUPABASE = 'https://qzvdzzvkocmulcfujyea.supabase.co';
 const RESOURCE = `${ORIGIN}/mcp`;
+interface Env {
+  OAUTH_PROVIDER: OAuthHelpers;
+  SUPABASE_ANON_KEY: string;
+  PROLINE_GROK_BROKER_SECRET: string;
+}
+interface ApiContext {
+  props?: { userId?: string };
+  auth?: { scope?: string[] };
+}
+
 const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
 export async function verifyLogin(email: string, password: string, anonKey: string) {
@@ -15,7 +25,7 @@ export async function verifyLogin(email: string, password: string, anonKey: stri
     body: JSON.stringify({ email, password }),
   });
   if (!login.ok) return null;
-  const session: any = await login.json();
+  const session = await login.json() as { access_token?: string; user?: { id?: string } };
   if (!session.access_token || !session.user?.id) return null;
   // Ask Auth for the current user, as Supabase's MFA listFactors implementation
   // does. Password-only consent must never bypass an enrolled second factor.
@@ -23,19 +33,19 @@ export async function verifyLogin(email: string, password: string, anonKey: stri
     headers: { apikey: anonKey, Authorization: `Bearer ${session.access_token}` },
   });
   if (!currentUser.ok) throw new Error('Authentication service unavailable');
-  const verified: any = await currentUser.json();
-  if (verified.id !== session.user.id || (Array.isArray(verified.factors) && verified.factors.some((factor: any) => factor.status === 'verified'))) return null;
+  const verified = await currentUser.json() as { id?: string; factors?: { status?: string }[] };
+  if (verified.id !== session.user.id || (Array.isArray(verified.factors) && verified.factors.some(factor => factor.status === 'verified'))) return null;
   const profile = await fetch(`${SUPABASE}/rest/v1/profiles?id=eq.${encodeURIComponent(session.user.id)}&select=id,role,active,organisation_id`, {
     headers: { apikey: anonKey, Authorization: `Bearer ${session.access_token}` },
   });
   if (!profile.ok) throw new Error('Profile service unavailable');
-  const rows: any = await profile.json();
+  const rows = await profile.json() as { id?: string; role?: string; active?: boolean; organisation_id?: string }[];
   const person = Array.isArray(rows) ? rows[0] : null;
   return person?.id === session.user.id && person?.active === true && person?.role === 'admin' && person?.organisation_id ? person.id : null;
 }
 
 const defaultHandler = {
-  async fetch(request: Request, env: any) {
+  async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
     if (url.pathname !== '/authorize') return new Response('Not found', { status: 404 });
     try {
@@ -69,7 +79,7 @@ const defaultHandler = {
 };
 
 const apiHandler = {
-  async fetch(request: Request, env: any, ctx: any) {
+  async fetch(request: Request, env: Env, ctx: ApiContext) {
     if (new URL(request.url).pathname !== '/mcp') return new Response('Not found', { status: 404 });
     if (!ctx.props?.userId || !Array.isArray(ctx.auth?.scope) || !ctx.auth.scope.includes('profile')) return new Response('Forbidden', { status: 403 });
     const body = await request.arrayBuffer();
