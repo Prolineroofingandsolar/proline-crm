@@ -7,6 +7,7 @@ struct JobChecklistItem: Identifiable {
 }
 
 struct TasksView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(AppState.self) private var appState
     @State private var showingAdd = false
     @State private var editingTask: GeneralTask?
@@ -146,6 +147,7 @@ struct TasksView: View {
                 item: $editingJobTask
             ) { EditJobTaskView(item: $0) }
         #else
+            GeometryReader { geometry in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .firstTextBaseline) {
@@ -163,6 +165,12 @@ struct TasksView: View {
                         Text("All").tag("All")
                     }.pickerStyle(.segmented)
 
+                    LazyVGrid(
+                        columns: dynamicTypeSize.isAccessibilitySize
+                            ? [GridItem(.flexible())]
+                            : [GridItem(.adaptive(minimum: min(280, max(1, geometry.size.width - 32))), alignment: .top)],
+                        alignment: .leading, spacing: 14
+                    ) {
                     if !rows.isEmpty {
                         VStack(spacing: 0) {
                             HStack {
@@ -195,12 +203,15 @@ struct TasksView: View {
                             }, toggleTask: { taskID in Task { await appState.toggleLeadTask(leadID: group.lead.id, taskID: taskID) } },
                             editTask: { task in editingJobTask = JobChecklistItem(lead: group.lead, task: task) })
                     }
+                    }
                     if visibleCount == 0 {
                         ContentUnavailableView(
                             "No tasks here", systemImage: "checkmark.circle", description: Text("Try another view or add a general task.")
                         ).padding(.top, 60)
                     }
                 }.padding(16)
+            }
+            .scrollDismissesKeyboard(.interactively)
             }
             .background(Color(.systemGroupedBackground)).navigationTitle("Tasks").searchable(text: $search, prompt: "Search tasks")
             .toolbar {

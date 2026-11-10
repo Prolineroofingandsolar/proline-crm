@@ -45,21 +45,19 @@ struct AccountsWorkspaceView: View {
             defaultFilename: "ProLine-Accountant-Handover-\(SupabaseService.today)"
         ) { result in if case .failure = result { appState.errorMessage = "The accountant export could not be saved." } }
     }
-    private var activeJobs: [Lead] {
-        appState.leads.filter { [.won, .scheduled, .inProgress, .completed, .waitingForPayment, .paid].contains($0.stage) }
+    private var customerMoney: (collected: Double, due: Double, depositsWaiting: Double) {
+        CustomerMoneyPolicy.summary(leads: appState.leads)
     }
-    private var collected: Double { activeJobs.reduce(0) { $0 + max(0, $1.value - $1.balance) } }
-    private var due: Double { activeJobs.reduce(0) { $0 + max(0, $1.balance) } }
     private var payroll: Double { appState.timesheets.reduce(0) { $0 + $1.amount } }
     private var accountsOverview: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 12) {
-                    accountMetric("Customer money in", collected, "arrow.down.circle.fill", .green);
-                    accountMetric("Customer money due", due, "clock.badge.exclamationmark.fill", Color.accentColor);
+                    accountMetric("Customer money in", customerMoney.collected, "arrow.down.circle.fill", .green);
+                    accountMetric("Customer money due", customerMoney.due, "clock.badge.exclamationmark.fill", Color.accentColor);
                     accountMetric("Labour recorded", payroll, "person.2.fill", .blue);
                     accountMetric(
-                        "Deposits waiting", activeJobs.filter { !$0.depositPaid && $0.deposit > 0 }.reduce(0) { $0 + $1.deposit },
+                        "Deposits waiting", customerMoney.depositsWaiting,
                         "creditcard.fill", .red)
                 };
                 VStack(alignment: .leading, spacing: 12) {

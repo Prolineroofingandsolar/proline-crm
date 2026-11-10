@@ -160,7 +160,7 @@ struct ReportsView: View {
                         value: appState.leads.filter { $0.stage == .paid }.reduce(0) { $0 + $1.value }.formatted(.currency(code: "GBP")));
                     LabeledContent(
                         "Outstanding",
-                        value: appState.leads.filter { $0.stage != .lost }.reduce(0) { $0 + $1.balance }.formatted(.currency(code: "GBP")))
+                        value: CustomerMoneyPolicy.summary(leads: appState.leads).due.formatted(.currency(code: "GBP")))
                 };
                 Section("Pipeline") {
                     ForEach(LeadStage.allCases) { stage in

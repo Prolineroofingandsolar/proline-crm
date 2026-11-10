@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Bot, X, Send, Loader2, Sparkles, Key, Copy, Check, ChevronDown, Trash2, Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import type { Stage, JobType } from '../../types';
@@ -731,7 +731,7 @@ function PipelineStats() {
   const { leads } = useStore();
   const stats = {
     leads: leads.filter(l => ['New Lead', 'Survey Booked', 'Quote Sent'].includes(l.stage)).length,
-    jobs: leads.filter(l => ['Won', 'In Progress'].includes(l.stage)).length,
+    jobs: leads.filter(l => ['Won', 'Scheduled', 'In Progress'].includes(l.stage)).length,
     revenue: leads.filter(l => l.stage === 'Paid').reduce((s, l) => s + l.value, 0),
   };
   return (

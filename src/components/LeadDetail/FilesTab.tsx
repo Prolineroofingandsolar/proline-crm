@@ -3,7 +3,8 @@ import { Plus, Trash2, FileText, Image as ImageIcon, Archive, File } from 'lucid
 import type { Lead, FileItem } from '../../types';
 import { useStore } from '../../store/useStore';
 import { formatDate } from '../../utils/helpers';
-import { removeStoredObject, uploadStoredObject, useStorageAsset } from '../StorageAsset';
+import { removeStoredObject, uploadStoredObject } from '../../lib/storage';
+import { useStorageAsset } from '../../lib/useStorageAsset';
 
 const iconMap: Record<string, React.ReactNode> = {
   pdf: <FileText size={18} className="text-red-500" />,

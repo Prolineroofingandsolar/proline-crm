@@ -112,6 +112,7 @@ final class AppState {
     var assistantErrorMessage: String?
     var isAdminUsingSimpleView = UserDefaults.standard.bool(forKey: "adminUsesSimpleView")
     var gmailConnectionStatus: GmailConnectionStatus?
+    var gmailConnectionStatusUnavailable = false
     var aiAuditEntries: [AIAuditEntry] = {
         guard let data = UserDefaults.standard.data(forKey: "aiActionAudit") else { return [] }
         return (try? JSONDecoder().decode([AIAuditEntry].self, from: data)) ?? []
@@ -461,6 +462,7 @@ final class AppState {
                 cacheSignedInUser(user)
                 KeychainStore.remove("userID")
                 await refresh(showErrors: false)
+                resumeRemoteNotificationsIfEnabled()
                 return true
             } catch {
                 await SupabaseService.shared.signOutAuthenticatedSession()
@@ -496,6 +498,14 @@ final class AppState {
         do { return try await SupabaseService.shared.createWorkerInvitation(email: email, role: role) } catch {
             errorMessage = error.localizedDescription; return nil
         }
+    }
+
+    func deactivateEmployee(id: String) async {
+        guard isAdmin, id != currentUser?.id else { errorMessage = "Only an administrator can remove another employee's access."; return }
+        do {
+            try await SupabaseService.shared.deactivateEmployee(id: id)
+            users.removeAll { $0.id == id }
+        } catch { errorMessage = "Access could not be removed: \(error.localizedDescription)" }
     }
 
     func createSecureUser(name: String, email: String, password: String, role: String, dayRate: Double?, cisRate: Int) async -> Bool {
@@ -555,6 +565,7 @@ final class AppState {
     func refresh(showErrors: Bool = true) async {
         guard SyncPolicy.shouldStart(isAuthenticated: isAuthenticated, isRefreshing: isRefreshing) else { return }
         isRefreshing = true
+        let leadVersionsAtStart = leadWriteVersions
         // Only the very first load blocks the UI. Background refreshes must not grey
         // out buttons across the app every minute.
         let ownsLoadingState = !isLoading && leads.isEmpty
@@ -603,7 +614,18 @@ final class AppState {
             case .failure: failures.append(label)
             }
         }
-        adopt(await fetchedLeads, "Leads and jobs") { leads = LeadAccessScope.visible($0, for: currentUser) }
+        adopt(await fetchedLeads, "Leads and jobs") { fetched in
+            let current = Dictionary(uniqueKeysWithValues: leads.map { ($0.id, $0) })
+            let protectedIDs = Set(leadWriteQueues.keys).union(leadWriteVersions.keys.filter {
+                leadWriteVersions[$0] != leadVersionsAtStart[$0]
+            })
+            var refreshed = LeadAccessScope.visible(fetched, for: currentUser).map { row in
+                protectedIDs.contains(row.id) ? (current[row.id] ?? row) : row
+            }
+            let ids = Set(refreshed.map(\.id))
+            refreshed += leads.filter { protectedIDs.contains($0.id) && !ids.contains($0.id) }
+            leads = refreshed
+        }
         adopt(await fetchedSurveys, "Surveys") { surveys = WorkflowAccessScope.visible($0, leads: leads) }
         adopt(await fetchedUsers, "Team") { users = UserAccessScope.visible($0, for: currentUser) }
         adopt(await fetchedContacts, "Contacts") { contacts = ContactAccessScope.visible($0, leads: leads, for: currentUser) }
@@ -648,10 +670,7 @@ final class AppState {
     @discardableResult
     func move(_ lead: Lead, to stage: LeadStage) async -> Bool {
         guard lead.stage != stage else { return true }
-        return await commitLead(lead.id, base: lead.updatedAt, fallback: "The stage change could not be saved.") { changed in
-            changed = lead
-            Self.apply(stage: stage, to: &changed)
-        }
+        return await commitLead(lead.id, original: lead, fallback: "The stage change could not be saved.") { $0.stage = stage }
     }
 
     /// The next thing to do for a lead in its current stage, as one primary action.
@@ -757,86 +776,111 @@ final class AppState {
         return true
     }
 
+    /// The original sheet snapshot defines the fields the user actually edited.
+    @discardableResult
+    func saveLead(_ lead: Lead, basedOn original: Lead) async -> Bool {
+        await saveLead(lead, original: original)
+    }
+
     @discardableResult
     func saveLead(_ lead: Lead) async -> Bool {
-        guard let old = leads.first(where: { $0.id == lead.id }) else {
-            errorMessage = "This lead could not be found. Refresh and try again."; return false
+        guard let original = leads.first(where: { $0.id == lead.id }) else {
+            errorMessage = "This job could not be found. Refresh and try again."
+            return false
         }
-        guard isAdmin || old.assignedTo.caseInsensitiveCompare(lead.assignedTo) == .orderedSame else {
+        return await saveLead(lead, original: original)
+    }
+
+    private func saveLead(_ lead: Lead, original: Lead) async -> Bool {
+        guard isAdmin || original.assignedTo.caseInsensitiveCompare(lead.assignedTo) == .orderedSame else {
             errorMessage = "Only an administrator can reassign customer work."
             return false
         }
         var changed = lead
-        // Money only moves when the figures that drive it move. Fixing a typo in an
-        // address must never reset a balance that has been adjusted by hand.
-        if changed.value != old.value || changed.deposit != old.deposit || changed.depositPaid != old.depositPaid {
+        if changed.value != original.value || changed.deposit != original.deposit || changed.depositPaid != original.depositPaid {
             changed.balance = max(0, changed.value - (changed.depositPaid ? changed.deposit : 0))
         }
-        if old.stage != changed.stage {
-            var unchangedStage = changed; unchangedStage.stage = old.stage
-            return await move(unchangedStage, to: changed.stage)
-        }
-        let saved = await commitLead(lead.id, base: lead.updatedAt, fallback: "Changes could not be saved.") { $0 = changed }
-        // Contact mirroring is helpful, but it is not part of the lead write.
-        // A missing/locked contacts table must never roll back a saved lead.
-        if saved { try? await syncContact(from: changed) }
+        let saved = await commitLead(lead.id, original: original, fallback: "Changes could not be saved.") { $0 = changed }
+        if saved, let canonical = leads.first(where: { $0.id == lead.id }) { try? await syncContact(from: canonical) }
         return saved
     }
 
-    // MARK: Lead write path
-    //
-    // Every change to a lead goes through `commitLead`. Two rules keep multi-device
-    // editing safe:
-    //  1. The conflict check uses the version the edit was *based on* — a sheet's copy,
-    //     or the row as it stood when the user tapped — never whatever the last background
-    //     refresh happened to load. An edit started before a refresh cannot silently
-    //     overwrite a colleague's change.
-    //  2. Writes to the same lead run one at a time, so two quick checklist taps never
-    //     race each other into a false "someone else changed this" conflict.
+    // All lead actions share a per-job queue and a three-way merge against a fresh
+    // server row. Only the user's changed fields are written; the final PATCH still
+    // checks that exact server version, including on a bounded retry after a race.
     private var leadWriteQueues: [String: Task<Bool, Never>] = [:]
+    private var leadWriteTokens: [String: UUID] = [:]
+    private var leadWriteVersions: [String: Int] = [:]
 
-    /// Applies `mutate` to the in-memory row straight away (optimistic UI), then writes it.
-    /// - Parameter base: the `updatedAt` the edit was based on. Pass it when saving a copy
-    ///   that was taken earlier (a sheet). Leave nil for in-place taps, which are based on
-    ///   whatever the row holds when the write actually runs.
     @discardableResult
-    private func commitLead(_ leadID: String, base: String? = nil, fallback: String, mutate: @escaping @MainActor (inout Lead) -> Void)
+    private func commitLead(_ leadID: String, original: Lead? = nil, fallback: String, mutate: @escaping @MainActor (inout Lead) -> Void)
         async -> Bool
     {
         guard let index = leads.firstIndex(where: { $0.id == leadID }) else {
             errorMessage = "This job could not be found. Refresh and try again."; return false
         }
-        let snapshot = leads[index]
+        let snapshot = original ?? leads[index]
         var changed = snapshot
         mutate(&changed)
         changed.progress = Self.progress(of: changed.tasks)
         leads[index] = changed
-        // Preview data has no server: keep the change locally so the UI can be exercised.
-        if isWorkerPreview { return true }
+        if isWorkerPreview {
+            if changed.stage != snapshot.stage { Self.apply(stage: changed.stage, to: &changed) }
+            changed.progress = Self.progress(of: changed.tasks)
+            leads[index] = changed
+            return true
+        }
 
         let previous = leadWriteQueues[leadID]
+        let token = UUID()
+        leadWriteTokens[leadID] = token
+        leadWriteVersions[leadID, default: 0] += 1
         let write = Task<Bool, Never> { @MainActor [self] in
             _ = await previous?.value
-            guard let current = leads.firstIndex(where: { $0.id == leadID }) else { return false }
-            var body: Lead
-            let expected: String
-            if let base { body = changed; expected = base } else { body = leads[current]; expected = leads[current].updatedAt }
-            body.updatedAt = SupabaseService.now
+            var lastServerRow: Lead?
             do {
-                let saved = try await SupabaseService.shared.updateLead(body, expectedUpdatedAt: expected)
-                if let now = leads.firstIndex(where: { $0.id == leadID }) { leads[now].updatedAt = saved?.updatedAt ?? body.updatedAt }
-                updateWidget()
-                await scheduleNotifications()
-                return true
+                let encoder = JSONEncoder()
+                for attempt in 0..<3 {
+                    guard let latest = try await SupabaseService.shared.fetchLead(id: leadID) else {
+                        throw SupabaseLeadUnavailable()
+                    }
+                    lastServerRow = latest
+                    let data = try LeadEditMerge.merge(
+                        base: encoder.encode(snapshot), edited: encoder.encode(changed), latest: encoder.encode(latest))
+                    var body = try JSONDecoder().decode(Lead.self, from: data)
+                    if body.stage != latest.stage { Self.apply(stage: body.stage, to: &body) }
+                    body.progress = Self.progress(of: body.tasks)
+                    body.updatedAt = SupabaseService.now
+                    do {
+                        let saved = try await SupabaseService.shared.updateLead(body, expectedUpdatedAt: latest.updatedAt)
+                        leadWriteVersions[leadID, default: 0] += 1
+                        if let current = leads.firstIndex(where: { $0.id == leadID }) {
+                            if leadWriteTokens[leadID] == token { leads[current] = saved ?? body }
+                            else { leads[current].updatedAt = saved?.updatedAt ?? body.updatedAt }
+                        }
+                        updateWidget()
+                        await scheduleNotifications()
+                        return true
+                    } catch is SupabaseWriteConflict where attempt < 2 {
+                        // Re-read and re-merge: never retry with an unguarded write.
+                        continue
+                    }
+                }
+                throw SupabaseWriteConflict()
             } catch {
-                if let now = leads.firstIndex(where: { $0.id == leadID }) { leads[now] = snapshot }
+                if leadWriteTokens[leadID] == token, let current = leads.firstIndex(where: { $0.id == leadID }) {
+                    leads[current] = lastServerRow ?? snapshot
+                }
                 reportLeadWrite(error, fallback: fallback)
                 return false
             }
         }
         leadWriteQueues[leadID] = write
         let result = await write.value
-        if leadWriteQueues[leadID] == write { leadWriteQueues[leadID] = nil }
+        if leadWriteTokens[leadID] == token {
+            leadWriteQueues[leadID] = nil
+            leadWriteTokens[leadID] = nil
+        }
         return result
     }
 
@@ -960,7 +1004,8 @@ final class AppState {
         do {
             return try await SupabaseService.shared.askOperationsAssistant(
                 prompt: prompt, history: history, attachment: attachment, leads: LeadAccessScope.visible(leads, for: user),
-                tasks: TaskAccessScope.visible(visibleGeneralTasks, for: user), actions: companyActions, user: user)
+                tasks: TaskAccessScope.visible(visibleGeneralTasks, for: user), actions: companyActions, user: user,
+                people: isAdmin ? users : [user])
         } catch { assistantErrorMessage = error.localizedDescription; return nil }
     }
 
@@ -975,6 +1020,14 @@ final class AppState {
         }
         let succeeded: Bool
         switch action.kind {
+        case .createLead:
+            guard isAdmin, let name = action.value?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+                errorMessage = "Only an administrator can add a lead, and the customer name is required."
+                return false
+            }
+            succeeded = await addLead(name: name, phone: action.customerPhone ?? "", email: action.customerEmail ?? "",
+                address: action.customerAddress ?? "", jobType: action.jobType ?? "Other", stage: .newLead,
+                value: 0, deposit: 0, source: "Other")
         case .addJobTask:
             guard let leadID = action.leadID, var lead = leads.first(where: { $0.id == leadID }), let title = action.value, !title.isEmpty
             else { return false }
@@ -992,8 +1045,13 @@ final class AppState {
             await toggleLeadTask(leadID: leadID, taskID: taskID)
             succeeded = leads.first(where: { $0.id == leadID })?.tasks.first(where: { $0.id == taskID })?.completed == true
         case .createGeneralTask:
+            if let assignee = action.assigneeID, !users.contains(where: { $0.id == assignee }) {
+                errorMessage = "The selected staff member is not available."
+                return false
+            }
             succeeded = await addGeneralTask(
-                title: action.value ?? action.title, dueDate: action.secondaryValue, priority: "medium", category: "AI suggested")
+                title: action.value ?? action.title, dueDate: action.secondaryValue, priority: "medium", category: "AI suggested",
+                assignedTo: action.assigneeID.map { [$0] })
         case .moveJobStage:
             guard let leadID = action.leadID, let lead = leads.first(where: { $0.id == leadID }), let raw = action.value,
                 let stage = LeadStage(rawValue: raw)
@@ -1084,7 +1142,7 @@ final class AppState {
         var changed = lead
         changed.depositPaid = true
         changed.balance = max(0, changed.value - changed.deposit)
-        return await saveLead(changed)
+        return await saveLead(changed, basedOn: lead)
     }
 
     @discardableResult func recordFinalPayment(for lead: Lead) async -> Bool {
@@ -1093,7 +1151,7 @@ final class AppState {
         changed.balance = 0
         changed.paidDate = SupabaseService.today
         changed.stage = .paid
-        return await saveLead(changed)
+        return await saveLead(changed, basedOn: lead)
     }
 
     @discardableResult
@@ -1291,7 +1349,8 @@ final class AppState {
                 let target: LeadStage? =
                     changed.status == .accepted
                     ? .won : (lead.stage == .quotePreparing || lead.stage == .newLead || lead.stage == .surveyBooked ? .quoteSent : nil)
-                if let target, lead.stage != target { await move(lead, to: target) } else { await saveLead(lead) }
+                if let target { lead.stage = target }
+                guard await saveLead(lead) else { return false }
             }
             return true
         } catch { errorMessage = "Quote could not be saved: \(error.localizedDescription)"; return false }
@@ -1734,9 +1793,10 @@ final class AppState {
         do {
             try await SupabaseService.shared.registerNativePushDevice(
                 token: token, platform: platform, environment: environment, bundleID: Bundle.main.bundleIdentifier ?? "")
-            UserDefaults.standard.set(token, forKey: "nativePushDeviceToken")
+            PushRegistrationPreferences.recordSuccess(token: token)
             syncIssues.removeAll { $0 == "Push notifications" }
         } catch {
+            PushRegistrationPreferences.recordFailure("The CRM could not register this device: \(error.localizedDescription)")
             if !syncIssues.contains("Push notifications") { syncIssues.append("Push notifications") }
             errorMessage =
                 "Notifications were allowed, but this device could not be connected to live updates: \(error.localizedDescription)"
@@ -1757,8 +1817,7 @@ final class AppState {
     }
 
     func handleRemoteNotificationRegistrationFailure(_ detail: String?) {
-        UserDefaults.standard.removeObject(forKey: "nativePushDeviceToken")
-        UserDefaults.standard.set(detail ?? "Apple Push registration unavailable", forKey: "remotePushRegistrationIssue")
+        PushRegistrationPreferences.recordFailure(detail ?? "Apple Push registration unavailable")
         if !syncIssues.contains("Push notifications") { syncIssues.append("Push notifications") }
         // Local scheduled reminders remain available. A provisioning failure should
         // not interrupt normal CRM work with a technical system alert.
@@ -1838,7 +1897,13 @@ final class AppState {
         }
     }
     func refreshGmailConnectionStatus() async {
-        do { gmailConnectionStatus = try await SupabaseService.shared.gmailConnectionStatus() } catch { gmailConnectionStatus = nil }
+        do {
+            gmailConnectionStatus = try await SupabaseService.shared.gmailConnectionStatus()
+            gmailConnectionStatusUnavailable = false
+        } catch {
+            // Keep the last known result. A temporary network/API failure is not the same as disconnecting Gmail.
+            gmailConnectionStatusUnavailable = true
+        }
     }
     func scanGmailNow() async -> Int? {
         do { let count = try await SupabaseService.shared.scanGmail(); await refresh(showErrors: false); return count } catch {
@@ -2024,7 +2089,7 @@ enum LeadOwnership {
         guard let user else { return false }
         let owner = lead.assignedTo.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = user.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !owner.isEmpty && !name.isEmpty && owner.caseInsensitiveCompare(name) == .orderedSame
+        return lead.teamMemberIDs.contains(user.id) || (!owner.isEmpty && !name.isEmpty && owner.caseInsensitiveCompare(name) == .orderedSame)
     }
 }
 
@@ -2266,6 +2331,21 @@ enum PaymentReminderPolicy {
     }
 }
 
+/// Keeps the customer-money totals shown on Today and Accounts consistent.
+enum CustomerMoneyPolicy {
+    nonisolated static let activeStages: Set<LeadStage> = [.won, .scheduled, .inProgress, .completed, .waitingForPayment, .paid]
+
+    nonisolated static func summary(leads: [Lead]) -> (collected: Double, due: Double, depositsWaiting: Double) {
+        leads.filter { activeStages.contains($0.stage) }.reduce(into: (0, 0, 0)) { totals, lead in
+            totals.0 += max(0, lead.value - lead.balance)
+            totals.1 += max(0, lead.balance)
+            if !lead.depositPaid && lead.deposit > 0 {
+                totals.2 += lead.deposit
+            }
+        }
+    }
+}
+
 enum FleetTaskPolicy {
     nonisolated static func isRetiredReminder(_ task: GeneralTask) -> Bool {
         guard ["Fleet", "Vehicle", "Renewal"].contains(task.category) else { return false }
@@ -2278,6 +2358,18 @@ enum FleetTaskPolicy {
         else { return true }
         let revealDate = Calendar.current.date(byAdding: .day, value: -45, to: date) ?? date
         return today >= revealDate
+    }
+}
+
+enum PushRegistrationPreferences {
+    static func recordSuccess(token: String, defaults: UserDefaults = .standard) {
+        defaults.set(token, forKey: "nativePushDeviceToken")
+        defaults.removeObject(forKey: "remotePushRegistrationIssue")
+    }
+
+    static func recordFailure(_ detail: String, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: "nativePushDeviceToken")
+        defaults.set(detail, forKey: "remotePushRegistrationIssue")
     }
 }
 

@@ -1,7 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
+type ContextTask = { id: string; completed?: boolean; [key: string]: unknown };
+type ContextLead = { id: string; tasks?: ContextTask[]; [key: string]: unknown };
+type ProposedAction = { kind: string; lead_id?: string; task_id?: string; value?: string; secondary_value?: string; assignee_id?: string; quantity?: number; unit?: string; [key: string]: unknown };
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type" };
-const allowedKinds = new Set(["add_job_task", "complete_job_task", "create_general_task", "move_job_stage", "schedule_survey", "schedule_job", "draft_email", "record_deposit", "record_final_payment", "set_job_value", "set_deposit_amount", "set_balance", "add_job_note", "add_material"]);
+const allowedKinds = new Set(["create_lead", "add_job_task", "complete_job_task", "create_general_task", "move_job_stage", "schedule_survey", "schedule_job", "draft_email", "record_deposit", "record_final_payment", "set_job_value", "set_deposit_amount", "set_balance", "add_job_note", "add_material"]);
 const allowedStages = new Set(["New Lead", "Survey Booked", "Quote Preparing", "Quote Sent", "Won", "Scheduled", "In Progress", "Completed", "Waiting for Payment", "Paid", "Lost"]);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
@@ -18,17 +21,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!(await verifyUser(req))) return json({ error: "A secure signed-in account is required for AI features." }, 401);
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  if (!apiKey) return json({ error: "Gemini is not configured." }, 503);
+  const provider = Deno.env.get("PROLINE_ASSISTANT_PROVIDER") ?? "gemini";
+  if (!["gemini", "grok"].includes(provider)) return json({ error: "Assistant provider is not configured correctly." }, 503);
+  const apiKey = Deno.env.get(provider === "grok" ? "XAI_API_KEY" : "GEMINI_API_KEY");
+  if (!apiKey) return json({ error: `${provider === "grok" ? "Grok" : "Gemini"} is not configured.` }, 503);
 
   const payload = await req.json();
   const prompt = String(payload.prompt ?? "").trim().slice(0, 4000);
   if (!prompt) return json({ error: "Ask a question first." }, 400);
   const leads = Array.isArray(payload.leads) ? payload.leads.slice(0, 100) : [];
   const tasks = Array.isArray(payload.tasks) ? payload.tasks.slice(0, 100) : [];
+  const people = Array.isArray(payload.people) ? payload.people.slice(0, 100).map((p: Record<string, unknown>) => ({ id: String(p.id ?? ""), name: String(p.name ?? "") })) : [];
   const history = Array.isArray(payload.history) ? payload.history.slice(-6) : [];
-  const relevanceText = `${prompt} ${history.map((turn: any) => String(turn?.text ?? "")).join(" ")}`.toLowerCase();
-  const compactLeads = leads.map((lead: any) => {
+  const relevanceText = `${prompt} ${history.map((turn: Record<string, unknown>) => String(turn?.text ?? "")).join(" ")}`.toLowerCase();
+  const compactLeads = leads.map((lead: ContextLead) => {
     const name = String(lead.customerName ?? "").toLowerCase();
     const reference = String(lead.jobRef ?? "").toLowerCase();
     const nameParts = name.split(/\s+/).filter((part: string) => part.length >= 4);
@@ -39,7 +45,7 @@ Deno.serve(async (req) => {
       balance: lead.balance, assignedTo: lead.assignedTo, surveyDate: lead.surveyDate,
       surveyTime: lead.surveyTime, startDate: lead.startDate, endDate: lead.endDate,
       progress: lead.progress,
-      tasks: Array.isArray(lead.tasks) ? lead.tasks.filter((task: any) => !task.completed).slice(0, relevant ? 12 : 2) : []
+      tasks: Array.isArray(lead.tasks) ? lead.tasks.filter((task: ContextTask) => !task.completed).slice(0, relevant ? 12 : 2) : []
     };
     if (relevant) {
       summary.address = lead.address;
@@ -47,12 +53,12 @@ Deno.serve(async (req) => {
     }
     return summary;
   });
-  const compactTasks = tasks.filter((task: any) => !task.completed).map((task: any) => ({
+  const compactTasks = tasks.filter((task: ContextTask) => !task.completed).map((task: ContextTask) => ({
     id: task.id, title: task.title, dueDate: task.dueDate, priority: task.priority,
     category: task.category, assignedTo: task.assignedTo
   }));
   const attachment = payload.attachment && typeof payload.attachment === "object" ? payload.attachment : null;
-  let attachmentPart: any = null;
+  let attachmentPart: { inlineData: { mimeType: string; data: string } } | null = null;
   if (attachment) {
     const mimeType = String(attachment.mime_type ?? "");
     const data = String(attachment.data ?? "");
@@ -60,18 +66,19 @@ Deno.serve(async (req) => {
     if (!allowed || !data || data.length > 21_000_000) return json({ error: "Use a PDF or image smaller than 15 MB." }, 400);
     attachmentPart = { inlineData: { mimeType, data } };
   }
-  const leadIDs = new Set(leads.map((lead: any) => String(lead.id)));
+  const leadIDs = new Set(leads.map((lead: ContextLead) => String(lead.id)));
   const taskOwners = new Map<string, string>();
   for (const lead of leads) for (const task of (lead.tasks ?? [])) taskOwners.set(String(task.id), String(lead.id));
 
   const system = `You are ProLine's roofing operations assistant for a UK roofing company.
 Use only supplied CRM records. Be concise and explicit about uncertainty. Never invent customers, jobs, dates or task IDs.
 You may answer and PROPOSE actions, but never execute them. Every action must set requires_approval=true.
-Allowed: add_job_task, complete_job_task, create_general_task, move_job_stage, schedule_survey, schedule_job, draft_email, record_deposit, record_final_payment, set_job_value, set_deposit_amount, set_balance, add_job_note, add_material.
+Allowed: create_lead, add_job_task, complete_job_task, create_general_task, move_job_stage, schedule_survey, schedule_job, draft_email, record_deposit, record_final_payment, set_job_value, set_deposit_amount, set_balance, add_job_note, add_material.
+create_lead uses value=customer name, optional customer_phone, customer_email, customer_address, job_type. Never invent details; ask if name is missing. Do not propose duplicates when a matching customer is already present.
 Never propose sending email: draft_email is wording only. Never propose payroll, banking, invoice issuance, deletion, or transfers.
 add_job_task uses lead_id, value=title, optional secondary_value=YYYY-MM-DD.
 complete_job_task uses a real lead_id and incomplete task_id.
-create_general_task uses value=title and optional secondary_value=YYYY-MM-DD.
+create_general_task uses value=title, optional secondary_value=YYYY-MM-DD and optional assignee_id from the supplied people list. If the named person is missing or ambiguous, ask rather than guessing. If no person was named, leave assignee_id empty.
 move_job_stage uses lead_id and an exact stage value.
 schedule_survey uses lead_id, value=YYYY-MM-DD and optional secondary_value=HH:mm.
 schedule_job uses lead_id, value=start YYYY-MM-DD and optional secondary_value=end YYYY-MM-DD.
@@ -90,36 +97,58 @@ If ambiguous, ask a question and return no actions. Today: ${String(payload.toda
       type: "OBJECT", required: ["id", "kind", "title", "explanation", "requires_approval"], properties: {
         id: { type: "STRING" }, kind: { type: "STRING" }, title: { type: "STRING" }, explanation: { type: "STRING" },
         lead_id: { type: "STRING", nullable: true }, task_id: { type: "STRING", nullable: true }, value: { type: "STRING", nullable: true },
-        secondary_value: { type: "STRING", nullable: true }, quantity: { type: "NUMBER", nullable: true }, unit: { type: "STRING", nullable: true }, requires_approval: { type: "BOOLEAN" }
+        secondary_value: { type: "STRING", nullable: true }, quantity: { type: "NUMBER", nullable: true }, unit: { type: "STRING", nullable: true }, requires_approval: { type: "BOOLEAN" },
+        assignee_id: { type: "STRING", nullable: true }, customer_phone: { type: "STRING", nullable: true }, customer_email: { type: "STRING", nullable: true }, customer_address: { type: "STRING", nullable: true }, job_type: { type: "STRING", nullable: true }
       }
     } }
   } };
   const model = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.6-flash";
   let response: Response;
+  const requestText = `Conversation history:\n${JSON.stringify(history)}\n\nCurrent request:\n${prompt}\n\nAttached filename: ${String(attachment?.filename ?? "none")}\n\nCRM jobs:\n${JSON.stringify(compactLeads)}\n\nGeneral tasks:\n${JSON.stringify(compactTasks)}\n\nPeople:\n${JSON.stringify(people)}`;
+  if (provider === "grok" && attachmentPart?.inlineData.mimeType === "application/pdf") {
+    return json({ error: "PDF attachments are not yet supported by the Grok assistant. No changes were made." }, 400);
+  }
   try {
-    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    if (provider === "grok") {
+      const parts: Record<string, unknown>[] = [{ type: "text", text: requestText }];
+      if (attachmentPart) parts.push({ type: "image_url", image_url: { url: `data:${attachmentPart.inlineData.mimeType};base64,${attachmentPart.inlineData.data}` } });
+      response = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(attachmentPart ? 55_000 : 40_000),
+        body: JSON.stringify({ model: Deno.env.get("XAI_MODEL") ?? "grok-4.3", temperature: 0.15,
+          messages: [{ role: "system", content: `${system}\nRespond with a JSON object containing message (string), lead_ids (array of strings), and actions (array). Each action must include id, kind, title, explanation and requires_approval; include only applicable optional fields.` },
+            { role: "user", content: parts }], response_format: { type: "json_object" } }),
+      });
+    } else response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(attachmentPart ? 55_000 : 40_000), body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: `Conversation history:\n${JSON.stringify(history)}\n\nCurrent request:\n${prompt}\n\nAttached filename: ${String(attachment?.filename ?? "none")}\n\nCRM jobs:\n${JSON.stringify(compactLeads)}\n\nGeneral tasks:\n${JSON.stringify(compactTasks)}` }, ...(attachmentPart ? [attachmentPart] : [])] }],
+        contents: [{ role: "user", parts: [{ text: requestText }, ...(attachmentPart ? [attachmentPart] : [])] }],
         generationConfig: { temperature: 0.15, maxOutputTokens: 1200, responseMimeType: "application/json", responseSchema: schema } })
     });
   } catch (error) {
-    console.error("Gemini request timed out or failed", error);
-    return json({ error: "Gemini took too long to respond. Please try again." }, 504);
+    console.error(`${provider} request timed out or failed`, error);
+    return json({ error: "The assistant took too long to respond. Please try again." }, 504);
   }
   if (!response.ok) {
     const failure = await response.json().catch(() => ({}));
     const rawReason = String(failure?.error?.message ?? failure?.error?.status ?? "Unknown Gemini API error");
     const safeReason = rawReason.replaceAll(apiKey, "[redacted]").slice(0, 300);
-    console.error(`Gemini API failure ${response.status}: ${safeReason}`);
-    return json({ error: `Gemini API returned ${response.status}: ${safeReason}` }, 502);
+    console.error(`${provider} API failure ${response.status}: ${safeReason}`);
+    return json({ error: `The assistant returned an error (${response.status}). Please try again.` }, 502);
   }
   const raw = await response.json();
-  const text = raw?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) return json({ error: "Gemini returned an empty answer." }, 502);
-  const result = JSON.parse(text);
+  const text = provider === "grok" ? raw?.choices?.[0]?.message?.content : raw?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (typeof text !== "string" || !text) return json({ error: "The assistant returned an empty answer." }, 502);
+  let result;
+  try { result = JSON.parse(text); } catch { return json({ error: "The assistant returned an invalid answer. Please try again." }, 502); }
+  if (!result || typeof result.message !== "string" || !Array.isArray(result.lead_ids) || !Array.isArray(result.actions)) {
+    return json({ error: "The assistant returned an incomplete answer. Please try again." }, 502);
+  }
   result.lead_ids = (result.lead_ids ?? []).filter((id: unknown) => leadIDs.has(String(id))).map(String);
-  result.actions = (result.actions ?? []).filter((action: any) => {
+  result.actions = (result.actions ?? []).filter((action: ProposedAction) => {
+    if (!action || typeof action !== "object") return false;
     if (!allowedKinds.has(action.kind)) return false;
+    if (action.kind === "create_lead" && (payload.user?.role !== "admin" || !String(action.value ?? "").trim())) return false;
+    if (action.assignee_id && (action.kind !== "create_general_task" || !people.some((person: { id: string }) => person.id === action.assignee_id))) return false;
     const needsLead = ["add_job_task", "complete_job_task", "move_job_stage", "schedule_survey", "schedule_job", "draft_email", "record_deposit", "record_final_payment", "set_job_value", "set_deposit_amount", "set_balance", "add_job_note", "add_material"].includes(action.kind);
     if (needsLead && !leadIDs.has(String(action.lead_id))) return false;
     if (action.kind === "complete_job_task" && taskOwners.get(String(action.task_id)) !== String(action.lead_id)) return false;
@@ -128,7 +157,7 @@ If ambiguous, ask a question and return no actions. Today: ${String(payload.toda
     if (action.kind === "schedule_survey" && action.secondary_value && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(action.secondary_value))) return false;
     if (action.kind === "schedule_job" && action.secondary_value && !/^\d{4}-\d{2}-\d{2}$/.test(String(action.secondary_value))) return false;
     if (["add_job_task", "create_general_task", "draft_email"].includes(action.kind) && !String(action.value ?? "").trim()) return false;
-    const lead = leads.find((item: any) => String(item.id) === String(action.lead_id));
+    const lead = leads.find((item: ContextLead) => String(item.id) === String(action.lead_id));
     if (action.kind === "record_deposit" && (payload.user?.role !== "admin" || !lead || Number(lead.deposit) <= 0 || lead.depositPaid === true)) return false;
     if (action.kind === "record_final_payment" && (payload.user?.role !== "admin" || !lead || Number(lead.balance) <= 0)) return false;
     if (["set_job_value", "set_deposit_amount", "set_balance"].includes(action.kind)) {
@@ -140,6 +169,6 @@ If ambiguous, ask a question and return no actions. Today: ${String(payload.toda
     if (action.kind === "add_job_note" && !String(action.value ?? "").trim()) return false;
     if (action.kind === "add_material" && (!String(action.value ?? "").trim() || !String(action.unit ?? "").trim() || !Number.isFinite(Number(action.quantity)) || Number(action.quantity) <= 0)) return false;
     return true;
-  }).map((action: any) => ({ ...action, requires_approval: true }));
+  }).map((action: ProposedAction) => ({ ...action, requires_approval: true }));
   return json(result);
 });

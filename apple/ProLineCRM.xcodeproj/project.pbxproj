@@ -7,15 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		412002D2E845045D8ABCFCCF /* VirtualOfficeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A59C6A48FB25FAEEF8BB21 /* VirtualOfficeView.swift */; };
-		113D9C9F9350687E349152C0 /* VirtualOfficeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A59C6A48FB25FAEEF8BB21 /* VirtualOfficeView.swift */; };
-		3609285D5584385EDC28DCC9 /* PaperclipService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E61B4E41EF6970F7495FD4 /* PaperclipService.swift */; };
-		AF12E7F38010604EF70295EC /* PaperclipService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E61B4E41EF6970F7495FD4 /* PaperclipService.swift */; };
 		0648E9BFA9989E418007BA36 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1124751956B1D90B6489ADE7 /* RootView.swift */; };
 		0976A6092012819742D1BED8 /* PayrollViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF16B57CF42196DA023354A /* PayrollViews.swift */; };
 		0A6D5335897BF543B3496DA0 /* TimesheetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C271B8ECBDDA70E88C7927A /* TimesheetViews.swift */; };
 		0C14E1AA86EF152E2688709E /* ContactsFilesReportsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 177D310CA0AAE1F3BA4DFBE9 /* ContactsFilesReportsViews.swift */; };
 		0D13D5E64E76A4F13FED4C1A /* CRMModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76954FC1891FA8555C44D6B2 /* CRMModels.swift */; };
+		113D9C9F9350687E349152C0 /* VirtualOfficeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A59C6A48FB25FAEEF8BB21 /* VirtualOfficeView.swift */; };
 		119F0A37D21BD96434CAC2C9 /* ProLineCRMApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116016C603551F55867ECD6B /* ProLineCRMApp.swift */; };
 		1371CC79AFB2E4C8A71F1D1B /* CallOutcomeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02474CC5E3238C41CE4E7415 /* CallOutcomeSheet.swift */; };
 		177E94A61A6D6C3C5A256A85 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56A442B5FB64919428E1379 /* LoginView.swift */; };
@@ -24,10 +21,12 @@
 		1EAA657E602A23D2B0AE0C40 /* OperationsAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1195AE03B365A24B80347981 /* OperationsAssistantView.swift */; };
 		2A1489460FBC73D7A057823E /* RoofingToolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D6202CC8E9DB93C565CCAA /* RoofingToolsView.swift */; };
 		2D99D844088B05809C09221B /* OperationsAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1195AE03B365A24B80347981 /* OperationsAssistantView.swift */; };
+		3609285D5584385EDC28DCC9 /* PaperclipService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E61B4E41EF6970F7495FD4 /* PaperclipService.swift */; };
 		377244E13B306A9DE7B93E0C /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C15F2C475C0F8AF3B86C93E5 /* KeychainStore.swift */; };
 		3A49BD1CE065E01259FAB6BC /* ProLineWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480FAB9E772AC8316A736F73 /* ProLineWidget.swift */; };
 		3A5F45198041116658DA8371 /* ProLineWidget-iOS.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B4AE5494759EF138A297B919 /* ProLineWidget-iOS.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3C41E40C18A799EC012B79C8 /* MacOperationsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60A63AB803245371E52A5C07 /* MacOperationsViews.swift */; };
+		412002D2E845045D8ABCFCCF /* VirtualOfficeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A59C6A48FB25FAEEF8BB21 /* VirtualOfficeView.swift */; };
 		4260F902DC8C720D5BB47467 /* LeadDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B83D1E0FE1DD7E70F67049C /* LeadDetailView.swift */; };
 		49D88EB7B7CC2CEA10ECDE39 /* ActionQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F50204BD5453D21D7A515C0 /* ActionQueueView.swift */; };
 		4A96B68512890F6B91158E8B /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2975D6A4FF6612C3AD25373A /* TasksView.swift */; };
@@ -67,6 +66,7 @@
 		A2F48568746396A9B9426937 /* CRMModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76954FC1891FA8555C44D6B2 /* CRMModels.swift */; };
 		AE68E143B95143736AF23358 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C15F2C475C0F8AF3B86C93E5 /* KeychainStore.swift */; };
 		AEFF7B6D081E406E835478C7 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F403D225C733DBBFCE86C2C /* AppState.swift */; };
+		AF12E7F38010604EF70295EC /* PaperclipService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E61B4E41EF6970F7495FD4 /* PaperclipService.swift */; };
 		B14337EA047143C00AA3A142 /* LeadDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B83D1E0FE1DD7E70F67049C /* LeadDetailView.swift */; };
 		B18AB031FD44CF655676BBC0 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B7652E17FF6CDA2269AC84 /* WidgetSnapshot.swift */; };
 		B2147323C9C9DD0CAE2BE21F /* TeamHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 628D29D8B5886B34241198AB /* TeamHubView.swift */; };
@@ -167,7 +167,6 @@
 		4B98F6F1BDF384E6B4A51DB4 /* ContactLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactLinks.swift; sourceTree = "<group>"; };
 		504C74BD92984F137A041D8F /* CRMLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRMLogicTests.swift; sourceTree = "<group>"; };
 		51A4DBE4864E2D9DAF866B55 /* RoofingWorkflowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoofingWorkflowViews.swift; sourceTree = "<group>"; };
-		C7E61B4E41EF6970F7495FD4 /* PaperclipService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperclipService.swift; sourceTree = "<group>"; };
 		5D03082AC6A483D2BF0F07D0 /* AddressSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressSearchService.swift; sourceTree = "<group>"; };
 		60A63AB803245371E52A5C07 /* MacOperationsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOperationsViews.swift; sourceTree = "<group>"; };
 		628D29D8B5886B34241198AB /* TeamHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamHubView.swift; sourceTree = "<group>"; };
@@ -177,26 +176,27 @@
 		8C271B8ECBDDA70E88C7927A /* TimesheetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimesheetViews.swift; sourceTree = "<group>"; };
 		91A56B7310279EB386850363 /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineView.swift; sourceTree = "<group>"; };
 		94705493636263CF0B142A9E /* QuotePDFRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotePDFRenderer.swift; sourceTree = "<group>"; };
-		97CB30822368769F57E75640 /* ProLineCRM-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "ProLineCRM-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		D9A59C6A48FB25FAEEF8BB21 /* VirtualOfficeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualOfficeView.swift; sourceTree = "<group>"; };
+		97CB30822368769F57E75640 /* ProLineCRM-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ProLineCRM-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9F50204BD5453D21D7A515C0 /* ActionQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionQueueView.swift; sourceTree = "<group>"; };
 		A56A442B5FB64919428E1379 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		AF44176F2052ADA4FAE0736D /* CustomerDeckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomerDeckView.swift; sourceTree = "<group>"; };
-		B4AE5494759EF138A297B919 /* ProLineWidget-iOS.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = "ProLineWidget-iOS.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4AE5494759EF138A297B919 /* ProLineWidget-iOS.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "ProLineWidget-iOS.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC6CF6AD5C4068FFD281E76C /* EmailWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailWorkspaceView.swift; sourceTree = "<group>"; };
 		C02AF66FEBD0B82C80CEE696 /* AccountsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsViews.swift; sourceTree = "<group>"; };
 		C15F2C475C0F8AF3B86C93E5 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		C3FB3B42D30474665FC59B8F /* ProLineWidget-macOS.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "ProLineWidget-macOS.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C43C1B1BE1BA1844D1D534DE /* FinanceFleetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceFleetViews.swift; sourceTree = "<group>"; };
+		C7E61B4E41EF6970F7495FD4 /* PaperclipService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperclipService.swift; sourceTree = "<group>"; };
 		CEF16B57CF42196DA023354A /* PayrollViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayrollViews.swift; sourceTree = "<group>"; };
-		D33C1BB554952237F588BD4A /* ProLineCRM-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ProLineCRM-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D33C1BB554952237F588BD4A /* ProLine CRM.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ProLine CRM.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D445CB8B99C93CF174EADDF9 /* ProLineCRMTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProLineCRMTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D876B701BAADA5AD1500AC29 /* CrewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrewView.swift; sourceTree = "<group>"; };
+		D9A59C6A48FB25FAEEF8BB21 /* VirtualOfficeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualOfficeView.swift; sourceTree = "<group>"; };
 		DB702FAED70865F4277742A5 /* JobsAndWorkerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobsAndWorkerViews.swift; sourceTree = "<group>"; };
 		DC4EA7B21552C2B0E511F0D9 /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherService.swift; sourceTree = "<group>"; };
 		DE5D7E6FD3FE69D518EC10AD /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		E4364C310749209AF649093E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		FD05C4E2A9A765B620D2A7E1 /* .swift-format */ = {isa = PBXFileReference; path = ".swift-format"; sourceTree = "<group>"; };
+		FD05C4E2A9A765B620D2A7E1 /* .swift-format */ = {isa = PBXFileReference; lastKnownFileType = text; path = ".swift-format"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -258,7 +258,7 @@
 			isa = PBXGroup;
 			children = (
 				97CB30822368769F57E75640 /* ProLineCRM-iOS.app */,
-				D33C1BB554952237F588BD4A /* ProLineCRM-macOS.app */,
+				D33C1BB554952237F588BD4A /* ProLine CRM.app */,
 				D445CB8B99C93CF174EADDF9 /* ProLineCRMTests.xctest */,
 				B4AE5494759EF138A297B919 /* ProLineWidget-iOS.appex */,
 				C3FB3B42D30474665FC59B8F /* ProLineWidget-macOS.appex */,
@@ -359,7 +359,7 @@
 			packageProductDependencies = (
 			);
 			productName = "ProLineCRM-macOS";
-			productReference = D33C1BB554952237F588BD4A /* ProLineCRM-macOS.app */;
+			productReference = D33C1BB554952237F588BD4A /* ProLine CRM.app */;
 			productType = "com.apple.product-type.application";
 		};
 		6D6684BB350D61232B8D9A46 /* ProLineCRMTests */ = {
@@ -421,7 +421,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 2710;
 				TargetAttributes = {
 					1CB2316C72B3240769368BBB = {
 						DevelopmentTeam = J87GB8M4RD;
@@ -683,7 +683,8 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = J87GB8M4RD;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -705,11 +706,12 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
@@ -722,6 +724,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = Configuration/ProLineCRM.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = "Configuration/Widget-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -729,6 +732,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.mac.widget;
+				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 			};
@@ -777,6 +781,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "Configuration/ProLineCRM-macOS-App.entitlements";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = "Configuration/macOS-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -784,6 +789,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.mac;
 				PRODUCT_NAME = "ProLine CRM";
+				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -795,6 +801,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "Configuration/ProLineCRM-macOS-App.entitlements";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = "Configuration/macOS-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -802,6 +809,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.mac;
 				PRODUCT_NAME = "ProLine CRM";
+				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -842,7 +850,8 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = J87GB8M4RD;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -858,10 +867,11 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
@@ -873,6 +883,8 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -889,6 +901,8 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -906,6 +920,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = Configuration/ProLineCRM.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = "Configuration/Widget-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -913,6 +928,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.prolineroofingandsolar.crm.native.mac.widget;
+				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 			};

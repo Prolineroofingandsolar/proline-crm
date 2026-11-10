@@ -53,7 +53,7 @@ struct RootView: View {
                                             Image(systemName: "magnifyingglass")
                                         }
                                         .accessibilityLabel("Search")
-                                        if section == .dashboard || section == .pipeline {
+                                        if section == .dashboard {
                                             Button {
                                                 appState.showingGlobalAddLead = true
                                             } label: {
@@ -148,16 +148,10 @@ struct RootView: View {
                     .listStyle(.sidebar)
                     .scrollContentBackground(.hidden)
                     .foregroundStyle(.white)
+                    .frame(maxHeight: .infinity)
+                    .clipped()
                     .onChange(of: appState.selectedSection) { _, _ in macPath = NavigationPath() }
-                }
-                .background(
-                    LinearGradient(
-                        colors: [Color(red: 0.025, green: 0.10, blue: 0.16), Color(red: 0.02, green: 0.14, blue: 0.21)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .safeAreaInset(edge: .bottom) {
+
                     if let user = appState.currentUser {
                         HStack {
                             Circle()
@@ -176,12 +170,22 @@ struct RootView: View {
                             } label: {
                                 Image(systemName: "chevron.down")
                             }
+                            .menuIndicator(.hidden)
+                            .accessibilityLabel("Account menu")
                         }
                         .foregroundStyle(.white)
                         .padding(16)
                         .background(Color.black.opacity(0.12))
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                .background(
+                    LinearGradient(
+                        colors: [Color(red: 0.025, green: 0.10, blue: 0.16), Color(red: 0.02, green: 0.14, blue: 0.21)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .navigationSplitViewColumnWidth(min: 190, ideal: 205, max: 220)
             } detail: {
                 NavigationStack(path: $macPath) {
@@ -367,12 +371,13 @@ struct RootView: View {
 
 #if os(iOS)
 private extension View {
-    /// On iPhone Duo the sidebar is used on the regular-width inner display and
-    /// collapses back to the familiar tab presentation on compact-width displays.
+    /// Keep the content canvas available on the Duo's inner display. The adaptive
+    /// style still lets users choose a sidebar without forcing it into narrow windows.
     @ViewBuilder
     func proLineAdaptiveTabPlacement() -> some View {
         if #available(iOS 18.0, *) {
-            defaultAdaptableTabBarPlacement(.sidebar)
+            tabViewStyle(.sidebarAdaptable)
+                .defaultAdaptableTabBarPlacement(.tabBar)
         } else {
             self
         }

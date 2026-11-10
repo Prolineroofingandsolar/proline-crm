@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate, jobTypeColor } from '../utils/helpers';
 import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 
-const JOB_STAGES = ['Won', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid'];
+const JOB_STAGES = ['Won', 'Scheduled', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid'];
 
 export default function JobsPage() {
   const { leads, selectedId, setSelectedId, moveToStage, deleteLead, users, currentUserId } = useStore();

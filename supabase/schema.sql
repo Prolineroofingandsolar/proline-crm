@@ -79,7 +79,7 @@ create table if not exists push_tokens (
   platform text not null default 'ios',
   updated_at text not null default ''
 );
-alter table push_tokens disable row level security;
+alter table push_tokens enable row level security;
 
 -- Timesheet migration
 -- Run this if upgrading an existing database (safe to run multiple times)

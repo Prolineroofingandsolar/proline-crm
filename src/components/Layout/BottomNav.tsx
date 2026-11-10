@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X, Clock, Landmark, Bot } from 'lucide-react';
+import { Kanban, Users, Briefcase, CheckSquare, LayoutDashboard, Calendar, Contact, FolderOpen, BarChart2, Settings, MoreHorizontal, X, Clock, Landmark, Bot, Ruler, Receipt } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 const ADMIN_MAIN = [
@@ -23,18 +23,21 @@ const ADMIN_MORE = [
   { id: 'files',     label: 'Files',     icon: FolderOpen },
   { id: 'reports',   label: 'Reports',   icon: BarChart2 },
   { id: 'banking',   label: 'Banking',   icon: Landmark },
+  { id: 'cis', label: 'CIS', icon: Receipt },
   { id: 'office',    label: 'Office',    icon: Bot },
   { id: 'settings',  label: 'Settings',  icon: Settings },
+  { id: 'tools', label: 'Roofing tools', icon: Ruler },
 ];
 const USER_MORE = [
   { id: 'calendar',  label: 'Calendar',  icon: Calendar },
+  { id: 'tools', label: 'Roofing tools', icon: Ruler },
 ];
 
 export default function BottomNav() {
-  const { currentPage, setCurrentPage, users, currentUserId } = useStore();
+  const { currentPage, setCurrentPage, users, currentUserId, simpleMode, setSimpleMode } = useStore();
   const isAdmin = users.find(u => u.id === currentUserId)?.role === 'admin';
-  const MAIN = isAdmin ? ADMIN_MAIN : USER_MAIN;
-  const MORE  = isAdmin ? ADMIN_MORE : USER_MORE;
+  const MAIN = isAdmin && !simpleMode ? ADMIN_MAIN : USER_MAIN;
+  const MORE  = isAdmin && !simpleMode ? ADMIN_MORE : USER_MORE;
   const [showMore, setShowMore] = useState(false);
 
   const go = (id: string) => { setCurrentPage(id); setShowMore(false); };
@@ -46,7 +49,7 @@ export default function BottomNav() {
       {showMore && (
         <>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowMore(false)} />
-          <div className="fixed left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl p-4" style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' }}>
+          <div className="fixed left-0 right-0 z-50 max-h-[70dvh] overflow-y-auto bg-white rounded-t-2xl shadow-2xl p-4" style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' }}>
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
             <div className="grid grid-cols-3 gap-3">
               {MORE.map(({ id, label, icon: Icon }) => (
@@ -59,6 +62,7 @@ export default function BottomNav() {
                 </button>
               ))}
             </div>
+            {isAdmin && <div className="mt-4 border-t pt-4"><label className="flex items-center justify-between gap-3 text-sm font-semibold text-gray-800">Simple mode<input type="checkbox" checked={simpleMode} onChange={e => { setSimpleMode(e.target.checked); setShowMore(false); }} className="h-5 w-5 accent-orange-600"/></label><p className="mt-1 text-xs text-gray-500">Shows a simpler layout. Your account permissions stay the same.</p></div>}
           </div>
         </>
       )}

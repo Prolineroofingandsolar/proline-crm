@@ -16,7 +16,7 @@ const defaultTasks = (prefix: string): Task[] => [
 const completedTasks = (prefix: string, date: string): Task[] =>
   defaultTasks(prefix).map(t => ({ ...t, completed: true, completedDate: date }));
 
-export const STAGES = ['New Lead', 'Survey Booked', 'Quote Sent', 'Won', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid'] as const;
+export const STAGES = ['New Lead', 'Survey Booked', 'Quote Preparing', 'Quote Sent', 'Won', 'Scheduled', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid', 'Lost'] as const;
 
 export const initialLeads: Lead[] = [
   // ── New Leads ─────────────────────────────────────────────────────────────

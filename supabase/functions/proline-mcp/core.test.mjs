@@ -20,6 +20,7 @@ test("keeps business writes gated while allowing a check-in-only pilot", () => {
   const pilot = toolsForConfig(true, false);
   assert.deepEqual(pilot.map((tool) => tool.name), [
     ...TOOLS.map((tool) => tool.name),
+    "proline_check_for_changes",
     "proline_agent_checkin",
   ]);
   assert.equal(pilot.at(-1).annotations.readOnlyHint, false);
@@ -81,4 +82,15 @@ test("returns MCP-compatible structured results", () => {
 
 test("uses a London calendar date", () => {
   assert.match(londonToday(new Date("2026-01-01T00:30:00Z")), /^2026-01-01$/);
+});
+
+
+test("accepts email enquiries without mislabelling their source and rejects unknown sources", () => {
+  const lead = { agent_slug: "rodney", source: "email", source_event_id: "gmail-thread-123", customer_name: "Test enquiry", email: "customer@example.com", job_type: "Roof Repair", evidence: "Customer requested a roof repair by email." };
+  const enabled = toolsForConfig(true, true);
+  const definition = enabled.find(tool => tool.name === "proline_create_verified_lead");
+  assert.deepEqual(definition.inputSchema.properties.source.enum, ["website", "mybuilder_shortlisted", "email"]);
+  assert.doesNotThrow(() => validateArguments("proline_create_verified_lead", lead, enabled));
+  assert.throws(() => validateArguments("proline_create_verified_lead", { ...lead, source: "spam" }, enabled));
+  assert.equal(toolsForConfig(true, false).some(tool => tool.name === "proline_create_verified_lead"), false);
 });

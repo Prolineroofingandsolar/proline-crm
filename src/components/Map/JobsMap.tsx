@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -68,32 +68,32 @@ function CardPositionTracker({
   return null;
 }
 
-const MAP_STAGES = ['Won', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid'];
+const MAP_STAGES = ['Won', 'Scheduled', 'In Progress', 'Completed', 'Waiting for Payment', 'Paid'];
 const CARD_W = 210;
 const CARD_H = 188;
 
 export default function JobsMap() {
   const { leads, geocodeLeads, setSelectedId } = useStore();
-  const [geocodingDone, setGeocodingDone] = useState(false);
+  const [finishedGeocodes, setFinishedGeocodes] = useState<Set<string>>(new Set());
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
   const [cardPos, setCardPos] = useState<{ x: number; y: number } | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
   const mapLeads = leads.filter(l => MAP_STAGES.includes(l.stage));
   const withCoords = mapLeads.filter(l => l.lat && l.lng);
-  const needsGeocode = mapLeads.filter(l => !l.lat && l.address);
+  const needsGeocode = useMemo(() => leads.filter(l => MAP_STAGES.includes(l.stage) && !l.lat && l.address), [leads]);
+  const geocodingDone = needsGeocode.every(l => finishedGeocodes.has(`${l.id}:${l.address}`));
 
   const attemptedKeys = useRef<Set<string>>(new Set());
   useEffect(() => {
     const untried = needsGeocode.filter(l => !attemptedKeys.current.has(`${l.id}:${l.address}`));
     if (untried.length > 0) {
       untried.forEach(l => attemptedKeys.current.add(`${l.id}:${l.address}`));
-      setGeocodingDone(false);
-      geocodeLeads(untried.map(l => l.id)).then(() => setGeocodingDone(true));
-    } else if (mapLeads.length > 0) {
-      setGeocodingDone(true);
+      void geocodeLeads(untried.map(l => l.id)).finally(() => {
+        setFinishedGeocodes(previous => new Set([...previous, ...untried.map(l => `${l.id}:${l.address}`)]));
+      });
     }
-  }, [needsGeocode.map(l => `${l.id}:${l.address}`).join(',')]);
+  }, [needsGeocode, geocodeLeads]);
 
   const clampedPos = useCallback((markerX: number, markerY: number) => {
     const container = mapContainerRef.current;

@@ -250,6 +250,16 @@ struct OperationsAssistantView: View {
                             .title2.bold()
                         ).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)
                     }
+                } else if action.kind == .createLead {
+                    GroupBox("New lead") {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(action.value ?? "Name missing").font(.headline)
+                            if let phone = action.customerPhone, !phone.isEmpty { Text(phone) }
+                            if let email = action.customerEmail, !email.isEmpty { Text(email) }
+                            if let address = action.customerAddress, !address.isEmpty { Text(address) }
+                            if let job = action.jobType, !job.isEmpty { Text(job) }
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 } else if action.kind == .addMaterial, let name = action.value, let quantity = action.quantity, let unit = action.unit {
                     GroupBox("Material to add") {
                         HStack {
@@ -286,6 +296,9 @@ struct OperationsAssistantView: View {
                 if let id = action.leadID, let lead = appState.leads.first(where: { $0.id == id }) {
                     Label("\(lead.name) · \(lead.jobRef)", systemImage: "house")
                 };
+                if let id = action.assigneeID, let person = appState.users.first(where: { $0.id == id }) {
+                    Label("Assigned to \(person.name)", systemImage: "person")
+                }
                 if let actionFailure {
                     Label(actionFailure, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(.red).padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading).background(
@@ -334,6 +347,7 @@ struct OperationsAssistantView: View {
     }
     private func reviewLabel(for kind: CRMAssistantActionKind) -> String {
         switch kind {
+        case .createLead: "Customer name";
         case .addJobTask, .createGeneralTask: "Task to add";
         case .completeJobTask: "Task to complete";
         case .moveJobStage: "New pipeline stage";
@@ -353,6 +367,7 @@ struct OperationsAssistantView: View {
     }
     private func icon(for kind: CRMAssistantActionKind) -> String {
         switch kind {
+        case .createLead: "person.badge.plus";
         case .addJobTask, .createGeneralTask: "plus.circle";
         case .completeJobTask: "checkmark.circle";
         case .moveJobStage: "arrow.right.circle";

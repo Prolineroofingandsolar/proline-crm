@@ -5,7 +5,7 @@ import { formatAddedAt, formatCurrency, jobTypeColor } from '../utils/helpers';
 import AddLeadModal from '../components/Pipeline/AddLeadModal';
 import LeadDetailPanel from '../components/LeadDetail/LeadDetailPanel';
 
-const LEAD_STAGES = ['New Lead', 'Survey Booked', 'Quote Sent'];
+const LEAD_STAGES = ['New Lead', 'Survey Booked', 'Quote Preparing', 'Quote Sent'];
 
 export default function LeadsPage() {
   const { leads, selectedId, setSelectedId, moveToStage, markAsWon, deleteLead, users, currentUserId } = useStore();
