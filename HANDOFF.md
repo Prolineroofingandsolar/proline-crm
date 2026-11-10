@@ -2,6 +2,10 @@
 
 Newest first. Add an entry when you finish a piece of work so the next person or agent (Codex, Claude) knows what changed.
 
+## 10 November 2026 — Ponytail plugin (Claude)
+
+Installed the [Ponytail](https://github.com/DietrichGebert/ponytail) Claude Code plugin at project scope. `.claude/settings.json` now declares the `ponytail` marketplace and enables `ponytail@ponytail`, so Claude Code (local and cloud) offers to install it when the repo is trusted. It adds `/ponytail [lite|full|ultra|off]`, `/ponytail-review`, `/ponytail-audit`, `/ponytail-debt`, `/ponytail-gain`, `/ponytail-help`, plus three Node hooks (SessionStart, SubagentStart, UserPromptSubmit), so `node` must be on PATH. Its optional webhook is empty by default; nothing leaves the machine unless someone sets it with `/plugin configure ponytail@ponytail`. Remove both keys from `.claude/settings.json` to uninstall.
+
 ## 1–2 November 2026 — PR #14 (Claude)
 
 **Before you start:** Will's local clone at `~/proline-crm` had about 83 uncommitted changed files on `main` (in-progress Codex work) when this was merged. Commit or stash those before `git pull`, then pull `main` (now at `ee32bce` or later). PR #14 touched `src/App.tsx`, `src/components/Layout/BottomNav.tsx`, `src/components/Layout/Sidebar.tsx`, `src/store/useStore.ts`, `src/pages/TimesheetPage.tsx` and four files in `apple/Shared/`, so expect conflicts there.
