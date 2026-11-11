@@ -296,6 +296,8 @@ private struct StaffMemberSheet: View {
     let person: StaffMember
     @State private var name: String
     @State private var email: String
+    @State private var newPassword = ""
+    @State private var passwordNotice: String?
     @State private var contactEmail: String
     @State private var role: String
     @State private var rate: String
@@ -379,11 +381,26 @@ private struct StaffMemberSheet: View {
                             Button("Save bank and tax details") { savePay() }.disabled(busy)
                         }
                     }
+                    if !ownAccount && person.email != nil {
+                        Section {
+                            SecureField("New password (at least 8 characters)", text: $newPassword)
+                                .textContentType(.newPassword)
+                            Button("Set new password") { setPassword() }
+                                .disabled(busy || newPassword.count < 8)
+                            if let passwordNotice {
+                                Label(passwordNotice, systemImage: "checkmark.circle").foregroundStyle(.green)
+                            }
+                        } header: {
+                            Text("Password")
+                        } footer: {
+                            Text("Use this when someone is locked out and cannot receive the reset email. Share it privately and ask them to change it.")
+                        }
+                    }
                     Section {
                         Button(person.active ? "Remove access" : "Restore staff access", role: person.active ? .destructive : nil) {
                             if person.active { confirmingRemoval = true } else { save(accessOnly: true) }
                         }.disabled(busy)
-                    } footer: { Text("Work, timesheets and payments are kept when access is removed. Employees reset their own passwords from the sign-in screen.") }
+                    } footer: { Text("Work, timesheets and payments are kept when access is removed.") }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
                 if busy { ProgressView("Saving…") }
@@ -403,6 +420,19 @@ private struct StaffMemberSheet: View {
             .frame(minWidth: 500, minHeight: 520)
         #endif
     }
+    private func setPassword() {
+        busy = true; error = nil
+        Task {
+            defer { busy = false }
+            do {
+                passwordNotice = nil
+                try await SupabaseService.shared.setStaffPassword(id: person.id, password: newPassword)
+                newPassword = ""
+                passwordNotice = "Password changed. Share it privately and ask them to change it."
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+
     private func save(accessOnly: Bool = false) {
         busy = true; error = nil
         Task {

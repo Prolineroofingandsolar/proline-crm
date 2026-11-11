@@ -575,6 +575,10 @@ actor SupabaseService {
         _ = try await staffManagementRequest(["action": "update_staff_email", "user_id": id, "email": email])
     }
 
+    func setStaffPassword(id: String, password: String) async throws {
+        _ = try await staffManagementRequest(["action": "set_staff_password", "user_id": id, "password": password])
+    }
+
     func updateStaffContactEmail(id: String, email: String) async throws {
         _ = try await staffManagementRequest(["action": "update_staff_contact_email", "user_id": id, "email": email])
     }

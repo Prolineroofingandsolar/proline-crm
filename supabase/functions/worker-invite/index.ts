@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, user_id: user.id, login_enabled: loginEnabled });
     }
 
-    if (["list_staff", "update_staff", "update_staff_details", "update_staff_email", "update_staff_contact_email", "get_pay_details", "update_pay_details", "restore", "cancel_invite"].includes(action)) {
+    if (["list_staff", "update_staff", "update_staff_details", "update_staff_email", "update_staff_contact_email", "set_staff_password", "get_pay_details", "update_pay_details", "restore", "cancel_invite"].includes(action)) {
       const profile = await authenticatedProfile(req);
       if (!profile?.active || profile.role !== "admin") return json({ error: "Only administrators can manage staff." }, 403);
       const headers = { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json", Prefer: "return=representation" };
@@ -155,6 +155,22 @@ Deno.serve(async (req) => {
         if (!response.ok) return json({ error: "Contact email could not be saved." }, 502);
         const rows = await response.json();
         return rows.length === 1 ? json({ ok: true }) : json({ error: "Staff member not found in your organisation." }, 404);
+      }
+      // Recovery email delivery is not something this CRM controls, so an
+      // administrator needs a way to get a locked-out employee back in.
+      if (action === "set_staff_password") {
+        if (id === profile.id) return json({ error: "Change your own password from Settings." }, 400);
+        const lookup = await fetch(`${url}/rest/v1/profiles?id=eq.${id}&${scope}&select=id,name,email`, { headers });
+        if (!lookup.ok) return json({ error: "Staff details could not be checked." }, 502);
+        const rows = await lookup.json();
+        if (rows.length !== 1) return json({ error: "Employee not found in your organisation." }, 404);
+        if (!rows[0].email) return json({ error: "Payroll-only staff do not have a login. Create an invitation for app access." }, 400);
+        const password = String(payload.password ?? "");
+        // Supabase hashes with bcrypt, which silently ignores anything past 72 bytes.
+        if (password.length < 8 || new TextEncoder().encode(password).length > 72) return json({ error: "Use a password between 8 and 72 characters." }, 400);
+        const updated = await fetch(`${url}/auth/v1/admin/users/${id}`, { method: "PUT", headers, body: JSON.stringify({ password }) });
+        if (!updated.ok) return json({ error: "The password could not be changed." }, 502);
+        return json({ ok: true });
       }
       if (action === "update_staff_email" || action === "update_staff_details") {
         if (id === profile.id) return json({ error: "Ask another administrator to update your account." }, 400);

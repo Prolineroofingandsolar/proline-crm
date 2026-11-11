@@ -18,7 +18,7 @@ function harness(profile, affected = [{ id: workerId }], syncReady = true, membe
     fetch: async (url, options = {}) => {
       calls.push({ url, ...options });
       if (url.endsWith('/auth/v1/user')) return Response.json({ id: profile?.id ?? workerId });
-      if (url.includes('/profiles?id=eq.') && url.includes('select=id,name,email')) return Response.json(affected.map(row => ({ ...row, name: 'Test Worker', email: 'old@example.invalid' })));
+      if (url.includes('/profiles?id=eq.') && url.includes('select=id,name,email')) return Response.json(affected.map(row => ({ name: 'Test Worker', email: 'old@example.invalid', ...row })));
       if (url.includes('/profiles?organisation_id=eq.') && url.includes('&email=eq.')) return Response.json(member ? [member] : []);
       if (url.endsWith('/rpc/staff_email_sync_ready')) return Response.json(syncReady);
       if (url.endsWith('/rpc/update_staff_details_safe')) return Response.json(null);
@@ -221,3 +221,40 @@ test('giving a login to someone whose access was removed points to Restore', asy
   assert.ok(!h.calls.some(c => c.url.endsWith('/auth/v1/admin/users') && c.method === 'POST'));
 });
 
+const pwAdmin = { id: adminId, active: true, role: 'admin', organisation_id: organisation };
+const pwHarness = (profile, email = 'worker@example.invalid') => harness(profile, [{ id: workerId, email }]);
+
+test('an administrator can set a new password for an employee', async () => {
+  const h = pwHarness(pwAdmin);
+  assert.equal((await h.run({ action: 'set_staff_password', user_id: workerId, password: 'BrandNewPass1' })).status, 200);
+  const write = h.calls.find(c => c.url.includes('/auth/v1/admin/users/') && c.method === 'PUT');
+  assert.ok(write, 'expected the auth password update');
+  assert.deepEqual(JSON.parse(write.body), { password: 'BrandNewPass1' });
+  assert.ok(h.calls.some(c => c.url.includes(`organisation_id=eq.${organisation}`)), 'lookup must be scoped to the company');
+});
+
+test('staff cannot set anyone password', async () => {
+  const h = pwHarness({ id: workerId, active: true, role: 'worker', organisation_id: organisation });
+  assert.equal((await h.run({ action: 'set_staff_password', user_id: adminId, password: 'BrandNewPass1' })).status, 403);
+  assert.ok(!h.calls.some(c => c.method === 'PUT'));
+});
+
+test('a short password is rejected before anything is written', async () => {
+  const h = pwHarness(pwAdmin);
+  assert.equal((await h.run({ action: 'set_staff_password', user_id: workerId, password: 'short' })).status, 400);
+  assert.ok(!h.calls.some(c => c.method === 'PUT'));
+});
+
+test('payroll-only staff have no login to reset', async () => {
+  const h = pwHarness(pwAdmin, null);
+  const response = await h.run({ action: 'set_staff_password', user_id: workerId, password: 'BrandNewPass1' });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /Payroll-only/);
+  assert.ok(!h.calls.some(c => c.method === 'PUT'));
+});
+
+test('an administrator is sent to Settings for their own password', async () => {
+  const h = pwHarness(pwAdmin);
+  assert.equal((await h.run({ action: 'set_staff_password', user_id: adminId, password: 'BrandNewPass1' })).status, 400);
+  assert.ok(!h.calls.some(c => c.method === 'PUT'));
+});
