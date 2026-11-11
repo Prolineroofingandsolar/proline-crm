@@ -159,12 +159,56 @@ struct DashboardView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
                                 .font(.title2.bold())
-                            Text("Your priorities and updates for the day.")
+                            Text("Your schedule, urgent work and business at a glance.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
                     }
+
+                    HStack(spacing: 12) {
+                        DashboardMetricCard(title: "Open leads", value: "\(openLeads)", icon: "person.2", tint: .blue)
+                        DashboardMetricCard(title: "Live jobs", value: "\(liveJobs)", icon: "hammer", tint: .orange)
+                        DashboardMetricCard(
+                            title: "Awaiting payment", value: "\(awaitingPayment)", icon: "clock.badge.exclamationmark", tint: .purple)
+                        DashboardMetricCard(
+                            title: "To collect", value: toCollect.formatted(.currency(code: "GBP").precision(.fractionLength(0))),
+                            icon: "sterlingsign.circle", tint: .green)
+                    }
+
+                    VStack(spacing: 0) {
+                        DashboardCardHeader(
+                            title: "Today's schedule", subtitle: scheduledToday.isEmpty ? "No appointments or site visits" : "\(scheduledToday.count) booked",
+                            icon: "calendar", tint: .blue)
+                        Divider()
+                        if scheduledToday.isEmpty {
+                            HStack(spacing: 12) {
+                                Image(systemName: "calendar.badge.checkmark")
+                                    .font(.title2)
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Nothing booked").fontWeight(.medium)
+                                    Text("Your day is clear for follow-ups and outstanding work.")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(18)
+                        } else {
+                            ForEach(scheduledToday) { lead in
+                                NavigationLink(value: LeadRoute(id: lead.id)) {
+                                    scheduleRow(lead)
+                                        .padding(.horizontal, 18)
+                                        .frame(minHeight: 62)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                if lead.id != scheduledToday.last?.id { Divider().padding(.leading, 18) }
+                            }
+                        }
+                    }
+                    .dashboardCard()
 
                     if appState.isAdmin {
                         VStack(alignment: .leading, spacing: 12) {

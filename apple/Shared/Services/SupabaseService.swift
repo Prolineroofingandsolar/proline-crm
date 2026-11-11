@@ -270,6 +270,9 @@ actor SupabaseService {
         try await fetch("admin_timesheet_entries", as: TimesheetEntry.self)
     }
     func fetchQuotes() async throws -> [CRMQuote] { try await fetch("quotes", as: CRMQuote.self) }
+    func fetchTimesheetJobOptions() async throws -> [TimesheetJobOption] {
+        try await execute(request(path: "rpc/timesheet_job_options", method: "POST", body: Data("{}".utf8)), as: [TimesheetJobOption].self)
+    }
     func fetchTeamMessages() async throws -> [TeamMessage] {
         try await execute(
             request(

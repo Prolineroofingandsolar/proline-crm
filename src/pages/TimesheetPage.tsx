@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { ChevronLeft, ChevronRight, Clock, Pencil, Check, X, Trash2, UserPlus, Banknote, CalendarCheck, CheckCircle2, PoundSterling, Wallet } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import type { AppUser, TimesheetEntry, PaymentRun, WorkerPayment } from '../types';
@@ -681,6 +682,17 @@ export default function TimesheetPage() {
   const isAdmin = currentUser?.role === 'admin';
 
   const [tab, setTab] = useState<'timesheet' | 'payments'>('timesheet');
+  // Workers can log time on any active job; the server returns name and reference only.
+  const [jobOptions, setJobOptions] = useState<{ id: string; name: string; jobRef: string }[]>([]);
+  useEffect(() => {
+    if (!currentUserId) return;
+    let cancelled = false;
+    void supabase.rpc('timesheet_job_options').then(({ data, error }) => {
+      if (cancelled || error || !Array.isArray(data)) return;
+      setJobOptions(data.map((r: { id: string; name: string | null; job_ref: string | null }) => ({ id: r.id, name: r.name ?? '', jobRef: r.job_ref ?? '' })));
+    });
+    return () => { cancelled = true; };
+  }, [currentUserId]);
 
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [viewUserId, setViewUserId] = useState(currentUserId ?? '');
@@ -720,7 +732,11 @@ export default function TimesheetPage() {
   const totalDeduction = totalGross * (cisRate / 100);
   const totalNet = totalGross - totalDeduction;
 
-  const leadOptions = leads.map(l => ({ id: l.id, name: l.name, jobRef: l.jobRef }));
+  const leadOptions = useMemo(() => {
+    const byId = new Map(jobOptions.map(o => [o.id, o]));
+    for (const l of leads) byId.set(l.id, { id: l.id, name: l.name, jobRef: l.jobRef });
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [jobOptions, leads]);
   const canEdit = viewUserId === currentUserId || isAdmin;
 
   const adminSummary = useMemo(() => {

@@ -221,7 +221,7 @@ struct AddSecureUserSheet: View {
     @State private var role = "worker"
     @State private var dayRate = ""
     @State private var cisRate = 20
-    @State private var loginEnabled = false
+    @State private var loginEnabled = true
     @State private var busy = false
     private var validRate: Bool { dayRate.isEmpty || (Double(dayRate.replacingOccurrences(of: ",", with: ".")).map { $0.isFinite && $0 >= 0 && $0 <= 10000 } ?? false) }
     private var valid: Bool {
@@ -240,7 +240,7 @@ struct AddSecureUserSheet: View {
                         SecureField("Temporary password (at least 8 characters)", text: $password).textContentType(.newPassword)
                     }
                 } header: { Text("App access") } footer: {
-                    Text(loginEnabled ? "Share the login privately and ask them to change their password. Use Invite staff instead if they should choose their own password." : "Add their sign-in details later if they need app access. They can still be included on timesheets.")
+                    Text(loginEnabled ? "Share the login privately and ask them to change their password. Use Invite staff instead if they should choose their own password." : "Payroll only. They can be recorded on timesheets but cannot sign in.")
                 }
                 .onChange(of: loginEnabled) { if !loginEnabled && role == "admin" { role = "labourer" } }
                 Section("Access") {

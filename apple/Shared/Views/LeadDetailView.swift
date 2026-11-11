@@ -84,6 +84,7 @@ struct LeadDetailView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let leadID: String
     @State private var showingEdit = false
     @State private var showingSurveySchedule = false

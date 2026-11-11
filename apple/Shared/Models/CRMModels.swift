@@ -474,6 +474,24 @@ struct TeamDayPlan: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+/// Active job a worker may log time against: name and reference only.
+struct TimesheetJobOption: Codable, Identifiable, Hashable, Sendable {
+    let id: String
+    let name: String
+    let jobRef: String
+    let stage: String
+    enum CodingKeys: String, CodingKey { case id, name, stage; case jobRef = "job_ref" }
+    init(id: String, name: String, jobRef: String, stage: String) { self.id = id; self.name = name; self.jobRef = jobRef; self.stage = stage }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        jobRef = try c.decodeIfPresent(String.self, forKey: .jobRef) ?? ""
+        stage = try c.decodeIfPresent(String.self, forKey: .stage) ?? ""
+    }
+    var label: String { jobRef.isEmpty ? name : "\(name) · \(jobRef)" }
+}
+
 struct TimesheetEntry: Codable, Identifiable, Hashable, Sendable {
     let id: String; var userID: String; var leadID: String; var date: String; var type: String; var amount: Double; var createdAt: String
     enum CodingKeys: String, CodingKey {

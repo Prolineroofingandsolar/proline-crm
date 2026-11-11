@@ -216,7 +216,7 @@ struct StaffManagementView: View {
                     stat("Invited", count: directory?.invitations.filter { !$0.expired }.count ?? 0)
                 }.padding(.vertical, 8)
                 Button { showingInvite = true } label: { Label("Invite staff member", systemImage: "paperplane") }
-                Button { showingAdd = true } label: { Label("Add staff member", systemImage: "person.badge.plus") }
+                Button { showingAdd = true } label: { Label("Set up login or payroll worker", systemImage: "person.badge.plus") }
             } footer: { Text("Invitations let employees choose their own password. Share invitation links or codes privately.") }
             if let notice { Section { Label(notice, systemImage: "checkmark.circle").foregroundStyle(.green) } }
             if let error { Section { Text(error).foregroundStyle(.red); Button("Retry") { Task { await reload() } } } }
@@ -234,7 +234,7 @@ struct StaffManagementView: View {
                                 .frame(width: 42, height: 42).background(.orange.opacity(0.12), in: Circle()).foregroundStyle(.orange)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(person.name + (person.id == appState.currentUser?.id ? " · You" : "")).font(.headline)
-                                Text(person.email ?? person.contactEmail ?? "No email added").font(.caption).foregroundStyle(.secondary)
+                                Text(person.email ?? person.contactEmail ?? "Payroll only · no app login").font(.caption).foregroundStyle(.secondary)
                                 Text(person.roleLabel).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -334,7 +334,7 @@ private struct StaffMemberSheet: View {
                             .autocorrectionDisabled()
                             #endif
                     } else {
-                        LabeledContent("Sign-in", value: person.email ?? "Not set up")
+                        LabeledContent("Sign-in", value: person.email ?? "Payroll only · no login")
                     }
                     if !ownAccount {
                         TextField("Contact email (optional)", text: $contactEmail)

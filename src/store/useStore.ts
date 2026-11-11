@@ -272,7 +272,7 @@ export const useStore = create<Store>()(
       selectedId: null,
       currentPage: 'pipeline',
       simpleMode: false,
-      setSimpleMode: (enabled) => set({ simpleMode: enabled, currentPage: 'pipeline', selectedId: null }),
+      setSimpleMode: (enabled) => set({ simpleMode: enabled, currentPage: enabled ? 'jobs' : 'pipeline', selectedId: null }),
       searchQuery: '',
       toast: null,
 
