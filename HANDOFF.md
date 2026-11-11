@@ -2,6 +2,91 @@
 
 Newest first. Add an entry when you finish a piece of work so the next person or agent (Codex, Claude) knows what changed.
 
+## 11 November 2026 — staff accounts, deployed and released (Claude)
+
+**Start here.** `main` is at `7a4db41`. The long-running divergence between
+`origin/main` and the Codex line is resolved: `main` was fast-forwarded to the
+merge, so there is one line of history again. PR #17 closed itself as merged.
+The merge itself is described in the entry below this one — read it, because
+it lists two clashes that only surfaced when compiling.
+
+### Live right now
+
+- **Web:** `https://proline-crm.pages.dev` rebuilt from `main`. Confirmed by
+  downloading the live bundle and finding "Give app access", "Set new
+  password", "Payroll only" and "Removed access" in it. Cloudflare's asset
+  hash does not match a local `npm run build`; that appears to be a builder
+  difference, not a content problem, but it was verified by feature rather
+  than by matching bytes.
+- **Supabase:** `worker-invite` deployed three times today. Deployed source
+  was diffed against the repository before each deploy and matched.
+- **Mac:** `/Applications/ProLine CRM.app` replaced with a Release build,
+  0.2.0 (3), signed Apple Development. The previous 0.1.0 (1) from September
+  is backed up at `~/Applications-ProLineCRM-backup-20261111-185103`.
+- **iPhone:** installed directly to Will's connected device with
+  `xcrun devicectl`, 0.2.0 (3). **Development-signed, so it expires in about
+  a week** and will stop opening. TestFlight is still the lasting answer.
+
+### What changed in staff accounts
+
+1. **Re-adding someone whose access was removed** failed with Auth's raw
+   "already been registered". Removal is a soft deactivate, so the answer is
+   almost always Restore. Both the invitation and add-a-login paths now look
+   the person up first and say so by name. The invitation path previously did
+   not check at all and would mint a code that could never be accepted.
+2. **`set_staff_password`** — an administrator can set a new password for
+   anyone in their organisation, including another administrator. Refuses
+   payroll-only staff, refuses self (Settings does that), 8–72 characters
+   because bcrypt ignores anything past 72 bytes.
+3. **`enable_staff_login`** — turns a payroll-only person into a real user.
+   They already have an auth row with a placeholder address, so this renames
+   that login instead of creating a second record. **The profile write has to
+   happen in the function:** `sync_staff_auth_email` only updates profiles
+   "where email is not null", so it deliberately skips payroll-only rows. If
+   the profile write does not land on exactly one row the placeholder address
+   is restored.
+4. **`SupabaseHTTPError`** no longer prefixes the server's message with
+   "The server returned HTTP 409:".
+
+All three actions were verified against the live backend with disposable
+organisations, including the employee actually signing in afterwards, and the
+15 live acceptance checks pass.
+
+### Open, and needing Will
+
+- **Self-service password reset does not work end to end.** Email delivery
+  itself works (a real reset reached his inbox). Three settings block the
+  rest, none of them code:
+  - Site URL points at the marketing website, so emailed links land there.
+    Should be `https://proline-crm.pages.dev`.
+  - The CRM may not be in the redirect allow-list. If it is not, Supabase
+    ignores what the web app asks for. This could not be tested from outside:
+    `/auth/v1/recover` returns 200 for any `redirect_to`.
+  - The reset email template probably has no `{{ .Token }}`, which means
+    **recovery on iPhone and Mac cannot work at all**, since those use a typed
+    code rather than a link.
+  Reading the project auth config needs a management token, and that was
+  blocked as credential access. Not worked around.
+- Delivery was only proven to the project owner's own address. Supabase's
+  built-in email reaches team members regardless, so it does **not** prove a
+  worker would receive one. Test with a real staff address.
+- **The merge has never had a human read.** It is live for staff now.
+  `DashboardView.swift` and `SettingsView.swift` are where two designs were
+  combined by hand. Revert target if needed: `fab2f51`.
+
+### Watch out
+
+- Resolving a conflict with `git checkout --ours <file>` takes that side's
+  whole file and silently discards everything the other side added outside the
+  markers. It deleted PR #14's `fetchTimesheetJobOptions` before the merge was
+  redone by editing markers in place. Resolve in place.
+- `xcodegen generate` writes `apple/project.yml` into the Xcode project.
+  Opening the project in Xcode rewrites the macOS scheme and that churn gets
+  swept into commits by a blanket `git add`. Regenerate rather than hand-edit.
+- `supabase db push` is still unsafe; the migration history is still out of
+  sync. Nothing was pushed today.
+
+
 ## 11 November 2026 — merge of the Codex line into main (Claude)
 
 **What this was.** `origin/main` and the Codex line had diverged: `origin/main`

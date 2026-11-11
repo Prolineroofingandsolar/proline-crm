@@ -1,3 +1,38 @@
+# Employee release status — 11 November 2026
+
+The 1 November record is kept below, unchanged. This section supersedes its
+Distribution and Remaining verification notes.
+
+## Where things actually are
+
+- **Web:** live from `main` at `7a4db41` on https://proline-crm.pages.dev.
+  Verified by downloading the live bundle and finding today's features in it.
+- **Supabase:** `worker-invite` deployed from `7a4db41`. Deployed source was
+  diffed against the repository and matched. No migrations were applied and
+  `supabase db push` was not run.
+- **Mac:** Release build 0.2.0 (3) installed at `/Applications/ProLine CRM.app`,
+  signed Apple Development, launches and signs in. The September 0.1.0 (1) that
+  was there before had no staff management in it at all, which is why staff
+  could not be removed on the Mac. Backup at
+  `~/Applications-ProLineCRM-backup-20261111-185103`.
+- **iPhone:** 0.2.0 (3) installed directly to the connected device.
+  Development-signed, so it stops opening after about a week.
+
+Neither Apple build is distributable to employees. Mac Developer ID export is
+still blocked on the certificate problem recorded below, and TestFlight is
+still pending beta review. Both installs are for this machine and this phone.
+
+## Still to do
+
+- Self-service password reset needs three Supabase settings changed: Site URL,
+  the redirect allow-list, and `{{ .Token }}` in the reset email template.
+  Email delivery itself is proven, but only to the project owner's address.
+  See HANDOFF.md for detail.
+- The merge that produced this release has not had a human read, and is live
+  for staff. Revert target `fab2f51`.
+- An administrator can reset another administrator's password, and can change
+  their sign-in email. Admins are assumed to trust each other.
+
 # Employee release status — 1 November 2026
 
 Release preparation is in progress. Do not treat an uploaded Apple build as an installed employee release.
