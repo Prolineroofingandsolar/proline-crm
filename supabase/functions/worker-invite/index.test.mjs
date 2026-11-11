@@ -9,7 +9,7 @@ const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTa
 const adminId = '11111111-1111-1111-1111-111111111111';
 const workerId = '22222222-2222-2222-2222-222222222222';
 const organisation = '33333333-3333-3333-3333-333333333333';
-function harness(profile, affected = [{ id: workerId }], syncReady = true, member = null) {
+function harness(profile, affected = [{ id: workerId }], syncReady = true, member = null, patched = null) {
   let handler;
   const calls = [];
   vm.runInNewContext(code, {
@@ -24,7 +24,8 @@ function harness(profile, affected = [{ id: workerId }], syncReady = true, membe
       if (url.endsWith('/rpc/update_staff_details_safe')) return Response.json(null);
       if (url.endsWith('/rpc/update_staff_pay_safe')) return Response.json(true);
       if (url.includes('/auth/v1/admin/users/') && options.method === 'PUT') return Response.json({ id: workerId });
-      if (options.method === 'PATCH') return Response.json(affected);
+      if (url.includes('/auth/v1/admin/users/') && !options.method) return Response.json({ id: workerId, email: 'timesheet-abc@users.prolinecrm.invalid' });
+      if (options.method === 'PATCH') return Response.json(patched ?? affected);
       return Response.json(profile ? [profile] : []);
     },
   });
@@ -257,4 +258,47 @@ test('an administrator is sent to Settings for their own password', async () => 
   const h = pwHarness(pwAdmin);
   assert.equal((await h.run({ action: 'set_staff_password', user_id: adminId, password: 'BrandNewPass1' })).status, 400);
   assert.ok(!h.calls.some(c => c.method === 'PUT'));
+});
+
+const loginHarness = (profile, email = null, patched = [{ id: workerId }]) => harness(profile, [{ id: workerId, email }], true, null, patched);
+
+test('an administrator can turn a payroll-only person into a login', async () => {
+  const h = loginHarness(pwAdmin);
+  assert.equal((await h.run({ action: 'enable_staff_login', user_id: workerId, email: 'Dave@Example.invalid', password: 'FirstPass123' })).status, 200);
+  const auth = h.calls.find(c => c.url.includes('/auth/v1/admin/users/') && c.method === 'PUT');
+  assert.deepEqual(JSON.parse(auth.body), { email: 'dave@example.invalid', password: 'FirstPass123', email_confirm: true });
+  const profileWrite = h.calls.find(c => c.url.includes('/profiles?id=eq.') && c.method === 'PATCH');
+  assert.ok(profileWrite.url.includes(`organisation_id=eq.${organisation}`));
+  assert.deepEqual(JSON.parse(profileWrite.body), { email: 'dave@example.invalid', username: 'dave@example.invalid' });
+});
+
+test('someone who already has a login is sent to Set new password', async () => {
+  const h = loginHarness(pwAdmin, 'already@example.invalid');
+  const response = await h.run({ action: 'enable_staff_login', user_id: workerId, email: 'new@example.invalid', password: 'FirstPass123' });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /Set new password/);
+  assert.ok(!h.calls.some(c => c.method === 'PUT'));
+});
+
+test('staff cannot give anyone a login', async () => {
+  const h = loginHarness({ id: workerId, active: true, role: 'worker', organisation_id: organisation });
+  assert.equal((await h.run({ action: 'enable_staff_login', user_id: adminId, email: 'new@example.invalid', password: 'FirstPass123' })).status, 403);
+  assert.ok(!h.calls.some(c => c.method === 'PUT'));
+});
+
+test('a bad email or short password is refused before anything is written', async () => {
+  for (const payload of [{ email: 'not-an-email', password: 'FirstPass123' }, { email: 'ok@example.invalid', password: 'short' }]) {
+    const h = loginHarness(pwAdmin);
+    assert.equal((await h.run({ action: 'enable_staff_login', user_id: workerId, ...payload })).status, 400);
+    assert.ok(!h.calls.some(c => c.method === 'PUT'));
+  }
+});
+
+test('a login that cannot be linked to the staff record is put back', async () => {
+  const h = loginHarness(pwAdmin, null, []);
+  const response = await h.run({ action: 'enable_staff_login', user_id: workerId, email: 'dave@example.invalid', password: 'FirstPass123' });
+  assert.equal(response.status, 502);
+  const puts = h.calls.filter(c => c.url.includes('/auth/v1/admin/users/') && c.method === 'PUT');
+  assert.equal(puts.length, 2, 'expected the placeholder address to be restored');
+  assert.equal(JSON.parse(puts[1].body).email, 'timesheet-abc@users.prolinecrm.invalid');
 });

@@ -297,6 +297,7 @@ private struct StaffMemberSheet: View {
     @State private var name: String
     @State private var email: String
     @State private var newPassword = ""
+    @State private var loginEmail = ""
     @State private var passwordNotice: String?
     @State private var contactEmail: String
     @State private var role: String
@@ -381,6 +382,27 @@ private struct StaffMemberSheet: View {
                             Button("Save bank and tax details") { savePay() }.disabled(busy)
                         }
                     }
+                    if !ownAccount && person.email == nil {
+                        Section {
+                            TextField("Employee email", text: $loginEmail)
+                                #if os(iOS)
+                                .keyboardType(.emailAddress)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                #endif
+                            SecureField("Temporary password (at least 8 characters)", text: $newPassword)
+                                .textContentType(.newPassword)
+                            Button("Give app access") { enableLogin() }
+                                .disabled(busy || !loginEmail.contains("@") || newPassword.count < 8)
+                            if let passwordNotice {
+                                Label(passwordNotice, systemImage: "checkmark.circle").foregroundStyle(.green)
+                            }
+                        } header: {
+                            Text("App access")
+                        } footer: {
+                            Text("They are on timesheets and payroll but cannot sign in. This keeps their existing record and work history. Share the login privately and ask them to change the password.")
+                        }
+                    }
                     if !ownAccount && person.email != nil {
                         Section {
                             SecureField("New password (at least 8 characters)", text: $newPassword)
@@ -420,6 +442,21 @@ private struct StaffMemberSheet: View {
             .frame(minWidth: 500, minHeight: 520)
         #endif
     }
+    private func enableLogin() {
+        busy = true; error = nil
+        Task {
+            defer { busy = false }
+            do {
+                passwordNotice = nil
+                try await SupabaseService.shared.enableStaffLogin(
+                    id: person.id, email: loginEmail.trimmingCharacters(in: .whitespacesAndNewlines), password: newPassword)
+                newPassword = ""
+                passwordNotice = "App access given. Share the login privately and ask them to change the password."
+                appState.users = try await SupabaseService.shared.fetchUsers()
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+
     private func setPassword() {
         busy = true; error = nil
         Task {

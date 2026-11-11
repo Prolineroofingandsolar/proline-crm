@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, user_id: user.id, login_enabled: loginEnabled });
     }
 
-    if (["list_staff", "update_staff", "update_staff_details", "update_staff_email", "update_staff_contact_email", "set_staff_password", "get_pay_details", "update_pay_details", "restore", "cancel_invite"].includes(action)) {
+    if (["list_staff", "update_staff", "update_staff_details", "update_staff_email", "update_staff_contact_email", "set_staff_password", "enable_staff_login", "get_pay_details", "update_pay_details", "restore", "cancel_invite"].includes(action)) {
       const profile = await authenticatedProfile(req);
       if (!profile?.active || profile.role !== "admin") return json({ error: "Only administrators can manage staff." }, 403);
       const headers = { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json", Prefer: "return=representation" };
@@ -156,6 +156,37 @@ Deno.serve(async (req) => {
         const rows = await response.json();
         return rows.length === 1 ? json({ ok: true }) : json({ error: "Staff member not found in your organisation." }, 404);
       }
+      // A payroll-only person already has an auth row with a placeholder address,
+      // so giving them app access means renaming that login rather than making a
+      // second record for the same human. The profile has to be written here:
+      // sync_staff_auth_email deliberately skips profiles whose email is null.
+      if (action === "enable_staff_login") {
+        const lookup = await fetch(`${url}/rest/v1/profiles?id=eq.${id}&${scope}&select=id,name,email`, { headers });
+        if (!lookup.ok) return json({ error: "Staff details could not be checked." }, 502);
+        const rows = await lookup.json();
+        if (rows.length !== 1) return json({ error: "Employee not found in your organisation." }, 404);
+        if (rows[0].email) return json({ error: `${rows[0].name ?? "That person"} already has a login. Use Set new password to change it.` }, 400);
+        const email = String(payload.email ?? "").trim().toLowerCase();
+        const password = String(payload.password ?? "");
+        if (!/^\S+@\S+\.\S+$/.test(email) || email.length > 254) return json({ error: "Enter a valid email address." }, 400);
+        if (password.length < 8 || new TextEncoder().encode(password).length > 72) return json({ error: "Use a password between 8 and 72 characters." }, 400);
+        const clash = await existingMember(url, service, profile.organisation_id, email);
+        if (clash) return json({ error: alreadyOnTeam(clash) }, 409);
+        const current = await fetch(`${url}/auth/v1/admin/users/${id}`, { headers });
+        if (!current.ok) return json({ error: "That staff record has no account to turn into a login." }, 502);
+        const placeholder = (await current.json()).email;
+        const updated = await fetch(`${url}/auth/v1/admin/users/${id}`, { method: "PUT", headers, body: JSON.stringify({ email, password, email_confirm: true }) });
+        if (!updated.ok) return json({ error: "That email address is already used by another account." }, 409);
+        const linked = await fetch(`${url}/rest/v1/profiles?id=eq.${id}&${scope}`, { method: "PATCH", headers, body: JSON.stringify({ email, username: email }) });
+        const linkedRows = linked.ok ? await linked.json() : [];
+        if (linkedRows.length !== 1) {
+          // Put the placeholder back rather than leave a login nothing points at.
+          await fetch(`${url}/auth/v1/admin/users/${id}`, { method: "PUT", headers, body: JSON.stringify({ email: placeholder, email_confirm: true }) });
+          return json({ error: "The login could not be linked to their staff record." }, 502);
+        }
+        return json({ ok: true });
+      }
+
       // Recovery email delivery is not something this CRM controls, so an
       // administrator needs a way to get a locked-out employee back in.
       if (action === "set_staff_password") {
