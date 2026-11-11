@@ -685,4 +685,10 @@ final class CRMLogicTests: XCTestCase {
         XCTAssertEqual(entry.summary(names: ["a1": "Lena"]), "You · paused · Lena")
         XCTAssertNotNil(PaperclipService.date(entry.createdAt))
     }
+
+    func testServerMessageIsShownWithoutAStatusCodeInFrontOfIt() {
+        let guidance = "Robert Conway is still here with their access removed. Open Staff & access, switch the list to \"Removed access\", open them and choose Restore."
+        XCTAssertEqual(SupabaseHTTPError(statusCode: 409, message: guidance).errorDescription, guidance)
+        XCTAssertEqual(SupabaseHTTPError(statusCode: 502).errorDescription, "The server returned HTTP 502.")
+    }
 }

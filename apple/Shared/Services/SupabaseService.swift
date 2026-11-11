@@ -998,7 +998,10 @@ struct SupabaseHTTPError: LocalizedError {
     let statusCode: Int
     var message: String? = nil
     var errorDescription: String? {
-        message.map { "The server returned HTTP \(statusCode): \($0)" } ?? "The server returned HTTP \(statusCode)."
+        // The server's own message is written for the person reading it, so a
+        // status code in front of it only gets in the way. Keep the code for
+        // failures that carry no message, where it is the only clue.
+        message ?? "The server returned HTTP \(statusCode)."
     }
 }
 
