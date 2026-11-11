@@ -29,6 +29,26 @@ async function authenticatedProfile(req: Request) {
   return rows[0] ?? null;
 }
 
+// Adding someone who is already on the team fails deep inside Auth with
+// "already been registered", which tells an administrator nothing. Removal is
+// deliberately a soft deactivate so work history survives, so the right answer
+// is almost always Restore. Look the person up first and say so.
+async function existingMember(url: string, service: string, organisationID: string, email: string) {
+  const headers = { apikey: service, authorization: `Bearer ${service}` };
+  const response = await fetch(
+    `${url}/rest/v1/profiles?organisation_id=eq.${encodeURIComponent(organisationID)}&email=eq.${encodeURIComponent(email)}&select=id,name,active`,
+    { headers },
+  );
+  if (!response.ok) return null;
+  const rows = await response.json();
+  return rows[0] ?? null;
+}
+
+const alreadyOnTeam = (person: { name?: string; active?: boolean }) =>
+  person.active
+    ? `${person.name ?? "That person"} is already on your team.`
+    : `${person.name ?? "That person"} is still here with their access removed. Open Staff & access, switch the list to "Removed access", open them and choose Restore.`;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -44,6 +64,8 @@ Deno.serve(async (req) => {
       const role = String(payload.role ?? "worker");
       if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: "Enter the worker's email address." }, 400);
       if (!new Set(["admin", "worker", "labourer"]).has(role)) return json({ error: "Invalid worker role." }, 400);
+      const existingInvitee = await existingMember(url, service, profile.organisation_id, email);
+      if (existingInvitee) return json({ error: alreadyOnTeam(existingInvitee) }, 409);
       const raw = hex(crypto.getRandomValues(new Uint8Array(24)));
       const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
       const insert = await fetch(`${url}/rest/v1/worker_invitations`, {
@@ -71,11 +93,16 @@ Deno.serve(async (req) => {
       const dayRate = payload.day_rate == null || payload.day_rate === "" ? null : Number(payload.day_rate);
       const cisRate = Number(payload.cis_rate ?? 20);
       if ((dayRate !== null && (!Number.isFinite(dayRate) || dayRate < 0 || dayRate > 10000)) || ![20, 30].includes(cisRate)) return json({ error: "Enter a valid day rate and CIS rate." }, 400);
+      if (loginEnabled) {
+        const existing = await existingMember(url, service, profile.organisation_id, suppliedEmail);
+        if (existing) return json({ error: alreadyOnTeam(existing) }, 409);
+      }
       const internalID = crypto.randomUUID();
       const email = loginEnabled ? suppliedEmail : `timesheet-${internalID}@users.prolinecrm.invalid`;
       const password = loginEnabled ? suppliedPassword : hex(crypto.getRandomValues(new Uint8Array(32)));
       const createUser = await fetch(`${url}/auth/v1/admin/users`, { method: "POST", headers: { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json" }, body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { name } }) });
-      if (!createUser.ok) { const detail = await createUser.json().catch(() => ({})); return json({ error: String(detail.msg ?? detail.message ?? "That email already has an account.") }, 409); }
+      // Auth's own wording names the other account, so it is not repeated here.
+      if (!createUser.ok) return json({ error: "That email address is already used by another account." }, 409);
       const user = await createUser.json();
       const profileResponse = await fetch(`${url}/rest/v1/profiles`, { method: "POST", headers: { apikey: service, authorization: `Bearer ${service}`, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ id: user.id, organisation_id: profile.organisation_id, email: loginEnabled ? email : null, username: loginEnabled ? email : null, name, role, active: true, day_rate: dayRate, cis_rate: cisRate }) });
       if (!profileResponse.ok) { await fetch(`${url}/auth/v1/admin/users/${user.id}`, { method: "DELETE", headers: { apikey: service, authorization: `Bearer ${service}` } }); return json({ error: "The user profile could not be created." }, 502); }

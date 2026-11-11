@@ -9,7 +9,7 @@ const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTa
 const adminId = '11111111-1111-1111-1111-111111111111';
 const workerId = '22222222-2222-2222-2222-222222222222';
 const organisation = '33333333-3333-3333-3333-333333333333';
-function harness(profile, affected = [{ id: workerId }], syncReady = true) {
+function harness(profile, affected = [{ id: workerId }], syncReady = true, member = null) {
   let handler;
   const calls = [];
   vm.runInNewContext(code, {
@@ -19,6 +19,7 @@ function harness(profile, affected = [{ id: workerId }], syncReady = true) {
       calls.push({ url, ...options });
       if (url.endsWith('/auth/v1/user')) return Response.json({ id: profile?.id ?? workerId });
       if (url.includes('/profiles?id=eq.') && url.includes('select=id,name,email')) return Response.json(affected.map(row => ({ ...row, name: 'Test Worker', email: 'old@example.invalid' })));
+      if (url.includes('/profiles?organisation_id=eq.') && url.includes('&email=eq.')) return Response.json(member ? [member] : []);
       if (url.endsWith('/rpc/staff_email_sync_ready')) return Response.json(syncReady);
       if (url.endsWith('/rpc/update_staff_details_safe')) return Response.json(null);
       if (url.endsWith('/rpc/update_staff_pay_safe')) return Response.json(true);
@@ -185,3 +186,38 @@ test('invalid staff contact email is rejected', async () => {
   assert.equal((await h.run({ action: 'update_staff_contact_email', user_id: workerId, email: 'not-an-email' })).status, 400);
   assert.ok(!h.calls.some(c => c.method === 'PATCH'));
 });
+
+const admin = { id: adminId, active: true, role: 'admin', organisation_id: organisation };
+
+test('inviting someone whose access was removed points to Restore instead of minting a dead code', async () => {
+  const h = harness(admin, [{ id: workerId }], true, { id: workerId, name: 'Removed Person', active: false });
+  const response = await h.run({ action: 'create', email: 'removed@example.invalid', role: 'worker' });
+  assert.equal(response.status, 409);
+  const body = await response.json();
+  assert.match(body.error, /Removed Person/);
+  assert.match(body.error, /Restore/);
+  assert.ok(!h.calls.some(c => c.url.includes('/worker_invitations') && c.method === 'POST'));
+});
+
+test('inviting someone already on the team is refused', async () => {
+  const h = harness(admin, [{ id: workerId }], true, { id: workerId, name: 'Active Person', active: true });
+  const response = await h.run({ action: 'create', email: 'active@example.invalid', role: 'worker' });
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /already on your team/);
+});
+
+test('inviting a genuinely new address still works', async () => {
+  const h = harness(admin, [{ id: workerId }], true, null);
+  const response = await h.run({ action: 'create', email: 'new@example.invalid', role: 'worker' });
+  assert.equal(response.status, 200);
+  assert.ok(h.calls.some(c => c.url.includes('/worker_invitations') && c.method === 'POST'));
+});
+
+test('giving a login to someone whose access was removed points to Restore', async () => {
+  const h = harness(admin, [{ id: workerId }], true, { id: workerId, name: 'Removed Person', active: false });
+  const response = await h.run({ action: 'create_user', name: 'Removed Person', email: 'removed@example.invalid', password: 'TempPass12345', role: 'worker', cis_rate: 20 });
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /Restore/);
+  assert.ok(!h.calls.some(c => c.url.endsWith('/auth/v1/admin/users') && c.method === 'POST'));
+});
+
