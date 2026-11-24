@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AGENT_WRITE_TOOLS, analyse, asToolResult, londonToday, pipelineSummary, TOOLS, toolsForConfig, validateArguments } from "./core.mjs";
+import { AGENT_WRITE_TOOLS, OWNER_ACTION_TOOLS, analyse, asToolResult, londonToday, ownerActionChanges, pipelineSummary, prepareFollowUp, TOOLS, toolsForConfig, validateArguments } from "./core.mjs";
 
-test("advertises the four read-only Grok Bot tools", () => {
+test("advertises the read-only Grok Bot tools", () => {
   assert.deepEqual(TOOLS.map((tool) => tool.name), [
     "proline_status",
     "proline_daily_plan",
     "proline_pipeline_summary",
     "proline_find_jobs",
+    "proline_prepare_follow_up",
   ]);
   for (const tool of TOOLS) {
     assert.equal(tool.annotations.readOnlyHint, true);
@@ -16,16 +17,53 @@ test("advertises the four read-only Grok Bot tools", () => {
   }
 });
 
+test("prepares follow-ups without sending and refuses invalid or stale payment states", () => {
+  const job = { id: "job-1", job_ref: "P-1", name: "Taylor", email: "taylor@example.com", stage: "Quote Sent", deposit: 500, deposit_paid: false, updated_at: "2026-11-15T10:00:00Z" };
+  const quote = prepareFollowUp(job, "quote_follow_up");
+  assert.equal(quote.sent, false);
+  assert.equal(quote.recipient, "taylor@example.com");
+  assert.equal(quote.based_on_updated_at, job.updated_at);
+  assert.throws(() => prepareFollowUp(null, "quote_follow_up"), /not found/);
+  assert.throws(() => prepareFollowUp({ ...job, email: "" }, "quote_follow_up"), /email/);
+  assert.throws(() => prepareFollowUp(job, "deposit_reminder"), /outstanding deposit/);
+  const deposit = prepareFollowUp({ ...job, stage: "Won" }, "deposit_reminder");
+  assert.match(deposit.body, /£500\.00/);
+  assert.throws(() => prepareFollowUp({ ...job, stage: "Won", deposit_paid: true }, "deposit_reminder"), /outstanding deposit/);
+  assert.throws(() => validateArguments("proline_prepare_follow_up", { job_id: "job-1", kind: "send" }), /invalid/);
+});
+
 test("keeps business writes gated while allowing a check-in-only pilot", () => {
   const pilot = toolsForConfig(true, false);
   assert.deepEqual(pilot.map((tool) => tool.name), [
     ...TOOLS.map((tool) => tool.name),
+    ...OWNER_ACTION_TOOLS.map((tool) => tool.name),
+    "proline_update_job_dates",
     "proline_check_for_changes",
     "proline_agent_checkin",
   ]);
   assert.equal(pilot.at(-1).annotations.readOnlyHint, false);
-  assert.deepEqual(toolsForConfig(false, false), TOOLS);
-  assert.equal(toolsForConfig(true, true).length, TOOLS.length + AGENT_WRITE_TOOLS.length);
+  assert.deepEqual(toolsForConfig(false, false).map(tool => tool.name), [...TOOLS, ...OWNER_ACTION_TOOLS].map(tool => tool.name).concat("proline_update_job_dates"));
+  assert.equal(toolsForConfig(true, true).length, TOOLS.length + OWNER_ACTION_TOOLS.length + AGENT_WRITE_TOOLS.length);
+});
+
+test("explicit owner actions protect versions, preserve checklist work, and calculate deposit balance", () => {
+  const job = { id: "j1", stage: "Quote Sent", updated_at: "2026-11-15T10:00:00Z", value: 5000, deposit: 1500, deposit_paid: false, tasks: [
+    { id: "old", title: "Old template", completed: false, isTemplate: true },
+    { id: "done", title: "Finished", completed: true, isTemplate: true },
+    { id: "custom", title: "Custom", completed: false },
+  ] };
+  const args = { job_id: "j1", expected_updated_at: job.updated_at, stage: "Won" };
+  const changes = ownerActionChanges(job, "proline_move_job_stage", args, "2026-11-15", () => "new");
+  assert.equal(changes.won_date, "2026-11-15");
+  assert.deepEqual(changes.tasks.slice(0, 2).map(t => t.id), ["done", "custom"]);
+  assert.ok(changes.tasks.some(t => t.title === "Order materials"));
+  assert.equal(changes.progress, Math.round(100 / changes.tasks.length));
+  assert.throws(() => ownerActionChanges(job, "proline_move_job_stage", { ...args, expected_updated_at: "2026-11-14T10:00:00Z" }, "2026-11-15"), /changed/);
+  assert.throws(() => validateArguments("proline_move_job_stage", { ...args, stage: "Paid" }), /invalid/);
+  assert.deepEqual(ownerActionChanges(job, "proline_record_deposit", { ...args, expected_deposit: 1500 }, "2026-11-15"), { deposit_paid: true, balance: 3500 });
+  assert.throws(() => ownerActionChanges(job, "proline_record_deposit", { ...args, expected_deposit: 1000 }, "2026-11-15"), /changed/);
+  assert.equal(ownerActionChanges({ ...job, deposit_paid: true }, "proline_record_deposit", { ...args, expected_deposit: 1500 }, "2026-11-15"), null);
+  assert.throws(() => validateArguments("proline_record_deposit", { job_id: "j1", expected_updated_at: job.updated_at, expected_deposit: 0 }), /greater/);
 });
 
 test("job date changes require explicit valid dates and the current job version", () => {
@@ -36,7 +74,8 @@ test("job date changes require explicit valid dates and the current job version"
   assert.throws(() => validateArguments(name, { ...base, start_date: "2026-11-13", end_date: "2026-11-12" }), /before/);
   assert.throws(() => validateArguments(name, { job_id: "job-1", start_date: "2026-11-13" }), /expected_updated_at/);
   assert.doesNotThrow(() => validateArguments(name, { ...base, start_date: "2026-11-13" }));
-  assert.equal(toolsForConfig(true, false).some(tool => tool.name === name), false);
+  assert.equal(toolsForConfig(true, false).find(tool => tool.name === name).annotations.readOnlyHint, false);
+  assert.equal(toolsForConfig(false, false).filter(tool => tool.name === name).length, 1);
   assert.equal(toolsForConfig(true, true).find(tool => tool.name === name).annotations.readOnlyHint, false);
 });
 
