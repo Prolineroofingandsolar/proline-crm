@@ -194,6 +194,18 @@ export const AGENT_WRITE_TOOLS = [
     false,
   ),
   tool(
+    "proline_update_job_dates",
+    "Update an existing job's dates when explicitly instructed by the authenticated administrator. Requires a current version timestamp to avoid overwriting other changes.",
+    schema({
+      job_id: { ...text, minLength: 1, maxLength: 100 },
+      start_date: { ...text, minLength: 10, maxLength: 10 },
+      end_date: { ...text, minLength: 10, maxLength: 10 },
+      expected_updated_at: { ...text, minLength: 10, maxLength: 80 },
+    }, ["job_id", "start_date", "end_date", "expected_updated_at"]),
+    false,
+    false,
+  ),
+  tool(
     "proline_submit_action_proposal",
     "Submit a proposed consequential action for administrator review. This records a proposal only and never executes it.",
     schema({
@@ -312,6 +324,11 @@ export function validateArguments(name, args, definitions = [...TOOLS, ...AGENT_
   }
   if (args.due_date !== undefined && !validDay(args.due_date)) {
     throw new Error("Use a valid YYYY-MM-DD due date.");
+  }
+  if (name === "proline_update_job_dates") {
+    if (!validDay(args.start_date) || !validDay(args.end_date)) throw new Error("Use valid YYYY-MM-DD job dates.");
+    if (args.end_date < args.start_date) throw new Error("End date cannot precede start date.");
+    if (Number.isNaN(Date.parse(args.expected_updated_at))) throw new Error("expected_updated_at must be an ISO timestamp.");
   }
   if (name === "proline_agent_checkin") {
     if (!Array.isArray(args.items) || args.items.length > 8) throw new Error("A check-in may contain no more than eight items.");
