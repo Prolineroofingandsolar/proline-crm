@@ -85,13 +85,13 @@ struct RootView: View {
             .sheet(isPresented: $appState.showingAssistant) { OperationsAssistantView() }
             .sheet(isPresented: $appState.showingGlobalAddLead) { AddLeadView(defaultStage: .newLead) }
             .sheet(item: $appState.pendingCallOutcome) { CallOutcomeSheet(pending: $0) }
-            .onAppear { ensureAllowedSelection() }
+            .onAppear { ensureAllowedSelection(); consumeNotificationDeepLink() }
             .onChange(of: appState.selectedSection) { _, _ in ensureAllowedSelection() }
             .onChange(of: appState.pendingLeadID) { _, id in if let id { showLead(id) } }
         .onChange(of: appState.pendingSection) { _, section in if let section { appState.pendingSection = nil; showSection(section) } }
             .onOpenURL(perform: openDeepLink)
             .onReceive(NotificationCenter.default.publisher(for: .crmNotificationDeepLink)) { note in
-                if let url = note.object as? URL { openDeepLink(url) }
+                if note.object is URL { consumeNotificationDeepLink() }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active && !appState.isWorkerPreview {
@@ -164,8 +164,10 @@ struct RootView: View {
                             }
                             Spacer()
                             Menu {
-                                Button("Settings…") { openSettings() }
-                                Divider()
+                                if appState.isAdmin {
+                                    Button("Settings…") { openSettings() }
+                                    Divider()
+                                }
                                 Button("Sign Out", role: .destructive) { appState.signOut() }
                             } label: {
                                 Image(systemName: "chevron.down")
@@ -227,9 +229,9 @@ struct RootView: View {
         .onChange(of: appState.pendingSection) { _, section in if let section { appState.pendingSection = nil; showSection(section) } }
             .onOpenURL(perform: openDeepLink)
             .onReceive(NotificationCenter.default.publisher(for: .crmNotificationDeepLink)) { note in
-                if let url = note.object as? URL { openDeepLink(url) }
+                if note.object is URL { consumeNotificationDeepLink() }
             }
-            .onAppear { ensureAllowedSelection() }
+            .onAppear { ensureAllowedSelection(); consumeNotificationDeepLink() }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active && !appState.isWorkerPreview {
                     appState.resumePendingCall()
@@ -274,6 +276,21 @@ struct RootView: View {
         #else
             appState.selectedSection = section
         #endif
+    }
+
+    private func consumeNotificationDeepLink() {
+        guard let value = UserDefaults.standard.string(forKey: "pendingNotificationDeepLink"),
+              let url = URL(string: value) else { return }
+        UserDefaults.standard.removeObject(forKey: "pendingNotificationDeepLink")
+        Task {
+            if url.host?.lowercased() == "lead" {
+                while appState.isRefreshing {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                await appState.refresh(showErrors: false)
+            }
+            openDeepLink(url)
+        }
     }
 
     private func openDeepLink(_ url: URL) {
@@ -460,7 +477,7 @@ private struct SectionContent: View {
     @Environment(AppState.self) private var appState
     let section: AppSection
     var body: some View {
-        if !appState.canAccess(section) && section != .settings {
+        if !appState.canAccess(section) {
             ContentUnavailableView(
                 "Administrator access required", systemImage: "lock.shield",
                 description: Text("This section contains restricted company or financial information."))

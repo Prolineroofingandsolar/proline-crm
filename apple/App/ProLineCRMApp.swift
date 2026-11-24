@@ -92,12 +92,17 @@ final class NotificationRouter: NSObject, UNUserNotificationCenterDelegate, @unc
         [.banner, .sound, .badge]
     }
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        guard let value = response.notification.request.content.userInfo["url"] as? String,
-            let url = URL(string: value)
-        else { return }
-        await MainActor.run {
-            NotificationCenter.default.post(name: .crmNotificationDeepLink, object: url)
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping @Sendable () -> Void
+    ) {
+        let value = response.notification.request.content.userInfo["url"] as? String
+        DispatchQueue.main.async {
+            if let value, let url = URL(string: value) {
+                UserDefaults.standard.set(url.absoluteString, forKey: "pendingNotificationDeepLink")
+                NotificationCenter.default.post(name: .crmNotificationDeepLink, object: url)
+            }
+            completionHandler()
         }
     }
 }
@@ -171,7 +176,13 @@ struct ProLineCRMApp: App {
         #endif
         #if os(macOS)
             Settings {
-                SettingsView().environment(appState).frame(minWidth: 520, minHeight: 560)
+                Group {
+                    if appState.isAdmin {
+                        SettingsView().environment(appState)
+                    } else {
+                        ContentUnavailableView("Administrator access required", systemImage: "lock.shield")
+                    }
+                }.frame(minWidth: 520, minHeight: 560)
             }
         #endif
     }
