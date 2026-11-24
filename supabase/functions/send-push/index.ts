@@ -59,17 +59,27 @@ Deno.serve(async (req) => {
   if (deviceError) return json({ error: deviceError.message }, 502);
 
   let bearer: string | null = null;
-  try { if ((devices ?? []).length) bearer = await apnsJWT(); } catch (error) { console.error(error); }
+  let apnsAuthFailed = false;
+  try { if ((devices ?? []).length) bearer = await apnsJWT(); } catch (error) {
+    console.error("APNs authentication unavailable", error);
+    apnsAuthFailed = true;
+  }
   const nativeResults = await Promise.all((devices ?? []).map(async (device) => {
     if (!bearer) return false;
     const host = device.environment === "production" ? "https://api.push.apple.com" : "https://api.sandbox.push.apple.com";
-    const response = await fetch(`${host}/3/device/${device.device_token}`, {
-      method: "POST",
-      headers: { authorization: `bearer ${bearer}`, "apns-topic": device.bundle_id, "apns-push-type": "alert", "apns-priority": "10", "Content-Type": "application/json" },
-      body: JSON.stringify({ aps: { alert: { title: content.title, body: content.body }, sound: "default", badge: 1 }, url: content.url })
-    });
-    if (response.status === 410) await supabase.from("native_push_devices").delete().eq("id", device.id);
-    return response.ok;
+    try {
+      const response = await fetch(`${host}/3/device/${device.device_token}`, {
+        method: "POST",
+        headers: { authorization: `bearer ${bearer}`, "apns-topic": device.bundle_id, "apns-push-type": "alert", "apns-priority": "10", "Content-Type": "application/json" },
+        body: JSON.stringify({ aps: { alert: { title: content.title, body: content.body }, sound: "default", badge: 1 }, url: content.url })
+      });
+      if (response.status === 410) await supabase.from("native_push_devices").delete().eq("id", device.id);
+      if (!response.ok) console.error("APNs delivery failed", { status: response.status, device_id: device.id });
+      return response.ok;
+    } catch (error) {
+      console.error("APNs delivery request failed", { device_id: device.id, error: String(error) });
+      return false;
+    }
   }));
 
   const vapidPublic = Deno.env.get("VAPID_PUBLIC_KEY");
@@ -81,5 +91,10 @@ Deno.serve(async (req) => {
     const results = await Promise.allSettled((rows ?? []).map((row) => webpush.sendNotification(row.subscription, JSON.stringify({ ...content }))));
     webSent = results.filter((result) => result.status === "fulfilled").length;
   }
-  return json({ ok: true, native_sent: nativeResults.filter(Boolean).length, native_failed: nativeResults.filter((value) => !value).length, web_sent: webSent });
+  const nativeSent = nativeResults.filter(Boolean).length;
+  const nativeFailed = nativeResults.filter((value) => !value).length;
+  if (nativeFailed > 0 && nativeSent === 0 && webSent === 0) {
+    return json({ error: apnsAuthFailed ? "Apple push notification authentication is not configured correctly." : "Apple could not deliver the push notification.", native_sent: nativeSent, native_failed: nativeFailed, web_sent: webSent }, apnsAuthFailed ? 503 : 502);
+  }
+  return json({ ok: true, native_sent: nativeSent, native_failed: nativeFailed, web_sent: webSent });
 });
